@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { fetchHealth } from './api'
+import SettingsPage from './SettingsPage'
 
 const navigation = [
   ['Dashboard', '/'],
@@ -67,7 +68,7 @@ function App() {
           <Route path="/shopping" element={<PlaceholderPage title="Shopping" />} />
           <Route path="/leftovers" element={<PlaceholderPage title="Leftovers" />} />
           <Route path="/history" element={<PlaceholderPage title="History" />} />
-          <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
