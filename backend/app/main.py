@@ -11,6 +11,7 @@ from app.api.meals import router as meals_router
 from app.api.planned_meals import router as planned_meals_router
 from app.api.recipes import router as recipes_router
 from app.api.reference import router as reference_router
+from app.api.shopping import router as shopping_router
 from app.config import get_settings
 from app.database.migrations import run_migrations
 from app.database.session import engine
@@ -40,6 +41,7 @@ app.include_router(inventory_router)
 app.include_router(meals_router)
 app.include_router(meal_cycles_router)
 app.include_router(planned_meals_router)
+app.include_router(shopping_router)
 
 
 @app.get("/health", tags=["system"])
