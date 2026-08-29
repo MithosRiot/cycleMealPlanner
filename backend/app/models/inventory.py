@@ -25,7 +25,10 @@ class InventoryLot(Base):
     thawed_date: Mapped[date | None] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text)
 
-    transactions: Mapped[list[InventoryTransaction]] = relationship(back_populates="lot")
+    transactions: Mapped[list[InventoryTransaction]] = relationship(
+        back_populates="lot",
+        order_by="InventoryTransaction.id",
+    )
 
     __table_args__ = (CheckConstraint("quantity >= 0", name="ck_inventory_lots_quantity_nonnegative"),)
 
