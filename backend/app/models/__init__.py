@@ -1,4 +1,5 @@
 from app.models.ingredient import Ingredient, IngredientAlias, Tag
+from app.models.recipe import Recipe, RecipeIngredient, RecipeMealType, recipe_tags
 from app.models.reference import Household, InventoryLocation, MeasurementUnit, ShoppingCategory
 
 __all__ = [
@@ -9,4 +10,8 @@ __all__ = [
     "Ingredient",
     "IngredientAlias",
     "Tag",
+    "Recipe",
+    "RecipeIngredient",
+    "RecipeMealType",
+    "recipe_tags",
 ]
