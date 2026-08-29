@@ -13,3 +13,4 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Recipe and structured RecipeIngredient models with servings, optional yield, meal types, tags, preparation metadata, required state, favorites, and archive behavior.
 - Authoritative Decimal recipe scaling for LINEAR, FIXED, ROUND_UP, and MANUAL modes, including safe same-family unit overrides.
 - Recipe CRUD/search/filter/scale APIs and backend test coverage.
+- Recipe Library, structured Recipe Editor, recipe detail view, search/filter controls, favorites/tags/meal-type display, and serving-scale preview UI.

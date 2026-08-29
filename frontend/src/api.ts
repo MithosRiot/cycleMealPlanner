@@ -72,6 +72,78 @@ export type Tag = {
   active: boolean
 }
 
+export type RecipeIngredientInput = {
+  ingredient_id: number
+  quantity: string
+  unit_id: number
+  display_text: string | null
+  preparation: string | null
+  optional: boolean
+  scaling_mode: 'LINEAR' | 'FIXED' | 'ROUND_UP' | 'MANUAL'
+  required_state: string
+  sort_order: number
+  notes: string | null
+}
+
+export type RecipeIngredient = RecipeIngredientInput & {
+  id: number
+  recipe_id: number
+}
+
+export type RecipeInput = {
+  name: string
+  description: string | null
+  base_servings: string
+  serving_unit: string
+  yield_quantity: string | null
+  yield_unit_id: number | null
+  prep_time_minutes: number | null
+  cook_time_minutes: number | null
+  notes: string | null
+  favorite: boolean
+  meal_types: string[]
+  tag_ids: number[]
+  ingredients: RecipeIngredientInput[]
+  active?: boolean
+}
+
+export type Recipe = {
+  id: number
+  household_id: number
+  name: string
+  description: string | null
+  base_servings: string
+  serving_unit: string
+  yield_quantity: string | null
+  yield_unit_id: number | null
+  prep_time_minutes: number | null
+  cook_time_minutes: number | null
+  notes: string | null
+  favorite: boolean
+  active: boolean
+  meal_types: string[]
+  tags: Tag[]
+  ingredients: RecipeIngredient[]
+}
+
+export type ScaledRecipeIngredient = {
+  recipe_ingredient_id: number
+  ingredient_id: number
+  quantity: string
+  unit_id: number
+  unit_code: string
+  scaling_mode: string
+  manual_review: boolean
+}
+
+export type RecipeScaleResponse = {
+  recipe_id: number
+  base_servings: string
+  requested_servings: string
+  scale_factor: string
+  ingredients: ScaledRecipeIngredient[]
+}
+
 async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
@@ -211,4 +283,54 @@ export function updateTag(tag: Tag): Promise<Tag> {
 
 export function archiveTag(id: number): Promise<void> {
   return jsonRequest<void>(`/api/tags/${id}`, { method: 'DELETE' })
+}
+
+export function fetchRecipes(filters?: {
+  search?: string
+  meal_type?: string
+  tag_id?: number
+  favorite?: boolean
+  include_inactive?: boolean
+}): Promise<Recipe[]> {
+  const params = new URLSearchParams()
+  if (filters?.search?.trim()) params.set('search', filters.search.trim())
+  if (filters?.meal_type) params.set('meal_type', filters.meal_type)
+  if (filters?.tag_id) params.set('tag_id', String(filters.tag_id))
+  if (filters?.favorite !== undefined) params.set('favorite', String(filters.favorite))
+  if (filters?.include_inactive) params.set('include_inactive', 'true')
+  const query = params.toString()
+  return jsonRequest<Recipe[]>(`/api/recipes${query ? `?${query}` : ''}`)
+}
+
+export function fetchRecipe(id: number): Promise<Recipe> {
+  return jsonRequest<Recipe>(`/api/recipes/${id}`)
+}
+
+export function createRecipe(input: RecipeInput): Promise<Recipe> {
+  return jsonRequest<Recipe>('/api/recipes', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateRecipe(recipe: Recipe, input: RecipeInput): Promise<Recipe> {
+  return jsonRequest<Recipe>(`/api/recipes/${recipe.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ ...input, active: input.active ?? recipe.active }),
+  })
+}
+
+export function archiveRecipe(id: number): Promise<void> {
+  return jsonRequest<void>(`/api/recipes/${id}`, { method: 'DELETE' })
+}
+
+export function scaleRecipe(
+  id: number,
+  requestedServings: string,
+  unitOverrides: Record<number, string> = {},
+): Promise<RecipeScaleResponse> {
+  return jsonRequest<RecipeScaleResponse>(`/api/recipes/${id}/scale`, {
+    method: 'POST',
+    body: JSON.stringify({ requested_servings: requestedServings, unit_overrides: unitOverrides }),
+  })
 }

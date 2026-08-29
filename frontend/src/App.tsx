@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { fetchHealth } from './api'
 import IngredientsPage from './IngredientsPage'
+import { RecipeDetailPage, RecipeEditorPage, RecipesPage } from './RecipePages'
 import SettingsPage from './SettingsPage'
 
 const navigation = [
@@ -62,7 +63,10 @@ function App() {
       <main className="content">
         <Routes>
           <Route path="/" element={<PlaceholderPage title="Dashboard" />} />
-          <Route path="/recipes" element={<PlaceholderPage title="Recipes" />} />
+          <Route path="/recipes" element={<RecipesPage />} />
+          <Route path="/recipes/new" element={<RecipeEditorPage />} />
+          <Route path="/recipes/:recipeId" element={<RecipeDetailPage />} />
+          <Route path="/recipes/:recipeId/edit" element={<RecipeEditorPage />} />
           <Route path="/meals" element={<PlaceholderPage title="Meals" />} />
           <Route path="/meal-plan" element={<PlaceholderPage title="Meal Plan" />} />
           <Route path="/inventory" element={<PlaceholderPage title="Inventory" />} />
