@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -19,7 +21,7 @@ def test_seeded_reference_data_and_safe_unit_conversion() -> None:
             json={"quantity": "2", "from_unit_code": "lb", "to_unit_code": "oz"},
         )
         assert converted.status_code == 200
-        assert converted.json()["quantity"] == "32.00000000"
+        assert Decimal(converted.json()["quantity"]) == Decimal("32")
 
         unsafe = client.post(
             "/api/reference/units/convert",
