@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database.session import get_db
 from app.models.meal_cycle import CycleSlot, MealCycle, MealSlotDefinition
-from app.schemas.meal_cycle import MealCycleInput, MealCycleRead
+from app.schemas.meal_cycle import MealCycleInput, MealCycleRead, MealSlotDefinitionInput
 from app.services.normalization import normalize_name
 
 
@@ -30,7 +30,7 @@ def _load_cycle(db: Session, cycle_id: int) -> MealCycle:
 def _normalize_slots(payload: MealCycleInput) -> list[MealSlotDefinitionInput]:
     labels: set[str] = set()
     orders: set[int] = set()
-    normalized = []
+    normalized: list[MealSlotDefinitionInput] = []
     for slot in sorted(payload.slot_definitions, key=lambda item: item.sort_order):
         label = slot.label.strip()
         label_key = normalize_name(label)
@@ -53,8 +53,11 @@ def _apply_cycle(db: Session, cycle: MealCycle, payload: MealCycleInput) -> None
     cycle.notes = payload.notes
     cycle.status = "DRAFT"
 
+    cycle.slots.clear()
+    db.flush()
     cycle.slot_definitions.clear()
     db.flush()
+
     definitions = [
         MealSlotDefinition(label=slot.label, sort_order=slot.sort_order)
         for slot in slot_inputs
@@ -62,7 +65,6 @@ def _apply_cycle(db: Session, cycle: MealCycle, payload: MealCycleInput) -> None
     cycle.slot_definitions.extend(definitions)
     db.flush()
 
-    cycle.slots.clear()
     for day_number in range(1, payload.duration_days + 1):
         for definition in definitions:
             cycle.slots.append(
@@ -112,7 +114,6 @@ def create_meal_cycle(payload: MealCycleInput, db: Session = Depends(get_db)) ->
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Meal cycle name already exists") from exc
-    db.refresh(cycle)
     return _load_cycle(db, cycle.id)
 
 
