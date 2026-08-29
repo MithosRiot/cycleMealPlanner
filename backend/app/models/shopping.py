@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -39,6 +39,15 @@ class ShoppingListItem(Base):
     adjustment_quantity: Mapped[Decimal] = mapped_column(Numeric(16, 6), nullable=False, default=Decimal("0"))
     source_trace: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     warning: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING")
+    actual_quantity: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
+    actual_unit_id: Mapped[int | None] = mapped_column(ForeignKey("measurement_units.id", ondelete="RESTRICT"))
+    purchase_date: Mapped[date | None] = mapped_column(Date)
+    storage_location_id: Mapped[int | None] = mapped_column(ForeignKey("inventory_locations.id", ondelete="RESTRICT"))
+    expiration_date: Mapped[date | None] = mapped_column(Date)
+    purchase_notes: Mapped[str | None] = mapped_column(Text)
+    inventory_lot_id: Mapped[int | None] = mapped_column(ForeignKey("inventory_lots.id", ondelete="RESTRICT"), unique=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     shopping_list: Mapped[ShoppingList] = relationship(back_populates="items")
 
