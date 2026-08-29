@@ -6,6 +6,7 @@ import InventoryPage from './InventoryPage'
 import './InventoryPage.css'
 import { MealDetailPage, MealEditorPage, MealsPage } from './MealPages'
 import './MealPages.css'
+import MealPlanPage from './MealPlanPage'
 import { RecipeDetailPage, RecipeEditorPage, RecipesPage } from './RecipePages'
 import SettingsPage from './SettingsPage'
 
@@ -75,7 +76,7 @@ function App() {
           <Route path="/meals/new" element={<MealEditorPage />} />
           <Route path="/meals/:mealId" element={<MealDetailPage />} />
           <Route path="/meals/:mealId/edit" element={<MealEditorPage />} />
-          <Route path="/meal-plan" element={<PlaceholderPage title="Meal Plan" />} />
+          <Route path="/meal-plan" element={<MealPlanPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/shopping" element={<PlaceholderPage title="Shopping" />} />
           <Route path="/leftovers" element={<PlaceholderPage title="Leftovers" />} />
