@@ -121,11 +121,12 @@ def _save_ingredient(db: Session, ingredient: Ingredient, payload: IngredientCre
     if isinstance(payload, IngredientUpdate):
         ingredient.active = payload.active
 
+    db.add(ingredient)
     ingredient.aliases.clear()
+    db.flush()
     for alias, normalized in aliases:
         ingredient.aliases.append(IngredientAlias(alias=alias, normalized_alias=normalized))
 
-    db.add(ingredient)
     try:
         db.commit()
     except IntegrityError as exc:
