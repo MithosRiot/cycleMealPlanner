@@ -51,10 +51,68 @@ def _normalized_aliases(values: list[str], ingredient_name: str) -> list[tuple[s
     return result
 
 
+def _validate_ingredient_identity(
+    db: Session,
+    normalized_name: str,
+    aliases: list[tuple[str, str]],
+    ingredient_id: int | None,
+) -> None:
+    other_ingredient = select(Ingredient.id).where(
+        Ingredient.household_id == DEFAULT_HOUSEHOLD_ID,
+        Ingredient.normalized_name == normalized_name,
+    )
+    if ingredient_id is not None:
+        other_ingredient = other_ingredient.where(Ingredient.id != ingredient_id)
+    if db.scalar(other_ingredient) is not None:
+        raise HTTPException(status_code=409, detail="Ingredient name already exists")
+
+    name_alias_conflict = (
+        select(IngredientAlias.id)
+        .join(Ingredient, Ingredient.id == IngredientAlias.ingredient_id)
+        .where(
+            Ingredient.household_id == DEFAULT_HOUSEHOLD_ID,
+            IngredientAlias.normalized_alias == normalized_name,
+        )
+    )
+    if ingredient_id is not None:
+        name_alias_conflict = name_alias_conflict.where(IngredientAlias.ingredient_id != ingredient_id)
+    if db.scalar(name_alias_conflict) is not None:
+        raise HTTPException(status_code=409, detail="Ingredient name conflicts with an existing alias")
+
+    for _, normalized_alias in aliases:
+        canonical_conflict = select(Ingredient.id).where(
+            Ingredient.household_id == DEFAULT_HOUSEHOLD_ID,
+            Ingredient.normalized_name == normalized_alias,
+        )
+        if ingredient_id is not None:
+            canonical_conflict = canonical_conflict.where(Ingredient.id != ingredient_id)
+        if db.scalar(canonical_conflict) is not None:
+            raise HTTPException(status_code=409, detail="Ingredient alias conflicts with an existing ingredient")
+
+        alias_conflict = (
+            select(IngredientAlias.id)
+            .join(Ingredient, Ingredient.id == IngredientAlias.ingredient_id)
+            .where(
+                Ingredient.household_id == DEFAULT_HOUSEHOLD_ID,
+                IngredientAlias.normalized_alias == normalized_alias,
+            )
+        )
+        if ingredient_id is not None:
+            alias_conflict = alias_conflict.where(IngredientAlias.ingredient_id != ingredient_id)
+        if db.scalar(alias_conflict) is not None:
+            raise HTTPException(status_code=409, detail="Ingredient alias already exists")
+
+
 def _save_ingredient(db: Session, ingredient: Ingredient, payload: IngredientCreate | IngredientUpdate) -> Ingredient:
     _validate_ingredient_references(db, payload)
+    normalized_name = normalize_name(payload.name)
+    if not normalized_name:
+        raise HTTPException(status_code=422, detail="Ingredient name cannot be blank")
+    aliases = _normalized_aliases(payload.aliases, payload.name)
+    _validate_ingredient_identity(db, normalized_name, aliases, ingredient.id if ingredient.id else None)
+
     ingredient.name = payload.name.strip()
-    ingredient.normalized_name = normalize_name(payload.name)
+    ingredient.normalized_name = normalized_name
     ingredient.shopping_category_id = payload.shopping_category_id
     ingredient.preferred_unit_id = payload.preferred_unit_id
     ingredient.default_location_id = payload.default_location_id
@@ -64,7 +122,7 @@ def _save_ingredient(db: Session, ingredient: Ingredient, payload: IngredientCre
         ingredient.active = payload.active
 
     ingredient.aliases.clear()
-    for alias, normalized in _normalized_aliases(payload.aliases, payload.name):
+    for alias, normalized in aliases:
         ingredient.aliases.append(IngredientAlias(alias=alias, normalized_alias=normalized))
 
     try:
@@ -106,10 +164,11 @@ def get_ingredient(ingredient_id: int, db: Session = Depends(get_db)) -> Ingredi
 
 @router.post("/ingredients", response_model=IngredientRead, status_code=status.HTTP_201_CREATED)
 def create_ingredient(payload: IngredientCreate, db: Session = Depends(get_db)) -> Ingredient:
-    normalized = normalize_name(payload.name)
-    if not normalized:
-        raise HTTPException(status_code=422, detail="Ingredient name cannot be blank")
-    ingredient = Ingredient(household_id=DEFAULT_HOUSEHOLD_ID, name=payload.name.strip(), normalized_name=normalized)
+    ingredient = Ingredient(
+        household_id=DEFAULT_HOUSEHOLD_ID,
+        name=payload.name.strip(),
+        normalized_name=normalize_name(payload.name),
+    )
     db.add(ingredient)
     return _save_ingredient(db, ingredient, payload)
 
@@ -137,10 +196,13 @@ def list_tags(include_inactive: bool = False, db: Session = Depends(get_db)) -> 
 
 @router.post("/tags", response_model=TagRead, status_code=status.HTTP_201_CREATED)
 def create_tag(payload: TagCreate, db: Session = Depends(get_db)) -> Tag:
+    normalized = normalize_name(payload.name)
+    if not normalized:
+        raise HTTPException(status_code=422, detail="Tag name cannot be blank")
     tag = Tag(
         household_id=DEFAULT_HOUSEHOLD_ID,
         name=payload.name.strip(),
-        normalized_name=normalize_name(payload.name),
+        normalized_name=normalized,
         category=payload.category.strip().upper(),
     )
     db.add(tag)
@@ -158,8 +220,11 @@ def update_tag(tag_id: int, payload: TagUpdate, db: Session = Depends(get_db)) -
     tag = db.get(Tag, tag_id)
     if tag is None or tag.household_id != DEFAULT_HOUSEHOLD_ID:
         raise HTTPException(status_code=404, detail="Tag not found")
+    normalized = normalize_name(payload.name)
+    if not normalized:
+        raise HTTPException(status_code=422, detail="Tag name cannot be blank")
     tag.name = payload.name.strip()
-    tag.normalized_name = normalize_name(payload.name)
+    tag.normalized_name = normalized
     tag.category = payload.category.strip().upper()
     tag.active = payload.active
     try:
