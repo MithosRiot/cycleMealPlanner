@@ -98,6 +98,7 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
         }
         for item in list(existing.items):
             db.delete(item)
+        db.flush()
         shopping_list = existing
         shopping_list.generated_at = datetime.utcnow()
     else:
