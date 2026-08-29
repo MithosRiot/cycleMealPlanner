@@ -1,0 +1,94 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #1f2933;
+  background: #f5f7f9;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+a { color: inherit; text-decoration: none; }
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  grid-template-rows: 64px 1fr;
+  grid-template-areas:
+    "topbar topbar"
+    "sidebar content";
+}
+
+.topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  background: white;
+  border-bottom: 1px solid #dfe5ea;
+}
+
+.topbar > div {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.status { font-size: 0.875rem; color: #52606d; }
+.status-error { color: #b42318; }
+
+.sidebar {
+  grid-area: sidebar;
+  background: #17212b;
+  padding: 18px 12px;
+}
+
+.sidebar nav { display: grid; gap: 6px; }
+.sidebar a {
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: #dce4ea;
+}
+.sidebar a:hover,
+.sidebar a.active { background: #263746; color: white; }
+
+.content { grid-area: content; padding: 32px; }
+.page-card {
+  max-width: 900px;
+  padding: 32px;
+  background: white;
+  border: 1px solid #dfe5ea;
+  border-radius: 14px;
+  box-shadow: 0 8px 30px rgba(20, 34, 45, 0.06);
+}
+.page-card h1 { margin: 0 0 10px; font-size: clamp(2rem, 4vw, 3rem); }
+.page-card p { color: #52606d; }
+.eyebrow {
+  margin: 0 0 8px !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas:
+      "topbar"
+      "sidebar"
+      "content";
+  }
+
+  .topbar { padding: 14px 16px; }
+  .topbar > div { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .sidebar { padding: 8px; overflow-x: auto; }
+  .sidebar nav { display: flex; width: max-content; gap: 4px; }
+  .sidebar a { white-space: nowrap; }
+  .content { padding: 16px; }
+  .page-card { padding: 22px; }
+}
