@@ -4,6 +4,8 @@ import { fetchHealth } from './api'
 import IngredientsPage from './IngredientsPage'
 import InventoryPage from './InventoryPage'
 import './InventoryPage.css'
+import { MealDetailPage, MealEditorPage, MealsPage } from './MealPages'
+import './MealPages.css'
 import { RecipeDetailPage, RecipeEditorPage, RecipesPage } from './RecipePages'
 import SettingsPage from './SettingsPage'
 
@@ -69,7 +71,10 @@ function App() {
           <Route path="/recipes/new" element={<RecipeEditorPage />} />
           <Route path="/recipes/:recipeId" element={<RecipeDetailPage />} />
           <Route path="/recipes/:recipeId/edit" element={<RecipeEditorPage />} />
-          <Route path="/meals" element={<PlaceholderPage title="Meals" />} />
+          <Route path="/meals" element={<MealsPage />} />
+          <Route path="/meals/new" element={<MealEditorPage />} />
+          <Route path="/meals/:mealId" element={<MealDetailPage />} />
+          <Route path="/meals/:mealId/edit" element={<MealEditorPage />} />
           <Route path="/meal-plan" element={<PlaceholderPage title="Meal Plan" />} />
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/shopping" element={<PlaceholderPage title="Shopping" />} />

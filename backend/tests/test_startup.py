@@ -15,7 +15,7 @@ def test_health_endpoint_and_migrations() -> None:
         migration_version = connection.execute(
             text("SELECT version_num FROM alembic_version")
         ).scalar_one()
-        assert migration_version == "0005_inventory_foundation"
+        assert migration_version == "0006_saved_meals"
 
 
 def test_sqlite_foreign_keys_and_wal_are_enabled() -> None:
