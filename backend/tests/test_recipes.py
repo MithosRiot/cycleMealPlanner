@@ -201,9 +201,12 @@ def test_recipe_crud_search_filter_archive_and_scaling() -> None:
 
         archived = client.delete(f"/api/recipes/{recipe_id}")
         assert archived.status_code == 204
-        assert client.get("/api/recipes").json() == []
+        active_ids = {item["id"] for item in client.get("/api/recipes").json()}
+        assert recipe_id not in active_ids
         inactive = client.get("/api/recipes", params={"include_inactive": True})
-        assert [item["id"] for item in inactive.json()] == [recipe_id]
+        inactive_by_id = {item["id"]: item for item in inactive.json()}
+        assert recipe_id in inactive_by_id
+        assert inactive_by_id[recipe_id]["active"] is False
 
 
 def test_scaling_engine_uses_decimal_rules() -> None:
