@@ -18,6 +18,17 @@ class MealCycleInput(BaseModel):
     slot_definitions: list[MealSlotDefinitionInput] = Field(min_length=1)
 
 
+class SlotPopulationRule(BaseModel):
+    include_meal_ids: list[int] = Field(default_factory=list)
+    exclude_meal_ids: list[int] = Field(default_factory=list)
+
+
+class PopulationRulesUpdate(BaseModel):
+    include_meal_ids: list[int] = Field(default_factory=list)
+    exclude_meal_ids: list[int] = Field(default_factory=list)
+    slot_rules: dict[int, SlotPopulationRule] = Field(default_factory=dict)
+
+
 class MealSlotDefinitionRead(MealSlotDefinitionInput):
     model_config = ConfigDict(from_attributes=True)
 
@@ -46,5 +57,6 @@ class MealCycleRead(BaseModel):
     status: str
     start_date: date | None
     notes: str | None
+    population_rules: str
     slot_definitions: list[MealSlotDefinitionRead]
     slots: list[CycleSlotRead]
