@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -6,6 +6,15 @@ from pydantic import BaseModel, Field
 
 class ShoppingItemAdjustment(BaseModel):
     adjustment_quantity: Decimal
+
+
+class ShoppingItemComplete(BaseModel):
+    actual_quantity: Decimal = Field(gt=0)
+    actual_unit_id: int
+    storage_location_id: int
+    purchase_date: date | None = None
+    expiration_date: date | None = None
+    notes: str | None = None
 
 
 class ShoppingListItemRead(BaseModel):
@@ -25,6 +34,16 @@ class ShoppingListItemRead(BaseModel):
     final_quantity: Decimal
     source_trace: str
     warning: str | None
+    status: str
+    actual_quantity: Decimal | None
+    actual_unit_id: int | None
+    actual_unit_code: str | None
+    purchase_date: date | None
+    storage_location_id: int | None
+    expiration_date: date | None
+    purchase_notes: str | None
+    inventory_lot_id: int | None
+    completed_at: datetime | None
 
 
 class ShoppingListRead(BaseModel):

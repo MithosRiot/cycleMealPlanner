@@ -9,16 +9,16 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database.session import get_db
 from app.models.ingredient import Ingredient
-from app.models.inventory import InventoryLot
+from app.models.inventory import InventoryLot, InventoryTransaction
 from app.models.meal_cycle import CycleSlot, MealCycle
-from app.models.planned_meal import PlannedMeal
-from app.models.reference import MeasurementUnit, ShoppingCategory
+from app.models.reference import InventoryLocation, MeasurementUnit, ShoppingCategory
 from app.models.shopping import ShoppingList, ShoppingListItem
-from app.schemas.shopping import ShoppingItemAdjustment, ShoppingListRead
+from app.schemas.shopping import ShoppingItemAdjustment, ShoppingItemComplete, ShoppingListRead
 from app.services.units import convert_quantity
 
 router = APIRouter(prefix="/api/shopping", tags=["shopping"])
 HOUSEHOLD_ID = 1
+TERMINAL_STATUSES = {"COMPLETED", "SKIPPED"}
 
 
 def _cycle_or_404(db: Session, cycle_id: int) -> MealCycle:
@@ -30,6 +30,24 @@ def _cycle_or_404(db: Session, cycle_id: int) -> MealCycle:
     if cycle is None:
         raise HTTPException(status_code=404, detail="Meal cycle not found")
     return cycle
+
+
+def _shopping_list_or_404(db: Session, cycle_id: int) -> ShoppingList:
+    shopping_list = db.scalar(
+        select(ShoppingList)
+        .where(ShoppingList.meal_cycle_id == cycle_id, ShoppingList.household_id == HOUSEHOLD_ID)
+        .options(selectinload(ShoppingList.items))
+    )
+    if shopping_list is None:
+        raise HTTPException(status_code=404, detail="Shopping list has not been generated")
+    return shopping_list
+
+
+def _item_or_404(shopping_list: ShoppingList, item_id: int) -> ShoppingListItem:
+    item = next((value for value in shopping_list.items if value.id == item_id), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Shopping list item not found")
+    return item
 
 
 def _serialize(db: Session, shopping_list: ShoppingList, cycle: MealCycle) -> dict:
@@ -44,6 +62,7 @@ def _serialize(db: Session, shopping_list: ShoppingList, cycle: MealCycle) -> di
         ingredient = ingredients[item.ingredient_id]
         category = categories.get(item.shopping_category_id)
         unit = units[item.unit_id]
+        actual_unit = units.get(item.actual_unit_id) if item.actual_unit_id else None
         final_quantity = max(Decimal(item.generated_quantity) + Decimal(item.adjustment_quantity), Decimal("0"))
         items.append(
             {
@@ -63,6 +82,16 @@ def _serialize(db: Session, shopping_list: ShoppingList, cycle: MealCycle) -> di
                 "final_quantity": final_quantity,
                 "source_trace": item.source_trace,
                 "warning": item.warning,
+                "status": item.status,
+                "actual_quantity": item.actual_quantity,
+                "actual_unit_id": item.actual_unit_id,
+                "actual_unit_code": actual_unit.code if actual_unit else None,
+                "purchase_date": item.purchase_date,
+                "storage_location_id": item.storage_location_id,
+                "expiration_date": item.expiration_date,
+                "purchase_notes": item.purchase_notes,
+                "inventory_lot_id": item.inventory_lot_id,
+                "completed_at": item.completed_at,
             }
         )
     items.sort(key=lambda value: (value["shopping_category_sort_order"], value["shopping_category_name"], value["ingredient_name"], value["unit_family"]))
@@ -95,21 +124,15 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
         .where(ShoppingList.meal_cycle_id == cycle.id, ShoppingList.household_id == HOUSEHOLD_ID)
         .options(selectinload(ShoppingList.items))
     )
-    adjustments = {}
-    if existing is not None:
-        adjustments = {
-            (item.ingredient_id, item.unit_family): Decimal(item.adjustment_quantity)
-            for item in existing.items
-        }
-        for item in list(existing.items):
-            db.delete(item)
-        db.flush()
-        shopping_list = existing
-        shopping_list.generated_at = datetime.utcnow()
-    else:
+    if existing is None:
         shopping_list = ShoppingList(household_id=HOUSEHOLD_ID, meal_cycle_id=cycle.id, generated_at=datetime.utcnow())
         db.add(shopping_list)
         db.flush()
+        existing_by_key: dict[tuple[int, str], ShoppingListItem] = {}
+    else:
+        shopping_list = existing
+        shopping_list.generated_at = datetime.utcnow()
+        existing_by_key = {(item.ingredient_id, item.unit_family): item for item in existing.items}
 
     requirements: dict[tuple[int, str], list[dict]] = defaultdict(list)
     families_by_ingredient: dict[int, set[str]] = defaultdict(set)
@@ -142,7 +165,9 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
                 if ingredient_row.get("manual_review"):
                     manual_review_groups.add(key)
 
+    seen_keys: set[tuple[int, str]] = set()
     for key in sorted(requirements):
+        seen_keys.add(key)
         ingredient_id, family = key
         ingredient = ingredients.get(ingredient_id)
         if ingredient is None:
@@ -155,8 +180,7 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
         source_trace = []
         for row in rows:
             source_unit = units[row["unit_id"]]
-            converted = convert_quantity(row["quantity"], source_unit, target_unit)
-            required += converted
+            required += convert_quantity(row["quantity"], source_unit, target_unit)
             source_trace.append(
                 {
                     "planned_meal_id": row["planned_meal_id"],
@@ -185,21 +209,27 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
         if key in manual_review_groups:
             warnings.append("One or more recipe ingredients use MANUAL scaling; review this quantity.")
 
-        db.add(
-            ShoppingListItem(
+        item = existing_by_key.get(key)
+        if item is None:
+            item = ShoppingListItem(
                 shopping_list_id=shopping_list.id,
                 ingredient_id=ingredient_id,
-                shopping_category_id=ingredient.shopping_category_id,
-                unit_id=target_unit.id,
                 unit_family=family,
-                required_quantity=required,
-                inventory_quantity=inventory,
-                generated_quantity=shortage,
-                adjustment_quantity=adjustments.get(key, Decimal("0")),
-                source_trace=json.dumps(source_trace, sort_keys=True),
-                warning=" ".join(warnings) or None,
+                adjustment_quantity=Decimal("0"),
+                status="PENDING",
             )
-        )
+            db.add(item)
+        item.shopping_category_id = ingredient.shopping_category_id
+        item.unit_id = target_unit.id
+        item.required_quantity = required
+        item.inventory_quantity = inventory
+        item.generated_quantity = shortage
+        item.source_trace = json.dumps(source_trace, sort_keys=True)
+        item.warning = " ".join(warnings) or None
+
+    for key, item in existing_by_key.items():
+        if key not in seen_keys and item.status == "PENDING":
+            db.delete(item)
 
     shopping_list_id = shopping_list.id
     db.commit()
@@ -215,37 +245,90 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
 @router.get("/{cycle_id}", response_model=ShoppingListRead)
 def get_shopping_list(cycle_id: int, db: Session = Depends(get_db)) -> dict:
     cycle = _cycle_or_404(db, cycle_id)
-    shopping_list = db.scalar(
-        select(ShoppingList)
-        .where(ShoppingList.meal_cycle_id == cycle_id, ShoppingList.household_id == HOUSEHOLD_ID)
-        .options(selectinload(ShoppingList.items))
-    )
-    if shopping_list is None:
-        raise HTTPException(status_code=404, detail="Shopping list has not been generated")
-    return _serialize(db, shopping_list, cycle)
+    return _serialize(db, _shopping_list_or_404(db, cycle_id), cycle)
 
 
 @router.post("/{cycle_id}/regenerate", response_model=ShoppingListRead)
 def regenerate_shopping_list(cycle_id: int, db: Session = Depends(get_db)) -> dict:
     cycle = _cycle_or_404(db, cycle_id)
-    shopping_list = _regenerate(db, cycle)
-    return _serialize(db, shopping_list, cycle)
+    return _serialize(db, _regenerate(db, cycle), cycle)
 
 
 @router.put("/{cycle_id}/items/{item_id}", response_model=ShoppingListRead)
 def adjust_shopping_item(cycle_id: int, item_id: int, payload: ShoppingItemAdjustment, db: Session = Depends(get_db)) -> dict:
     cycle = _cycle_or_404(db, cycle_id)
-    shopping_list = db.scalar(
-        select(ShoppingList)
-        .where(ShoppingList.meal_cycle_id == cycle_id, ShoppingList.household_id == HOUSEHOLD_ID)
-        .options(selectinload(ShoppingList.items))
-    )
-    if shopping_list is None:
-        raise HTTPException(status_code=404, detail="Shopping list has not been generated")
-    item = next((value for value in shopping_list.items if value.id == item_id), None)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Shopping list item not found")
+    shopping_list = _shopping_list_or_404(db, cycle_id)
+    item = _item_or_404(shopping_list, item_id)
+    if item.status != "PENDING":
+        raise HTTPException(status_code=409, detail="Completed or skipped shopping items cannot be adjusted")
     item.adjustment_quantity = payload.adjustment_quantity
     db.commit()
-    db.refresh(item)
+    return _serialize(db, shopping_list, cycle)
+
+
+@router.post("/{cycle_id}/items/{item_id}/complete", response_model=ShoppingListRead)
+def complete_shopping_item(cycle_id: int, item_id: int, payload: ShoppingItemComplete, db: Session = Depends(get_db)) -> dict:
+    cycle = _cycle_or_404(db, cycle_id)
+    shopping_list = _shopping_list_or_404(db, cycle_id)
+    item = _item_or_404(shopping_list, item_id)
+    if item.status in TERMINAL_STATUSES or item.inventory_lot_id is not None:
+        raise HTTPException(status_code=409, detail="Shopping item has already been completed or skipped")
+
+    unit = db.get(MeasurementUnit, payload.actual_unit_id)
+    if unit is None:
+        raise HTTPException(status_code=400, detail="Measurement unit not found")
+    if unit.unit_family != item.unit_family:
+        raise HTTPException(status_code=409, detail="Purchased unit must use the same measurement family as the shopping item")
+    location = db.get(InventoryLocation, payload.storage_location_id)
+    if location is None or location.household_id != HOUSEHOLD_ID or not location.active:
+        raise HTTPException(status_code=400, detail="Inventory location not found")
+
+    lot = InventoryLot(
+        household_id=HOUSEHOLD_ID,
+        ingredient_id=item.ingredient_id,
+        location_id=payload.storage_location_id,
+        quantity=payload.actual_quantity,
+        unit_id=payload.actual_unit_id,
+        purchase_date=payload.purchase_date,
+        expiration_date=payload.expiration_date,
+        notes=payload.notes.strip() if payload.notes else None,
+    )
+    db.add(lot)
+    db.flush()
+    db.add(
+        InventoryTransaction(
+            household_id=HOUSEHOLD_ID,
+            lot_id=lot.id,
+            transaction_type="PURCHASE",
+            quantity_delta=payload.actual_quantity,
+            unit_id=payload.actual_unit_id,
+            to_location_id=payload.storage_location_id,
+            note=payload.notes.strip() if payload.notes else None,
+        )
+    )
+    item.status = "COMPLETED"
+    item.actual_quantity = payload.actual_quantity
+    item.actual_unit_id = payload.actual_unit_id
+    item.purchase_date = payload.purchase_date
+    item.storage_location_id = payload.storage_location_id
+    item.expiration_date = payload.expiration_date
+    item.purchase_notes = payload.notes.strip() if payload.notes else None
+    item.inventory_lot_id = lot.id
+    item.completed_at = datetime.utcnow()
+    db.commit()
+    db.expire_all()
+    shopping_list = _shopping_list_or_404(db, cycle_id)
+    return _serialize(db, shopping_list, cycle)
+
+
+@router.post("/{cycle_id}/items/{item_id}/skip", response_model=ShoppingListRead)
+def skip_shopping_item(cycle_id: int, item_id: int, db: Session = Depends(get_db)) -> dict:
+    cycle = _cycle_or_404(db, cycle_id)
+    shopping_list = _shopping_list_or_404(db, cycle_id)
+    item = _item_or_404(shopping_list, item_id)
+    if item.status in TERMINAL_STATUSES or item.inventory_lot_id is not None:
+        raise HTTPException(status_code=409, detail="Shopping item has already been completed or skipped")
+    item.status = "SKIPPED"
+    item.completed_at = datetime.utcnow()
+    db.commit()
     return _serialize(db, shopping_list, cycle)

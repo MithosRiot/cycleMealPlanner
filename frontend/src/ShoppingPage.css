@@ -6,13 +6,22 @@
 .shopping-groups { display: grid; gap: 16px; }
 .shopping-category h2 { margin-top: 0; }
 .shopping-items { display: grid; gap: 10px; }
-.shopping-item { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, 280px); gap: 18px; padding: 14px; border: 1px solid #d7dfe6; border-radius: 10px; background: #fbfcfd; }
-.shopping-item.covered { opacity: .72; background: #f2f6f3; }
+.shopping-item { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); gap: 18px; padding: 14px; border: 1px solid #d7dfe6; border-radius: 10px; background: #fbfcfd; }
+.shopping-item.covered { background: #f2f6f3; }
+.shopping-item-terminal { background: #f4f6f8; }
+.shopping-title-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.shopping-status { padding: 3px 8px; border-radius: 999px; font-size: .72rem; font-weight: 700; letter-spacing: .04em; background: #e6ebef; color: #44515d; }
+.shopping-status.completed { background: #dff1e4; color: #275b35; }
+.shopping-status.skipped { background: #eceff2; color: #59636d; }
 .shopping-math { margin-top: 5px; color: #5d6974; font-size: .9rem; }
 .shopping-item details { margin-top: 8px; color: #52606d; }
 .shopping-item details ul { margin-bottom: 0; padding-left: 20px; }
 .shopping-quantity { display: grid; gap: 8px; align-content: start; }
-.shopping-quantity label { display: grid; gap: 5px; font-size: .85rem; color: #52606d; }
+.shopping-quantity label, .shopping-intake label { display: grid; gap: 5px; font-size: .85rem; color: #52606d; }
 .generated-quantity { color: #52606d; font-size: .9rem; }
+.shopping-intake { display: grid; gap: 9px; margin-top: 8px; padding-top: 12px; border-top: 1px solid #d7dfe6; }
+.shopping-intake textarea { min-height: 64px; resize: vertical; }
+.shopping-intake-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.purchase-record { margin-top: 12px; padding: 9px 10px; border-radius: 8px; background: #e9eef2; color: #3f4d59; font-size: .9rem; }
 .shopping-empty { background: white; border: 1px solid #dfe5ea; border-radius: 14px; }
 @media (max-width: 760px) { .shopping-toolbar, .shopping-item { grid-template-columns: 1fr; } }
