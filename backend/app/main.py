@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 
 from app.config import get_settings
+from app.database.migrations import run_migrations
 from app.database.session import engine
 from app.logging import configure_logging
 
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    run_migrations()
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))
     logger.info("application_started")
