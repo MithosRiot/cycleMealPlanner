@@ -1,3 +1,5 @@
+import json
+from decimal import Decimal
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -76,7 +78,7 @@ def _create_meal(client: TestClient, name: str, meal_type: str) -> int:
     return meal.json()["id"]
 
 
-def test_manual_move_lock_snapshot_and_random_fill() -> None:
+def test_manual_move_lock_snapshot_servings_leftovers_and_random_fill() -> None:
     suffix = uuid4().hex[:8]
     with TestClient(app) as client:
         breakfast_id = _create_meal(client, f"Placement Breakfast {suffix}", "BREAKFAST")
@@ -108,7 +110,54 @@ def test_manual_move_lock_snapshot_and_random_fill() -> None:
             json={"meal_id": breakfast_id},
         )
         assert assigned.status_code == 201
-        snapshot_name = assigned.json()["snapshot_name"]
+        assigned_body = assigned.json()
+        snapshot_name = assigned_body["snapshot_name"]
+        assert Decimal(assigned_body["planned_servings"]) == Decimal("4")
+        assert Decimal(assigned_body["planned_leftover_servings"]) == Decimal("0")
+        initial_scaled = json.loads(assigned_body["scaled_components"])
+        assert Decimal(initial_scaled[0]["requested_servings"]) == Decimal("4")
+        assert Decimal(initial_scaled[0]["ingredients"][0]["quantity"]) == Decimal("1")
+
+        component_id = json.loads(assigned_body["snapshot_components"])[0]["meal_recipe_id"]
+        planned_update = client.put(
+            f"/api/meal-cycles/{cycle_id}/slots/{breakfast_slots[0]['id']}/planned-meal/planning",
+            json={
+                "planned_servings": "5",
+                "planned_leftover_servings": "1",
+                "component_serving_overrides": {},
+            },
+        )
+        assert planned_update.status_code == 200
+        updated_plan = planned_update.json()
+        assert Decimal(updated_plan["planned_servings"]) == Decimal("5")
+        assert Decimal(updated_plan["planned_leftover_servings"]) == Decimal("1")
+        scaled = json.loads(updated_plan["scaled_components"])
+        assert Decimal(scaled[0]["requested_servings"]) == Decimal("6")
+        assert Decimal(scaled[0]["ingredients"][0]["quantity"]) == Decimal("1.5")
+
+        override_update = client.put(
+            f"/api/meal-cycles/{cycle_id}/slots/{breakfast_slots[0]['id']}/planned-meal/planning",
+            json={
+                "planned_servings": "5",
+                "planned_leftover_servings": "1",
+                "component_serving_overrides": {str(component_id): "8"},
+            },
+        )
+        assert override_update.status_code == 200
+        overridden = override_update.json()
+        scaled = json.loads(overridden["scaled_components"])
+        assert Decimal(scaled[0]["requested_servings"]) == Decimal("8")
+        assert Decimal(scaled[0]["ingredients"][0]["quantity"]) == Decimal("2")
+
+        invalid_override = client.put(
+            f"/api/meal-cycles/{cycle_id}/slots/{breakfast_slots[0]['id']}/planned-meal/planning",
+            json={
+                "planned_servings": "5",
+                "planned_leftover_servings": "1",
+                "component_serving_overrides": {"999999": "2"},
+            },
+        )
+        assert invalid_override.status_code == 422
 
         source_meal = client.get(f"/api/meals/{breakfast_id}").json()
         updated = client.put(
@@ -133,6 +182,9 @@ def test_manual_move_lock_snapshot_and_random_fill() -> None:
         persisted = client.get(f"/api/meal-cycles/{cycle_id}").json()
         planned = next(slot["planned_meal"] for slot in persisted["slots"] if slot["id"] == breakfast_slots[0]["id"])
         assert planned["snapshot_name"] == snapshot_name
+        assert Decimal(planned["planned_servings"]) == Decimal("5")
+        assert Decimal(planned["planned_leftover_servings"]) == Decimal("1")
+        assert json.loads(planned["component_serving_overrides"])[str(component_id)] == "8"
 
         locked = client.put(
             f"/api/meal-cycles/{cycle_id}/slots/{breakfast_slots[0]['id']}/planned-meal/lock",
@@ -164,6 +216,8 @@ def test_manual_move_lock_snapshot_and_random_fill() -> None:
         )
         assert moved.status_code == 200
         assert moved.json()["cycle_slot_id"] == target
+        assert Decimal(moved.json()["planned_servings"]) == Decimal("5")
+        assert Decimal(moved.json()["planned_leftover_servings"]) == Decimal("1")
 
         removed = client.delete(f"/api/meal-cycles/{cycle_id}/slots/{target}/planned-meal")
         assert removed.status_code == 204
