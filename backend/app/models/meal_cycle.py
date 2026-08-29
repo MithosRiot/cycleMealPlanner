@@ -28,7 +28,7 @@ class MealCycle(Base):
     slots: Mapped[list[CycleSlot]] = relationship(
         back_populates="cycle",
         cascade="all, delete-orphan",
-        order_by="(CycleSlot.day_number, CycleSlot.sort_order)",
+        order_by=lambda: (CycleSlot.day_number, CycleSlot.sort_order),
     )
 
     __table_args__ = (
