@@ -6,6 +6,7 @@ from sqlalchemy import text
 
 from app.api.ingredients import router as ingredients_router
 from app.api.inventory import router as inventory_router
+from app.api.meal_cycles import router as meal_cycles_router
 from app.api.meals import router as meals_router
 from app.api.recipes import router as recipes_router
 from app.api.reference import router as reference_router
@@ -36,6 +37,7 @@ app.include_router(ingredients_router)
 app.include_router(recipes_router)
 app.include_router(inventory_router)
 app.include_router(meals_router)
+app.include_router(meal_cycles_router)
 
 
 @app.get("/health", tags=["system"])
