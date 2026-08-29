@@ -125,6 +125,7 @@ def _save_ingredient(db: Session, ingredient: Ingredient, payload: IngredientCre
     for alias, normalized in aliases:
         ingredient.aliases.append(IngredientAlias(alias=alias, normalized_alias=normalized))
 
+    db.add(ingredient)
     try:
         db.commit()
     except IntegrityError as exc:
@@ -169,7 +170,6 @@ def create_ingredient(payload: IngredientCreate, db: Session = Depends(get_db)) 
         name=payload.name.strip(),
         normalized_name=normalize_name(payload.name),
     )
-    db.add(ingredient)
     return _save_ingredient(db, ingredient, payload)
 
 
