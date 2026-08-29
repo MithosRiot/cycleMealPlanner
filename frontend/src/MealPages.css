@@ -1,0 +1,21 @@
+.meal-component-list, .meal-detail-list { display: grid; gap: 10px; }
+.meal-component-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) minmax(110px, .8fr) minmax(130px, .9fr) minmax(180px, 1.5fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px 0;
+  border-bottom: 1px solid #edf0f2;
+}
+.meal-component-row label { display: grid; gap: 6px; }
+.meal-detail-list > div {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) minmax(80px, .7fr) minmax(160px, 1fr) minmax(180px, 1.5fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #edf0f2;
+}
+@media (max-width: 900px) {
+  .meal-component-row, .meal-detail-list > div { grid-template-columns: 1fr; }
+}
