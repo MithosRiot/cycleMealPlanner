@@ -14,9 +14,16 @@
 .slot-editor-list { display: grid; gap: .5rem; }
 .slot-editor-row { display: grid; grid-template-columns: 2rem minmax(140px, 1fr) auto auto auto; gap: .5rem; align-items: center; }
 .slot-order { text-align: center; opacity: .7; }
-.cycle-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .75rem; }
+.cycle-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: .75rem; }
 .cycle-day { border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: .75rem; display: grid; gap: .5rem; }
 .cycle-day h3 { margin: 0; }
-.cycle-slot { border: 1px dashed rgba(255,255,255,.15); border-radius: 8px; padding: .6rem; opacity: .85; }
-.button-row { display: flex; gap: .5rem; }
-@media (max-width: 900px) { .meal-plan-layout { grid-template-columns: 1fr; } .form-grid { grid-template-columns: 1fr; } .slot-editor-row { grid-template-columns: 2rem 1fr; } .slot-editor-row button { grid-column: auto; } }
+.cycle-slot { border: 1px dashed rgba(255,255,255,.15); border-radius: 8px; padding: .65rem; display: grid; gap: .55rem; }
+.cycle-slot.planned { border-style: solid; }
+.cycle-slot.locked { outline: 1px solid rgba(255,255,255,.22); }
+.placement-card, .assign-control, .move-control { display: grid; gap: .45rem; }
+.placement-card small { opacity: .7; }
+.placement-actions, .move-control { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.assign-control { grid-template-columns: minmax(0, 1fr) auto; }
+.assign-control select, .move-control select { min-width: 0; }
+.button-row { display: flex; gap: .5rem; flex-wrap: wrap; }
+@media (max-width: 900px) { .meal-plan-layout { grid-template-columns: 1fr; } .form-grid { grid-template-columns: 1fr; } .slot-editor-row { grid-template-columns: 2rem 1fr; } .slot-editor-row button { grid-column: auto; } .section-heading { align-items: flex-start; flex-direction: column; } }
