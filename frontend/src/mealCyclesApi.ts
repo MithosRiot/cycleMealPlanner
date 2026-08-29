@@ -8,12 +8,24 @@ export type MealSlotDefinition = MealSlotDefinitionInput & {
   cycle_id: number
 }
 
+export type PlannedMeal = {
+  id: number
+  cycle_slot_id: number
+  meal_id: number
+  locked: boolean
+  snapshot_name: string
+  snapshot_description: string | null
+  snapshot_meal_types: string
+  snapshot_components: string
+}
+
 export type CycleSlot = {
   id: number
   cycle_id: number
   slot_definition_id: number
   day_number: number
   sort_order: number
+  planned_meal: PlannedMeal | null
 }
 
 export type MealCycleInput = {
@@ -51,3 +63,8 @@ export const fetchMealCycle = (id: number): Promise<MealCycle> => jsonRequest(`/
 export const createMealCycle = (input: MealCycleInput): Promise<MealCycle> => jsonRequest('/api/meal-cycles', { method: 'POST', body: JSON.stringify(input) })
 export const updateMealCycle = (id: number, input: MealCycleInput): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'PUT', body: JSON.stringify(input) })
 export const deleteMealCycle = (id: number): Promise<void> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'DELETE' })
+export const assignPlannedMeal = (cycleId: number, slotId: number, mealId: number): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal`, { method: 'POST', body: JSON.stringify({ meal_id: mealId }) })
+export const removePlannedMeal = (cycleId: number, slotId: number): Promise<void> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal`, { method: 'DELETE' })
+export const setPlannedMealLock = (cycleId: number, slotId: number, locked: boolean): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal/lock`, { method: 'PUT', body: JSON.stringify({ locked }) })
+export const movePlannedMeal = (cycleId: number, slotId: number, targetSlotId: number): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal/move`, { method: 'POST', body: JSON.stringify({ target_cycle_slot_id: targetSlotId }) })
+export const randomFillMealCycle = (cycleId: number): Promise<{ filled_count: number }> => jsonRequest(`/api/meal-cycles/${cycleId}/random-fill`, { method: 'POST' })

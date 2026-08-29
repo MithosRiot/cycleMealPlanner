@@ -1,13 +1,19 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  assignPlannedMeal,
   createMealCycle,
   deleteMealCycle,
   fetchMealCycle,
   fetchMealCycles,
   MealCycleInput,
+  movePlannedMeal,
+  randomFillMealCycle,
+  removePlannedMeal,
+  setPlannedMealLock,
   updateMealCycle,
 } from './mealCyclesApi'
+import { fetchMeals } from './mealsApi'
 import './MealPlanPage.css'
 
 const DEFAULT_SLOTS = ['Breakfast', 'Lunch', 'Dinner']
@@ -25,6 +31,7 @@ function makeDraft(): MealCycleInput {
 export default function MealPlanPage() {
   const queryClient = useQueryClient()
   const cycles = useQuery({ queryKey: ['meal-cycles'], queryFn: fetchMealCycles })
+  const meals = useQuery({ queryKey: ['meals', 'planner'], queryFn: () => fetchMeals() })
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const selected = useQuery({
     queryKey: ['meal-cycle', selectedId],
@@ -33,6 +40,8 @@ export default function MealPlanPage() {
   })
   const [draft, setDraft] = useState<MealCycleInput>(makeDraft())
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [mealChoices, setMealChoices] = useState<Record<number, number>>({})
+  const [moveTargets, setMoveTargets] = useState<Record<number, number>>({})
 
   const slotGrid = useMemo(() => {
     const cycle = selected.data
@@ -46,11 +55,15 @@ export default function MealPlanPage() {
     })
   }, [selected.data])
 
+  async function refreshCycle(cycleId: number) {
+    await queryClient.invalidateQueries({ queryKey: ['meal-cycles'] })
+    await queryClient.invalidateQueries({ queryKey: ['meal-cycle', cycleId] })
+  }
+
   const saveMutation = useMutation({
     mutationFn: () => editingId === null ? createMealCycle(draft) : updateMealCycle(editingId, draft),
     onSuccess: async (cycle) => {
-      await queryClient.invalidateQueries({ queryKey: ['meal-cycles'] })
-      await queryClient.invalidateQueries({ queryKey: ['meal-cycle', cycle.id] })
+      await refreshCycle(cycle.id)
       setSelectedId(cycle.id)
       setEditingId(null)
       setDraft(makeDraft())
@@ -64,6 +77,20 @@ export default function MealPlanPage() {
       setSelectedId(null)
       setEditingId(null)
       setDraft(makeDraft())
+    },
+  })
+
+  const placementMutation = useMutation({
+    mutationFn: async (action: { type: 'assign'; slotId: number; mealId: number } | { type: 'remove'; slotId: number } | { type: 'lock'; slotId: number; locked: boolean } | { type: 'move'; slotId: number; targetSlotId: number } | { type: 'random' }) => {
+      if (selectedId === null) throw new Error('Select a cycle first')
+      if (action.type === 'assign') return assignPlannedMeal(selectedId, action.slotId, action.mealId)
+      if (action.type === 'remove') return removePlannedMeal(selectedId, action.slotId)
+      if (action.type === 'lock') return setPlannedMealLock(selectedId, action.slotId, action.locked)
+      if (action.type === 'move') return movePlannedMeal(selectedId, action.slotId, action.targetSlotId)
+      return randomFillMealCycle(selectedId)
+    },
+    onSuccess: async () => {
+      if (selectedId !== null) await refreshCycle(selectedId)
     },
   })
 
@@ -119,13 +146,15 @@ export default function MealPlanPage() {
     saveMutation.mutate()
   }
 
+  const emptySlots = selected.data?.slots.filter((slot) => slot.planned_meal === null) ?? []
+
   return (
     <section className="meal-plan-page">
       <header className="page-heading">
         <div>
           <p className="eyebrow">Cycle Planning</p>
           <h1>Meal Plan</h1>
-          <p>Create reusable draft cycles with any duration up to one year and define the ordered meal slots used on each day.</p>
+          <p>Create reusable cycles, place saved Meals manually, lock choices, or fill eligible empty slots randomly.</p>
         </div>
       </header>
 
@@ -133,12 +162,7 @@ export default function MealPlanPage() {
         <aside className="cycle-list panel">
           <h2>Cycles</h2>
           {cycles.data?.map((cycle) => (
-            <button
-              type="button"
-              className={selectedId === cycle.id ? 'cycle-select active' : 'cycle-select'}
-              key={cycle.id}
-              onClick={() => setSelectedId(cycle.id)}
-            >
+            <button type="button" className={selectedId === cycle.id ? 'cycle-select active' : 'cycle-select'} key={cycle.id} onClick={() => setSelectedId(cycle.id)}>
               <strong>{cycle.name}</strong>
               <span>{cycle.duration_days} days · {cycle.slot_definitions.length} slots/day</span>
             </button>
@@ -152,30 +176,13 @@ export default function MealPlanPage() {
               <h2>{editingId === null ? 'New cycle' : 'Edit cycle'}</h2>
               {editingId !== null && <button type="button" className="button-secondary" onClick={() => { setEditingId(null); setDraft(makeDraft()) }}>Cancel edit</button>}
             </div>
-
             <div className="form-grid">
-              <label>
-                Cycle name
-                <input required value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
-              </label>
-              <label>
-                Duration (days)
-                <input type="number" min="1" max="365" required value={draft.duration_days} onChange={(event) => setDraft({ ...draft, duration_days: Number(event.target.value) })} />
-              </label>
-              <label>
-                Start date (optional)
-                <input type="date" value={draft.start_date ?? ''} onChange={(event) => setDraft({ ...draft, start_date: event.target.value || null })} />
-              </label>
-              <label className="wide-field">
-                Notes
-                <textarea value={draft.notes ?? ''} onChange={(event) => setDraft({ ...draft, notes: event.target.value || null })} />
-              </label>
+              <label>Cycle name<input required value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+              <label>Duration (days)<input type="number" min="1" max="365" required value={draft.duration_days} onChange={(event) => setDraft({ ...draft, duration_days: Number(event.target.value) })} /></label>
+              <label>Start date (optional)<input type="date" value={draft.start_date ?? ''} onChange={(event) => setDraft({ ...draft, start_date: event.target.value || null })} /></label>
+              <label className="wide-field">Notes<textarea value={draft.notes ?? ''} onChange={(event) => setDraft({ ...draft, notes: event.target.value || null })} /></label>
             </div>
-
-            <div className="section-heading">
-              <h3>Meal slots</h3>
-              <button type="button" className="button-secondary" onClick={addSlot}>Add slot</button>
-            </div>
+            <div className="section-heading"><h3>Meal slots</h3><button type="button" className="button-secondary" onClick={addSlot}>Add slot</button></div>
             <div className="slot-editor-list">
               {draft.slot_definitions.map((slot, index) => (
                 <div className="slot-editor-row" key={`${index}-${slot.sort_order}`}>
@@ -200,17 +207,54 @@ export default function MealPlanPage() {
                   <p>{selected.data.duration_days} days · {selected.data.start_date ? `Starts ${selected.data.start_date}` : 'No start date yet'}</p>
                 </div>
                 <div className="button-row">
-                  <button type="button" className="button-secondary" onClick={startEdit}>Edit</button>
-                  <button type="button" className="button-secondary" onClick={() => deleteMutation.mutate(selected.data!.id)}>Delete</button>
+                  <button type="button" className="button-secondary" onClick={() => placementMutation.mutate({ type: 'random' })}>Random fill empty</button>
+                  <button type="button" className="button-secondary" onClick={startEdit}>Edit cycle</button>
+                  <button type="button" className="button-secondary" onClick={() => deleteMutation.mutate(selected.data!.id)}>Delete cycle</button>
                 </div>
               </div>
+              {placementMutation.isError && <div className="error-banner">{(placementMutation.error as Error).message}</div>}
               <div className="cycle-grid">
                 {slotGrid.map(({ day, slots }) => (
                   <div className="cycle-day" key={day}>
                     <h3>Day {day}</h3>
                     {slots.map((slot) => {
                       const definition = selected.data!.slot_definitions.find((item) => item.id === slot.slot_definition_id)
-                      return <div className="cycle-slot" key={slot.id}>{definition?.label ?? 'Slot'}</div>
+                      const placement = slot.planned_meal
+                      return (
+                        <div className={placement?.locked ? 'cycle-slot planned locked' : placement ? 'cycle-slot planned' : 'cycle-slot'} key={slot.id}>
+                          <strong>{definition?.label ?? 'Slot'}</strong>
+                          {placement ? (
+                            <div className="placement-card">
+                              <span>{placement.snapshot_name}</span>
+                              <small>{placement.locked ? 'Locked' : 'Unlocked'}</small>
+                              <div className="placement-actions">
+                                <button type="button" className="button-secondary" onClick={() => placementMutation.mutate({ type: 'lock', slotId: slot.id, locked: !placement.locked })}>{placement.locked ? 'Unlock' : 'Lock'}</button>
+                                <button type="button" className="button-secondary" disabled={placement.locked} onClick={() => placementMutation.mutate({ type: 'remove', slotId: slot.id })}>Remove</button>
+                              </div>
+                              {!placement.locked && emptySlots.length > 0 && (
+                                <div className="move-control">
+                                  <select value={moveTargets[slot.id] ?? ''} onChange={(event) => setMoveTargets({ ...moveTargets, [slot.id]: Number(event.target.value) })}>
+                                    <option value="">Move to…</option>
+                                    {emptySlots.map((target) => {
+                                      const targetDefinition = selected.data!.slot_definitions.find((item) => item.id === target.slot_definition_id)
+                                      return <option key={target.id} value={target.id}>Day {target.day_number} · {targetDefinition?.label ?? 'Slot'}</option>
+                                    })}
+                                  </select>
+                                  <button type="button" className="button-secondary" disabled={!moveTargets[slot.id]} onClick={() => placementMutation.mutate({ type: 'move', slotId: slot.id, targetSlotId: moveTargets[slot.id] })}>Move</button>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="assign-control">
+                              <select value={mealChoices[slot.id] ?? ''} onChange={(event) => setMealChoices({ ...mealChoices, [slot.id]: Number(event.target.value) })}>
+                                <option value="">Choose meal…</option>
+                                {meals.data?.map((meal) => <option key={meal.id} value={meal.id}>{meal.name}</option>)}
+                              </select>
+                              <button type="button" className="button-secondary" disabled={!mealChoices[slot.id]} onClick={() => placementMutation.mutate({ type: 'assign', slotId: slot.id, mealId: mealChoices[slot.id] })}>Place</button>
+                            </div>
+                          )}
+                        </div>
+                      )
                     })}
                   </div>
                 ))}

@@ -66,6 +66,12 @@ class CycleSlot(Base):
 
     cycle: Mapped[MealCycle] = relationship(back_populates="slots")
     slot_definition: Mapped[MealSlotDefinition] = relationship(back_populates="slots")
+    planned_meal = relationship(
+        "PlannedMeal",
+        back_populates="cycle_slot",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
 
     __table_args__ = (
         UniqueConstraint("cycle_id", "day_number", "slot_definition_id", name="uq_cycle_slots_day_definition"),

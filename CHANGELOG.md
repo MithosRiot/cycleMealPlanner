@@ -18,7 +18,9 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Milestone 1 end-to-end validation covering fresh database initialization, reference data, ingredients/aliases, tagged recipes, scaling, inventory transactions, negative-quantity protection, application restart, and persistence.
 - Reusable saved Meals composed of ordered Recipe components with serving multipliers/defaults, tags, meal types, favorites, archive behavior, CRUD/search API, and Meals library/editor/detail UI.
 - Flexible draft Meal Cycles with arbitrary duration up to 365 days, configurable ordered slot definitions, generated per-day CycleSlots, optional start dates, CRUD API, and Meal Plan cycle editor/preview UI.
+- Planned Meal placement with immutable source snapshots, manual assign/remove/move, lock/unlock controls, meal-type-aware random fill, and Meal Plan placement UI.
+- Reproducible seeded manual-testing database with sample ingredients, recipes, Meals, Inventory, and a seven-day sample cycle.
 
 ### Known limitations
-- Planned meal placement, shopping-list generation, reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
+- Planned serving overrides/leftovers, shopping-list generation, reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
 - The development database currently defaults to `./data`; packaged Windows persistence will be moved outside the installation directory.
