@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, Numeric, String, Table, Text, Column, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, ForeignKey, Integer, Numeric, String, Table, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
+from app.models.ingredient import Tag
 
 
 recipe_tags = Table(
@@ -44,7 +45,7 @@ class Recipe(Base):
         cascade="all, delete-orphan",
         order_by="RecipeMealType.meal_type",
     )
-    tags: Mapped[list["Tag"]] = relationship(secondary=recipe_tags)
+    tags: Mapped[list[Tag]] = relationship(secondary=recipe_tags)
 
     __table_args__ = (
         UniqueConstraint("household_id", "normalized_name", name="uq_recipes_household_normalized_name"),
