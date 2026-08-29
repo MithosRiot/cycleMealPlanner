@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { fetchHealth } from './api'
 import IngredientsPage from './IngredientsPage'
 import InventoryPage from './InventoryPage'
+import './InventoryPage.css'
 import { RecipeDetailPage, RecipeEditorPage, RecipesPage } from './RecipePages'
 import SettingsPage from './SettingsPage'
 
