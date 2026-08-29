@@ -23,6 +23,8 @@ def _clear_seeded_data(engine) -> None:
     development server has the database open.
     """
     tables = [
+        "shopping_list_items",
+        "shopping_lists",
         "planned_meals",
         "cycle_slots",
         "meal_slot_definitions",
