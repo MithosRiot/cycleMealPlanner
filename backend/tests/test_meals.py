@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -91,7 +93,7 @@ def test_saved_meal_crud_search_filter_and_archive() -> None:
         meal_id = meal["id"]
         assert meal["meal_types"] == ["DINNER"]
         assert [item["recipe_id"] for item in meal["recipes"]] == [main_recipe_id, side_recipe_id]
-        assert meal["recipes"][1]["serving_multiplier"] == "0.500"
+        assert Decimal(meal["recipes"][1]["serving_multiplier"]) == Decimal("0.5")
 
         filtered = client.get(
             "/api/meals",
