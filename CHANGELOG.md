@@ -16,7 +16,8 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Recipe Library, structured Recipe Editor, recipe detail view, search/filter controls, favorites/tags/meal-type display, and serving-scale preview UI.
 - Physical inventory lots with location, quantity/unit, purchase/open/expiration/frozen/thawed dates, immutable transaction history, add/remove/correction/transfer operations, browse filters, and Inventory management UI.
 - Milestone 1 end-to-end validation covering fresh database initialization, reference data, ingredients/aliases, tagged recipes, scaling, inventory transactions, negative-quantity protection, application restart, and persistence.
+- Reusable saved Meals composed of ordered Recipe components with serving multipliers/defaults, tags, meal types, favorites, archive behavior, CRUD/search API, and Meals library/editor/detail UI.
 
 ### Known limitations
-- Meal templates, meal-cycle planning, shopping-list generation, reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
+- Meal-cycle planning, shopping-list generation, reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
 - The development database currently defaults to `./data`; packaged Windows persistence will be moved outside the installation directory.
