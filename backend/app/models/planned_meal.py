@@ -18,6 +18,7 @@ class PlannedMeal(Base):
     planned_servings: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False, default=Decimal("4"))
     planned_leftover_servings: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False, default=Decimal("0"))
     component_serving_overrides: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    scaled_components: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     snapshot_name: Mapped[str] = mapped_column(String(160), nullable=False)
     snapshot_description: Mapped[str | None] = mapped_column(Text)
     snapshot_meal_types: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
