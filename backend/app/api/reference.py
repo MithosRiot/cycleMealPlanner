@@ -1,7 +1,8 @@
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -11,9 +12,11 @@ from app.schemas.reference import (
     HouseholdUpdate,
     InventoryLocationCreate,
     InventoryLocationRead,
+    InventoryLocationUpdate,
     MeasurementUnitRead,
     ShoppingCategoryCreate,
     ShoppingCategoryRead,
+    ShoppingCategoryUpdate,
     UnitConversionRequest,
     UnitConversionResponse,
 )
@@ -21,6 +24,32 @@ from app.services.units import UnitConversionError, convert_quantity
 
 router = APIRouter(prefix="/api/reference", tags=["reference"])
 DEFAULT_HOUSEHOLD_ID = 1
+
+
+def _commit(db: Session) -> None:
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="A conflicting record already exists") from exc
+
+
+def _validate_parent(db: Session, parent_id: int | None, location_id: int | None = None) -> None:
+    if parent_id is None:
+        return
+    if location_id is not None and parent_id == location_id:
+        raise HTTPException(status_code=400, detail="A location cannot be its own parent")
+
+    current = db.get(InventoryLocation, parent_id)
+    if current is None or current.household_id != DEFAULT_HOUSEHOLD_ID or not current.active:
+        raise HTTPException(status_code=400, detail="Parent inventory location not found")
+
+    while current.parent_location_id is not None:
+        if location_id is not None and current.parent_location_id == location_id:
+            raise HTTPException(status_code=400, detail="Location hierarchy cannot contain a cycle")
+        current = db.get(InventoryLocation, current.parent_location_id)
+        if current is None:
+            break
 
 
 @router.get("/household", response_model=HouseholdRead)
@@ -38,7 +67,7 @@ def update_household(payload: HouseholdUpdate, db: Session = Depends(get_db)) ->
         raise HTTPException(status_code=404, detail="Default household not found")
     household.name = payload.name.strip()
     household.default_servings = payload.default_servings
-    db.commit()
+    _commit(db)
     db.refresh(household)
     return household
 
@@ -78,9 +107,34 @@ def create_shopping_category(payload: ShoppingCategoryCreate, db: Session = Depe
         sort_order=payload.sort_order,
     )
     db.add(category)
-    db.commit()
+    _commit(db)
     db.refresh(category)
     return category
+
+
+@router.put("/shopping-categories/{category_id}", response_model=ShoppingCategoryRead)
+def update_shopping_category(
+    category_id: int, payload: ShoppingCategoryUpdate, db: Session = Depends(get_db)
+) -> ShoppingCategory:
+    category = db.get(ShoppingCategory, category_id)
+    if category is None or category.household_id != DEFAULT_HOUSEHOLD_ID:
+        raise HTTPException(status_code=404, detail="Shopping category not found")
+    category.name = payload.name.strip()
+    category.sort_order = payload.sort_order
+    category.active = payload.active
+    _commit(db)
+    db.refresh(category)
+    return category
+
+
+@router.delete("/shopping-categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+def archive_shopping_category(category_id: int, db: Session = Depends(get_db)) -> Response:
+    category = db.get(ShoppingCategory, category_id)
+    if category is None or category.household_id != DEFAULT_HOUSEHOLD_ID:
+        raise HTTPException(status_code=404, detail="Shopping category not found")
+    category.active = False
+    _commit(db)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/inventory-locations", response_model=list[InventoryLocationRead])
@@ -94,11 +148,7 @@ def list_inventory_locations(db: Session = Depends(get_db)) -> list[InventoryLoc
 
 @router.post("/inventory-locations", response_model=InventoryLocationRead, status_code=status.HTTP_201_CREATED)
 def create_inventory_location(payload: InventoryLocationCreate, db: Session = Depends(get_db)) -> InventoryLocation:
-    if payload.parent_location_id is not None:
-        parent = db.get(InventoryLocation, payload.parent_location_id)
-        if parent is None or parent.household_id != DEFAULT_HOUSEHOLD_ID:
-            raise HTTPException(status_code=400, detail="Parent inventory location not found")
-
+    _validate_parent(db, payload.parent_location_id)
     location = InventoryLocation(
         household_id=DEFAULT_HOUSEHOLD_ID,
         parent_location_id=payload.parent_location_id,
@@ -107,6 +157,42 @@ def create_inventory_location(payload: InventoryLocationCreate, db: Session = De
         sort_order=payload.sort_order,
     )
     db.add(location)
-    db.commit()
+    _commit(db)
     db.refresh(location)
     return location
+
+
+@router.put("/inventory-locations/{location_id}", response_model=InventoryLocationRead)
+def update_inventory_location(
+    location_id: int, payload: InventoryLocationUpdate, db: Session = Depends(get_db)
+) -> InventoryLocation:
+    location = db.get(InventoryLocation, location_id)
+    if location is None or location.household_id != DEFAULT_HOUSEHOLD_ID:
+        raise HTTPException(status_code=404, detail="Inventory location not found")
+    _validate_parent(db, payload.parent_location_id, location_id)
+    location.name = payload.name.strip()
+    location.parent_location_id = payload.parent_location_id
+    location.location_type = payload.location_type.upper()
+    location.sort_order = payload.sort_order
+    location.active = payload.active
+    _commit(db)
+    db.refresh(location)
+    return location
+
+
+@router.delete("/inventory-locations/{location_id}", status_code=status.HTTP_204_NO_CONTENT)
+def archive_inventory_location(location_id: int, db: Session = Depends(get_db)) -> Response:
+    location = db.get(InventoryLocation, location_id)
+    if location is None or location.household_id != DEFAULT_HOUSEHOLD_ID:
+        raise HTTPException(status_code=404, detail="Inventory location not found")
+    active_child = db.scalar(
+        select(InventoryLocation).where(
+            InventoryLocation.parent_location_id == location_id,
+            InventoryLocation.active.is_(True),
+        )
+    )
+    if active_child is not None:
+        raise HTTPException(status_code=409, detail="Archive child locations first")
+    location.active = False
+    _commit(db)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
