@@ -1,5 +1,6 @@
 from app.models.ingredient import Ingredient, IngredientAlias, Tag
 from app.models.inventory import InventoryLot, InventoryTransaction
+from app.models.meal import Meal, MealMealType, MealRecipe, meal_tags
 from app.models.recipe import Recipe, RecipeIngredient, RecipeMealType, recipe_tags
 from app.models.reference import Household, InventoryLocation, MeasurementUnit, ShoppingCategory
 
@@ -17,4 +18,8 @@ __all__ = [
     "recipe_tags",
     "InventoryLot",
     "InventoryTransaction",
+    "Meal",
+    "MealRecipe",
+    "MealMealType",
+    "meal_tags",
 ]
