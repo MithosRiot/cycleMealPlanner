@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 
 from app.api.ingredients import router as ingredients_router
+from app.api.recipes import router as recipes_router
 from app.api.reference import router as reference_router
 from app.config import get_settings
 from app.database.migrations import run_migrations
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.include_router(reference_router)
 app.include_router(ingredients_router)
+app.include_router(recipes_router)
 
 
 @app.get("/health", tags=["system"])
