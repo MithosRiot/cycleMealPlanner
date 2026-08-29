@@ -2,6 +2,8 @@ from datetime import date
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.planned_meal import PlannedMealRead
+
 
 class MealSlotDefinitionInput(BaseModel):
     label: str = Field(min_length=1, max_length=80)
@@ -31,6 +33,7 @@ class CycleSlotRead(BaseModel):
     slot_definition_id: int
     day_number: int
     sort_order: int
+    planned_meal: PlannedMealRead | None = None
 
 
 class MealCycleRead(BaseModel):
