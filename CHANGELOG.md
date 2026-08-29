@@ -14,3 +14,4 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Authoritative Decimal recipe scaling for LINEAR, FIXED, ROUND_UP, and MANUAL modes, including safe same-family unit overrides.
 - Recipe CRUD/search/filter/scale APIs and backend test coverage.
 - Recipe Library, structured Recipe Editor, recipe detail view, search/filter controls, favorites/tags/meal-type display, and serving-scale preview UI.
+- Physical inventory lots with location, quantity/unit, purchase/open/expiration/frozen/thawed dates, immutable transaction history, add/remove/correction/transfer operations, browse filters, and Inventory management UI.
