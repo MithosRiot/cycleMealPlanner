@@ -148,8 +148,9 @@ def random_fill(cycle_id: int, db: Session = Depends(get_db)) -> RandomFillResul
             continue
         label = slot.slot_definition.label.strip().casefold()
         eligible = [meal for meal in meals if any(mt.meal_type.casefold() == label for mt in meal.meal_types)]
-        pool = eligible or meals
-        _place(db, slot, random.choice(pool))
+        if not eligible:
+            continue
+        _place(db, slot, random.choice(eligible))
         filled += 1
 
     db.commit()
