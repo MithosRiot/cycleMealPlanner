@@ -1,19 +1,36 @@
 import json
 import random
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database.session import get_db
+from app.engines.recipe_scaling import scale_quantity
 from app.models.meal import Meal
 from app.models.meal_cycle import CycleSlot, MealCycle
 from app.models.planned_meal import PlannedMeal
-from app.schemas.planned_meal import PlannedMealAssign, PlannedMealLock, PlannedMealMove, PlannedMealRead, RandomFillResult
-
+from app.models.recipe import Recipe
+from app.schemas.planned_meal import (
+    PlannedMealAssign,
+    PlannedMealLock,
+    PlannedMealMove,
+    PlannedMealPlanningUpdate,
+    PlannedMealRead,
+    RandomFillResult,
+)
 
 router = APIRouter(prefix="/api/meal-cycles", tags=["meal-placement"])
 HOUSEHOLD_ID = 1
+DEFAULT_SERVINGS = Decimal("4")
+
+
+def _component_key(component: dict) -> int:
+    stored_id = component.get("meal_recipe_id")
+    if stored_id is not None:
+        return int(stored_id)
+    return -(int(component.get("sort_order", 0)) + 1)
 
 
 def _load_slot(db: Session, cycle_id: int, slot_id: int) -> CycleSlot:
@@ -42,6 +59,7 @@ def _load_meal(db: Session, meal_id: int) -> Meal:
 def _snapshot(meal: Meal) -> dict[str, str | None]:
     components = [
         {
+            "meal_recipe_id": component.id,
             "recipe_id": component.recipe_id,
             "serving_multiplier": str(component.serving_multiplier),
             "default_servings": str(component.default_servings) if component.default_servings is not None else None,
@@ -58,14 +76,78 @@ def _snapshot(meal: Meal) -> dict[str, str | None]:
     }
 
 
+def _calculate_scaled_components(db: Session, planned: PlannedMeal) -> str:
+    components = json.loads(planned.snapshot_components)
+    overrides = {int(key): Decimal(str(value)) for key, value in json.loads(planned.component_serving_overrides).items()}
+    total_servings = Decimal(planned.planned_servings) + Decimal(planned.planned_leftover_servings)
+    results: list[dict] = []
+
+    for component in components:
+        component_id = _component_key(component)
+        recipe = db.scalar(
+            select(Recipe)
+            .where(Recipe.id == int(component["recipe_id"]), Recipe.household_id == HOUSEHOLD_ID)
+            .options(selectinload(Recipe.ingredients))
+        )
+        if recipe is None:
+            raise HTTPException(status_code=409, detail=f"Recipe {component['recipe_id']} no longer exists")
+
+        requested_servings = overrides.get(
+            component_id,
+            total_servings * Decimal(str(component["serving_multiplier"])),
+        )
+        if requested_servings <= 0:
+            raise HTTPException(status_code=422, detail="Component serving overrides must be greater than zero")
+
+        scale_factor = requested_servings / Decimal(recipe.base_servings)
+        ingredients: list[dict] = []
+        for ingredient in recipe.ingredients:
+            quantity, manual_review = scale_quantity(
+                Decimal(ingredient.quantity), scale_factor, ingredient.scaling_mode
+            )
+            ingredients.append(
+                {
+                    "recipe_ingredient_id": ingredient.id,
+                    "ingredient_id": ingredient.ingredient_id,
+                    "quantity": str(quantity),
+                    "unit_id": ingredient.unit_id,
+                    "scaling_mode": ingredient.scaling_mode,
+                    "manual_review": manual_review,
+                }
+            )
+
+        results.append(
+            {
+                "meal_recipe_id": component_id,
+                "recipe_id": recipe.id,
+                "base_servings": str(recipe.base_servings),
+                "requested_servings": str(requested_servings),
+                "scale_factor": str(scale_factor),
+                "ingredients": ingredients,
+            }
+        )
+
+    return json.dumps(results)
+
+
 def _place(db: Session, slot: CycleSlot, meal: Meal) -> PlannedMeal:
     if slot.planned_meal is not None:
         if slot.planned_meal.locked:
             raise HTTPException(status_code=409, detail="Placement is locked")
         db.delete(slot.planned_meal)
         db.flush()
-    planned = PlannedMeal(cycle_slot_id=slot.id, meal_id=meal.id, locked=False, **_snapshot(meal))
+    planned = PlannedMeal(
+        cycle_slot_id=slot.id,
+        meal_id=meal.id,
+        locked=False,
+        planned_servings=DEFAULT_SERVINGS,
+        planned_leftover_servings=Decimal("0"),
+        component_serving_overrides="{}",
+        **_snapshot(meal),
+    )
     db.add(planned)
+    db.flush()
+    planned.scaled_components = _calculate_scaled_components(db, planned)
     db.flush()
     return planned
 
@@ -78,6 +160,31 @@ def assign_meal(cycle_id: int, slot_id: int, payload: PlannedMealAssign, db: Ses
     db.commit()
     db.refresh(planned)
     return planned
+
+
+@router.put("/{cycle_id}/slots/{slot_id}/planned-meal/planning", response_model=PlannedMealRead)
+def update_planning(cycle_id: int, slot_id: int, payload: PlannedMealPlanningUpdate, db: Session = Depends(get_db)) -> PlannedMeal:
+    slot = _load_slot(db, cycle_id, slot_id)
+    if slot.planned_meal is None:
+        raise HTTPException(status_code=404, detail="No planned meal in this slot")
+
+    valid_component_ids = {
+        _component_key(component)
+        for component in json.loads(slot.planned_meal.snapshot_components)
+    }
+    unknown = set(payload.component_serving_overrides) - valid_component_ids
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Unknown planned component: {min(unknown)}")
+
+    slot.planned_meal.planned_servings = payload.planned_servings
+    slot.planned_meal.planned_leftover_servings = payload.planned_leftover_servings
+    slot.planned_meal.component_serving_overrides = json.dumps(
+        {str(key): str(value) for key, value in payload.component_serving_overrides.items()}
+    )
+    slot.planned_meal.scaled_components = _calculate_scaled_components(db, slot.planned_meal)
+    db.commit()
+    db.refresh(slot.planned_meal)
+    return slot.planned_meal
 
 
 @router.delete("/{cycle_id}/slots/{slot_id}/planned-meal", status_code=status.HTTP_204_NO_CONTENT)

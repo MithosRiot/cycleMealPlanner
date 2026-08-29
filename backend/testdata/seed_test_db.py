@@ -16,22 +16,52 @@ def configure_database() -> None:
     os.environ["CYCLE_MEAL_PLANNER_ENV"] = "testdata"
 
 
+def _clear_seeded_data(engine) -> None:
+    """Clear mutable test data without deleting the SQLite file.
+
+    Keeping the file in place makes --reset work on Windows even while the
+    development server has the database open.
+    """
+    tables = [
+        "planned_meals",
+        "cycle_slots",
+        "meal_slot_definitions",
+        "meal_cycles",
+        "meal_tags",
+        "meal_meal_types",
+        "meal_recipes",
+        "meals",
+        "recipe_tags",
+        "recipe_meal_types",
+        "recipe_ingredients",
+        "recipes",
+        "inventory_transactions",
+        "inventory_lots",
+        "ingredient_aliases",
+        "ingredients",
+        "tags",
+    ]
+    with engine.begin() as connection:
+        for table in tables:
+            connection.execute(text(f"DELETE FROM {table}"))
+        connection.execute(text("UPDATE households SET name='My Household', default_servings=4 WHERE id=1"))
+
+
 def seed(reset: bool = False) -> Path:
-    if reset:
-        for suffix in ("", "-shm", "-wal"):
-            candidate = Path(f"{TEST_DB}{suffix}")
-            if candidate.exists():
-                candidate.unlink()
-
-    if TEST_DB.exists():
-        return TEST_DB
-
     configure_database()
 
     from app.database.migrations import run_migrations
     from app.database.session import engine
 
     run_migrations()
+
+    if reset:
+        _clear_seeded_data(engine)
+    elif TEST_DB.exists():
+        with engine.connect() as connection:
+            existing = connection.execute(text("SELECT COUNT(*) FROM ingredients")).scalar_one()
+        if existing:
+            return TEST_DB
 
     today = date.today()
     ingredients = [
@@ -164,14 +194,14 @@ def seed(reset: bool = False) -> Path:
                 connection.execute(text("INSERT INTO cycle_slots (id, cycle_id, slot_definition_id, day_number, sort_order) VALUES (:id,1,:definition,:day,:sort_order)"), {"id": slot_id, "definition": definition_id, "day": day_number, "sort_order": sort_order})
                 slot_id += 1
 
-    print(f"Created test database: {TEST_DB}")
+    print(f"Reset test database: {TEST_DB}" if reset else f"Created test database: {TEST_DB}")
     print("Seeded: 16 ingredients, 12 recipes, 12 meals, 16 inventory lots, 1 seven-day cycle")
     return TEST_DB
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Create the Cycle Meal Planner test database.")
-    parser.add_argument("--reset", action="store_true", help="Delete and rebuild the test database.")
+    parser = argparse.ArgumentParser(description="Create or reset the Cycle Meal Planner test database.")
+    parser.add_argument("--reset", action="store_true", help="Clear and rebuild seeded test data in place.")
     args = parser.parse_args()
     seed(reset=args.reset)
 

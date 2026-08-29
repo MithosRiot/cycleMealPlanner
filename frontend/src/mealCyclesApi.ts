@@ -8,11 +8,31 @@ export type MealSlotDefinition = MealSlotDefinitionInput & {
   cycle_id: number
 }
 
+export type ScaledPlannedComponent = {
+  meal_recipe_id: number
+  recipe_id: number
+  base_servings: string
+  requested_servings: string
+  scale_factor: string
+  ingredients: Array<{
+    recipe_ingredient_id: number
+    ingredient_id: number
+    quantity: string
+    unit_id: number
+    scaling_mode: string
+    manual_review: boolean
+  }>
+}
+
 export type PlannedMeal = {
   id: number
   cycle_slot_id: number
   meal_id: number
   locked: boolean
+  planned_servings: string
+  planned_leftover_servings: string
+  component_serving_overrides: string
+  scaled_components: string
   snapshot_name: string
   snapshot_description: string | null
   snapshot_meal_types: string
@@ -64,6 +84,7 @@ export const createMealCycle = (input: MealCycleInput): Promise<MealCycle> => js
 export const updateMealCycle = (id: number, input: MealCycleInput): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'PUT', body: JSON.stringify(input) })
 export const deleteMealCycle = (id: number): Promise<void> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'DELETE' })
 export const assignPlannedMeal = (cycleId: number, slotId: number, mealId: number): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal`, { method: 'POST', body: JSON.stringify({ meal_id: mealId }) })
+export const updatePlannedMealPlanning = (cycleId: number, slotId: number, input: { planned_servings: string; planned_leftover_servings: string; component_serving_overrides: Record<number, string> }): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal/planning`, { method: 'PUT', body: JSON.stringify(input) })
 export const removePlannedMeal = (cycleId: number, slotId: number): Promise<void> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal`, { method: 'DELETE' })
 export const setPlannedMealLock = (cycleId: number, slotId: number, locked: boolean): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal/lock`, { method: 'PUT', body: JSON.stringify({ locked }) })
 export const movePlannedMeal = (cycleId: number, slotId: number, targetSlotId: number): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal/move`, { method: 'POST', body: JSON.stringify({ target_cycle_slot_id: targetSlotId }) })

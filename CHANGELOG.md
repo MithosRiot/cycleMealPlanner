@@ -20,7 +20,8 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Flexible draft Meal Cycles with arbitrary duration up to 365 days, configurable ordered slot definitions, generated per-day CycleSlots, optional start dates, CRUD API, and Meal Plan cycle editor/preview UI.
 - Planned Meal placement with immutable source snapshots, manual assign/remove/move, lock/unlock controls, meal-type-aware random fill, and Meal Plan placement UI.
 - Reproducible seeded manual-testing database with sample ingredients, recipes, Meals, Inventory, and a seven-day sample cycle.
+- Planned serving targets, planned leftover servings, per-component serving overrides, deterministic scaled component/ingredient requirements, persistence, and Meal Plan quantity controls.
 
 ### Known limitations
-- Planned serving overrides/leftovers, shopping-list generation, reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
+- Shopping-list generation, reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
 - The development database currently defaults to `./data`; packaged Windows persistence will be moved outside the installation directory.
