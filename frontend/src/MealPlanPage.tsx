@@ -1,22 +1,31 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchRecipes, type Recipe } from './api'
 import {
   assignPlannedMeal,
   createMealCycle,
   deleteMealCycle,
   fetchMealCycle,
   fetchMealCycles,
-  MealCycleInput,
+  type MealCycleInput,
+  type PlannedMeal,
   movePlannedMeal,
   randomFillMealCycle,
   removePlannedMeal,
   setPlannedMealLock,
   updateMealCycle,
+  updatePlannedMealPlanning,
 } from './mealCyclesApi'
 import { fetchMeals } from './mealsApi'
 import './MealPlanPage.css'
 
 const DEFAULT_SLOTS = ['Breakfast', 'Lunch', 'Dinner']
+
+type PlanningInput = {
+  planned_servings: string
+  planned_leftover_servings: string
+  component_serving_overrides: Record<number, string>
+}
 
 function makeDraft(): MealCycleInput {
   return {
@@ -28,10 +37,60 @@ function makeDraft(): MealCycleInput {
   }
 }
 
+function componentKey(component: { meal_recipe_id?: number; sort_order?: number }): number {
+  return component.meal_recipe_id ?? -((component.sort_order ?? 0) + 1)
+}
+
+function PlanningControls({ placement, recipes, onSave, disabled }: { placement: PlannedMeal; recipes: Recipe[]; onSave: (input: PlanningInput) => void; disabled: boolean }) {
+  const initialOverrides = useMemo(() => JSON.parse(placement.component_serving_overrides || '{}') as Record<string, string>, [placement.component_serving_overrides])
+  const components = useMemo(() => JSON.parse(placement.snapshot_components || '[]') as Array<{ meal_recipe_id?: number; recipe_id: number; serving_multiplier: string; sort_order?: number }>, [placement.snapshot_components])
+  const scaled = useMemo(() => JSON.parse(placement.scaled_components || '[]') as Array<{ meal_recipe_id: number; recipe_id: number; requested_servings: string }>, [placement.scaled_components])
+  const [servings, setServings] = useState(placement.planned_servings)
+  const [leftovers, setLeftovers] = useState(placement.planned_leftover_servings)
+  const [overrides, setOverrides] = useState<Record<number, string>>(() => Object.fromEntries(Object.entries(initialOverrides).map(([key, value]) => [Number(key), value])))
+
+  return (
+    <details className="planning-controls">
+      <summary>Plan quantities</summary>
+      <div className="planning-grid">
+        <label>Eat servings<input type="number" min="0.001" step="0.001" value={servings} onChange={(event) => setServings(event.target.value)} /></label>
+        <label>Planned leftovers<input type="number" min="0" step="0.001" value={leftovers} onChange={(event) => setLeftovers(event.target.value)} /></label>
+      </div>
+      <p className="planning-note">Recipe requirements are calculated for {Number(servings || 0) + Number(leftovers || 0)} total servings to produce.</p>
+      <details className="component-overrides">
+        <summary>Component serving overrides</summary>
+        <div className="component-override-list">
+          {components.map((component) => {
+            const key = componentKey(component)
+            const recipe = recipes.find((item) => item.id === component.recipe_id)
+            const calculated = scaled.find((item) => item.meal_recipe_id === key)?.requested_servings
+            return (
+              <label key={key}>
+                <span>{recipe?.name ?? `Recipe ${component.recipe_id}`} <small>({calculated ?? '—'} calculated)</small></span>
+                <input type="number" min="0.001" step="0.001" placeholder="Use calculated" value={overrides[key] ?? ''} onChange={(event) => {
+                  const value = event.target.value
+                  setOverrides((current) => {
+                    const next = { ...current }
+                    if (value) next[key] = value
+                    else delete next[key]
+                    return next
+                  })
+                }} />
+              </label>
+            )
+          })}
+        </div>
+      </details>
+      <button type="button" className="button-secondary" disabled={disabled || !servings || Number(servings) <= 0 || Number(leftovers) < 0} onClick={() => onSave({ planned_servings: servings, planned_leftover_servings: leftovers || '0', component_serving_overrides: overrides })}>Save quantities</button>
+    </details>
+  )
+}
+
 export default function MealPlanPage() {
   const queryClient = useQueryClient()
   const cycles = useQuery({ queryKey: ['meal-cycles'], queryFn: fetchMealCycles })
   const meals = useQuery({ queryKey: ['meals', 'planner'], queryFn: () => fetchMeals() })
+  const recipes = useQuery({ queryKey: ['recipes', 'planner'], queryFn: () => fetchRecipes() })
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const selected = useQuery({
     queryKey: ['meal-cycle', selectedId],
@@ -48,10 +107,7 @@ export default function MealPlanPage() {
     if (!cycle) return []
     return Array.from({ length: cycle.duration_days }, (_, index) => {
       const day = index + 1
-      return {
-        day,
-        slots: cycle.slots.filter((slot) => slot.day_number === day),
-      }
+      return { day, slots: cycle.slots.filter((slot) => slot.day_number === day) }
     })
   }, [selected.data])
 
@@ -80,102 +136,60 @@ export default function MealPlanPage() {
     },
   })
 
+  type PlacementAction =
+    | { type: 'assign'; slotId: number; mealId: number }
+    | { type: 'remove'; slotId: number }
+    | { type: 'lock'; slotId: number; locked: boolean }
+    | { type: 'move'; slotId: number; targetSlotId: number }
+    | { type: 'planning'; slotId: number; input: PlanningInput }
+    | { type: 'random' }
+
   const placementMutation = useMutation({
-    mutationFn: async (action: { type: 'assign'; slotId: number; mealId: number } | { type: 'remove'; slotId: number } | { type: 'lock'; slotId: number; locked: boolean } | { type: 'move'; slotId: number; targetSlotId: number } | { type: 'random' }) => {
+    mutationFn: async (action: PlacementAction) => {
       if (selectedId === null) throw new Error('Select a cycle first')
       if (action.type === 'assign') return assignPlannedMeal(selectedId, action.slotId, action.mealId)
       if (action.type === 'remove') return removePlannedMeal(selectedId, action.slotId)
       if (action.type === 'lock') return setPlannedMealLock(selectedId, action.slotId, action.locked)
       if (action.type === 'move') return movePlannedMeal(selectedId, action.slotId, action.targetSlotId)
+      if (action.type === 'planning') return updatePlannedMealPlanning(selectedId, action.slotId, action.input)
       return randomFillMealCycle(selectedId)
     },
-    onSuccess: async () => {
-      if (selectedId !== null) await refreshCycle(selectedId)
-    },
+    onSuccess: async () => { if (selectedId !== null) await refreshCycle(selectedId) },
   })
 
   function startEdit() {
     if (!selected.data) return
     const cycle = selected.data
     setEditingId(cycle.id)
-    setDraft({
-      name: cycle.name,
-      duration_days: cycle.duration_days,
-      start_date: cycle.start_date,
-      notes: cycle.notes,
-      slot_definitions: cycle.slot_definitions.map((slot) => ({ label: slot.label, sort_order: slot.sort_order })),
-    })
+    setDraft({ name: cycle.name, duration_days: cycle.duration_days, start_date: cycle.start_date, notes: cycle.notes, slot_definitions: cycle.slot_definitions.map((slot) => ({ label: slot.label, sort_order: slot.sort_order })) })
   }
 
-  function addSlot() {
-    setDraft((current) => ({
-      ...current,
-      slot_definitions: [...current.slot_definitions, { label: '', sort_order: current.slot_definitions.length }],
-    }))
-  }
-
-  function updateSlot(index: number, label: string) {
-    setDraft((current) => ({
-      ...current,
-      slot_definitions: current.slot_definitions.map((slot, slotIndex) => slotIndex === index ? { ...slot, label } : slot),
-    }))
-  }
-
-  function removeSlot(index: number) {
-    setDraft((current) => ({
-      ...current,
-      slot_definitions: current.slot_definitions
-        .filter((_, slotIndex) => slotIndex !== index)
-        .map((slot, slotIndex) => ({ ...slot, sort_order: slotIndex })),
-    }))
-  }
-
+  function addSlot() { setDraft((current) => ({ ...current, slot_definitions: [...current.slot_definitions, { label: '', sort_order: current.slot_definitions.length }] })) }
+  function updateSlot(index: number, label: string) { setDraft((current) => ({ ...current, slot_definitions: current.slot_definitions.map((slot, slotIndex) => slotIndex === index ? { ...slot, label } : slot) })) }
+  function removeSlot(index: number) { setDraft((current) => ({ ...current, slot_definitions: current.slot_definitions.filter((_, slotIndex) => slotIndex !== index).map((slot, slotIndex) => ({ ...slot, sort_order: slotIndex })) })) }
   function moveSlot(index: number, direction: -1 | 1) {
     const target = index + direction
     if (target < 0 || target >= draft.slot_definitions.length) return
     const copy = [...draft.slot_definitions]
     ;[copy[index], copy[target]] = [copy[target], copy[index]]
-    setDraft((current) => ({
-      ...current,
-      slot_definitions: copy.map((slot, slotIndex) => ({ ...slot, sort_order: slotIndex })),
-    }))
+    setDraft((current) => ({ ...current, slot_definitions: copy.map((slot, slotIndex) => ({ ...slot, sort_order: slotIndex })) }))
   }
-
-  function submit(event: FormEvent) {
-    event.preventDefault()
-    saveMutation.mutate()
-  }
+  function submit(event: FormEvent) { event.preventDefault(); saveMutation.mutate() }
 
   const emptySlots = selected.data?.slots.filter((slot) => slot.planned_meal === null) ?? []
 
   return (
     <section className="meal-plan-page">
-      <header className="page-heading">
-        <div>
-          <p className="eyebrow">Cycle Planning</p>
-          <h1>Meal Plan</h1>
-          <p>Create reusable cycles, place saved Meals manually, lock choices, or fill eligible empty slots randomly.</p>
-        </div>
-      </header>
-
+      <header className="page-heading"><div><p className="eyebrow">Cycle Planning</p><h1>Meal Plan</h1><p>Place Meals, set serving targets and planned leftovers, lock choices, or fill eligible empty slots randomly.</p></div></header>
       <div className="meal-plan-layout">
         <aside className="cycle-list panel">
           <h2>Cycles</h2>
-          {cycles.data?.map((cycle) => (
-            <button type="button" className={selectedId === cycle.id ? 'cycle-select active' : 'cycle-select'} key={cycle.id} onClick={() => setSelectedId(cycle.id)}>
-              <strong>{cycle.name}</strong>
-              <span>{cycle.duration_days} days · {cycle.slot_definitions.length} slots/day</span>
-            </button>
-          ))}
+          {cycles.data?.map((cycle) => <button type="button" className={selectedId === cycle.id ? 'cycle-select active' : 'cycle-select'} key={cycle.id} onClick={() => setSelectedId(cycle.id)}><strong>{cycle.name}</strong><span>{cycle.duration_days} days · {cycle.slot_definitions.length} slots/day</span></button>)}
           {!cycles.isPending && cycles.data?.length === 0 && <p>No cycles yet.</p>}
         </aside>
-
         <div className="cycle-workspace">
           <form className="panel cycle-editor" onSubmit={submit}>
-            <div className="section-heading">
-              <h2>{editingId === null ? 'New cycle' : 'Edit cycle'}</h2>
-              {editingId !== null && <button type="button" className="button-secondary" onClick={() => { setEditingId(null); setDraft(makeDraft()) }}>Cancel edit</button>}
-            </div>
+            <div className="section-heading"><h2>{editingId === null ? 'New cycle' : 'Edit cycle'}</h2>{editingId !== null && <button type="button" className="button-secondary" onClick={() => { setEditingId(null); setDraft(makeDraft()) }}>Cancel edit</button>}</div>
             <div className="form-grid">
               <label>Cycle name<input required value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
               <label>Duration (days)<input type="number" min="1" max="365" required value={draft.duration_days} onChange={(event) => setDraft({ ...draft, duration_days: Number(event.target.value) })} /></label>
@@ -183,80 +197,39 @@ export default function MealPlanPage() {
               <label className="wide-field">Notes<textarea value={draft.notes ?? ''} onChange={(event) => setDraft({ ...draft, notes: event.target.value || null })} /></label>
             </div>
             <div className="section-heading"><h3>Meal slots</h3><button type="button" className="button-secondary" onClick={addSlot}>Add slot</button></div>
-            <div className="slot-editor-list">
-              {draft.slot_definitions.map((slot, index) => (
-                <div className="slot-editor-row" key={`${index}-${slot.sort_order}`}>
-                  <span className="slot-order">{index + 1}</span>
-                  <input required placeholder="Slot label" value={slot.label} onChange={(event) => updateSlot(index, event.target.value)} />
-                  <button type="button" className="button-secondary" disabled={index === 0} onClick={() => moveSlot(index, -1)}>↑</button>
-                  <button type="button" className="button-secondary" disabled={index === draft.slot_definitions.length - 1} onClick={() => moveSlot(index, 1)}>↓</button>
-                  <button type="button" className="button-secondary" disabled={draft.slot_definitions.length === 1} onClick={() => removeSlot(index)}>Remove</button>
-                </div>
-              ))}
-            </div>
+            <div className="slot-editor-list">{draft.slot_definitions.map((slot, index) => <div className="slot-editor-row" key={`${index}-${slot.sort_order}`}><span className="slot-order">{index + 1}</span><input required placeholder="Slot label" value={slot.label} onChange={(event) => updateSlot(index, event.target.value)} /><button type="button" className="button-secondary" disabled={index === 0} onClick={() => moveSlot(index, -1)}>↑</button><button type="button" className="button-secondary" disabled={index === draft.slot_definitions.length - 1} onClick={() => moveSlot(index, 1)}>↓</button><button type="button" className="button-secondary" disabled={draft.slot_definitions.length === 1} onClick={() => removeSlot(index)}>Remove</button></div>)}</div>
             {saveMutation.isError && <div className="error-banner">{(saveMutation.error as Error).message}</div>}
             <button className="button-link" type="submit" disabled={saveMutation.isPending}>{editingId === null ? 'Create cycle' : 'Save changes'}</button>
           </form>
-
           {selected.data && (
             <section className="panel cycle-preview">
               <div className="section-heading">
-                <div>
-                  <p className="eyebrow">{selected.data.status}</p>
-                  <h2>{selected.data.name}</h2>
-                  <p>{selected.data.duration_days} days · {selected.data.start_date ? `Starts ${selected.data.start_date}` : 'No start date yet'}</p>
-                </div>
-                <div className="button-row">
-                  <button type="button" className="button-secondary" onClick={() => placementMutation.mutate({ type: 'random' })}>Random fill empty</button>
-                  <button type="button" className="button-secondary" onClick={startEdit}>Edit cycle</button>
-                  <button type="button" className="button-secondary" onClick={() => deleteMutation.mutate(selected.data!.id)}>Delete cycle</button>
-                </div>
+                <div><p className="eyebrow">{selected.data.status}</p><h2>{selected.data.name}</h2><p>{selected.data.duration_days} days · {selected.data.start_date ? `Starts ${selected.data.start_date}` : 'No start date yet'}</p></div>
+                <div className="button-row"><button type="button" className="button-secondary" onClick={() => placementMutation.mutate({ type: 'random' })}>Random fill empty</button><button type="button" className="button-secondary" onClick={startEdit}>Edit cycle</button><button type="button" className="button-secondary" onClick={() => deleteMutation.mutate(selected.data!.id)}>Delete cycle</button></div>
               </div>
               {placementMutation.isError && <div className="error-banner">{(placementMutation.error as Error).message}</div>}
               <div className="cycle-grid">
                 {slotGrid.map(({ day, slots }) => (
-                  <div className="cycle-day" key={day}>
-                    <h3>Day {day}</h3>
-                    {slots.map((slot) => {
-                      const definition = selected.data!.slot_definitions.find((item) => item.id === slot.slot_definition_id)
-                      const placement = slot.planned_meal
-                      return (
-                        <div className={placement?.locked ? 'cycle-slot planned locked' : placement ? 'cycle-slot planned' : 'cycle-slot'} key={slot.id}>
-                          <strong>{definition?.label ?? 'Slot'}</strong>
-                          {placement ? (
-                            <div className="placement-card">
-                              <span>{placement.snapshot_name}</span>
-                              <small>{placement.locked ? 'Locked' : 'Unlocked'}</small>
-                              <div className="placement-actions">
-                                <button type="button" className="button-secondary" onClick={() => placementMutation.mutate({ type: 'lock', slotId: slot.id, locked: !placement.locked })}>{placement.locked ? 'Unlock' : 'Lock'}</button>
-                                <button type="button" className="button-secondary" disabled={placement.locked} onClick={() => placementMutation.mutate({ type: 'remove', slotId: slot.id })}>Remove</button>
-                              </div>
-                              {!placement.locked && emptySlots.length > 0 && (
-                                <div className="move-control">
-                                  <select value={moveTargets[slot.id] ?? ''} onChange={(event) => setMoveTargets({ ...moveTargets, [slot.id]: Number(event.target.value) })}>
-                                    <option value="">Move to…</option>
-                                    {emptySlots.map((target) => {
-                                      const targetDefinition = selected.data!.slot_definitions.find((item) => item.id === target.slot_definition_id)
-                                      return <option key={target.id} value={target.id}>Day {target.day_number} · {targetDefinition?.label ?? 'Slot'}</option>
-                                    })}
-                                  </select>
-                                  <button type="button" className="button-secondary" disabled={!moveTargets[slot.id]} onClick={() => placementMutation.mutate({ type: 'move', slotId: slot.id, targetSlotId: moveTargets[slot.id] })}>Move</button>
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="assign-control">
-                              <select value={mealChoices[slot.id] ?? ''} onChange={(event) => setMealChoices({ ...mealChoices, [slot.id]: Number(event.target.value) })}>
-                                <option value="">Choose meal…</option>
-                                {meals.data?.map((meal) => <option key={meal.id} value={meal.id}>{meal.name}</option>)}
-                              </select>
-                              <button type="button" className="button-secondary" disabled={!mealChoices[slot.id]} onClick={() => placementMutation.mutate({ type: 'assign', slotId: slot.id, mealId: mealChoices[slot.id] })}>Place</button>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
+                  <div className="cycle-day" key={day}><h3>Day {day}</h3>{slots.map((slot) => {
+                    const definition = selected.data!.slot_definitions.find((item) => item.id === slot.slot_definition_id)
+                    const placement = slot.planned_meal
+                    return (
+                      <div className={placement?.locked ? 'cycle-slot planned locked' : placement ? 'cycle-slot planned' : 'cycle-slot'} key={slot.id}>
+                        <strong>{definition?.label ?? 'Slot'}</strong>
+                        {placement ? (
+                          <div className="placement-card">
+                            <span>{placement.snapshot_name}</span>
+                            <small>{placement.planned_servings} servings + {placement.planned_leftover_servings} leftover · {placement.locked ? 'Locked' : 'Unlocked'}</small>
+                            <PlanningControls key={`${placement.id}-${placement.planned_servings}-${placement.planned_leftover_servings}-${placement.component_serving_overrides}`} placement={placement} recipes={recipes.data ?? []} disabled={placementMutation.isPending} onSave={(input) => placementMutation.mutate({ type: 'planning', slotId: slot.id, input })} />
+                            <div className="placement-actions"><button type="button" className="button-secondary" onClick={() => placementMutation.mutate({ type: 'lock', slotId: slot.id, locked: !placement.locked })}>{placement.locked ? 'Unlock' : 'Lock'}</button><button type="button" className="button-secondary" disabled={placement.locked} onClick={() => placementMutation.mutate({ type: 'remove', slotId: slot.id })}>Remove</button></div>
+                            {!placement.locked && emptySlots.length > 0 && <div className="move-control"><select value={moveTargets[slot.id] ?? ''} onChange={(event) => setMoveTargets({ ...moveTargets, [slot.id]: Number(event.target.value) })}><option value="">Move to…</option>{emptySlots.map((target) => { const targetDefinition = selected.data!.slot_definitions.find((item) => item.id === target.slot_definition_id); return <option key={target.id} value={target.id}>Day {target.day_number} · {targetDefinition?.label ?? 'Slot'}</option> })}</select><button type="button" className="button-secondary" disabled={!moveTargets[slot.id]} onClick={() => placementMutation.mutate({ type: 'move', slotId: slot.id, targetSlotId: moveTargets[slot.id] })}>Move</button></div>}
+                          </div>
+                        ) : (
+                          <div className="assign-control"><select value={mealChoices[slot.id] ?? ''} onChange={(event) => setMealChoices({ ...mealChoices, [slot.id]: Number(event.target.value) })}><option value="">Choose meal…</option>{meals.data?.map((meal) => <option key={meal.id} value={meal.id}>{meal.name}</option>)}</select><button type="button" className="button-secondary" disabled={!mealChoices[slot.id]} onClick={() => placementMutation.mutate({ type: 'assign', slotId: slot.id, mealId: mealChoices[slot.id] })}>Place</button></div>
+                        )}
+                      </div>
+                    )
+                  })}</div>
                 ))}
               </div>
             </section>
