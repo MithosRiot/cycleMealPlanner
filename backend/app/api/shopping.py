@@ -81,8 +81,13 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
         ingredient.id: ingredient
         for ingredient in db.scalars(select(Ingredient).where(Ingredient.household_id == HOUSEHOLD_ID))
     }
-    inventory_lots = list(
-        db.scalars(select(InventoryLot).where(InventoryLot.household_id == HOUSEHOLD_ID, InventoryLot.quantity > 0))
+    inventory_rows = list(
+        db.execute(
+            select(InventoryLot.ingredient_id, InventoryLot.quantity, InventoryLot.unit_id).where(
+                InventoryLot.household_id == HOUSEHOLD_ID,
+                InventoryLot.quantity > 0,
+            )
+        ).all()
     )
 
     existing = db.scalar(
@@ -165,13 +170,13 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
             )
 
         inventory = Decimal("0")
-        for lot in inventory_lots:
-            if lot.ingredient_id != ingredient_id:
+        for lot_ingredient_id, lot_quantity, lot_unit_id in inventory_rows:
+            if lot_ingredient_id != ingredient_id:
                 continue
-            lot_unit = units.get(lot.unit_id)
+            lot_unit = units.get(lot_unit_id)
             if lot_unit is None or lot_unit.unit_family != family:
                 continue
-            inventory += convert_quantity(Decimal(lot.quantity), lot_unit, target_unit)
+            inventory += convert_quantity(Decimal(lot_quantity), lot_unit, target_unit)
 
         shortage = max(required - inventory, Decimal("0"))
         warnings = []
