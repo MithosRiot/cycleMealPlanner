@@ -201,11 +201,14 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
             )
         )
 
+    shopping_list_id = shopping_list.id
     db.commit()
+    db.expire_all()
     return db.scalar(
         select(ShoppingList)
-        .where(ShoppingList.id == shopping_list.id)
+        .where(ShoppingList.id == shopping_list_id)
         .options(selectinload(ShoppingList.items))
+        .execution_options(populate_existing=True)
     )
 
 
