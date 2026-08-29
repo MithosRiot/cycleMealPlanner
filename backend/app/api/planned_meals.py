@@ -26,6 +26,13 @@ HOUSEHOLD_ID = 1
 DEFAULT_SERVINGS = Decimal("4")
 
 
+def _component_key(component: dict) -> int:
+    stored_id = component.get("meal_recipe_id")
+    if stored_id is not None:
+        return int(stored_id)
+    return -(int(component.get("sort_order", 0)) + 1)
+
+
 def _load_slot(db: Session, cycle_id: int, slot_id: int) -> CycleSlot:
     slot = db.scalar(
         select(CycleSlot)
@@ -76,7 +83,7 @@ def _calculate_scaled_components(db: Session, planned: PlannedMeal) -> str:
     results: list[dict] = []
 
     for component in components:
-        component_id = int(component["meal_recipe_id"])
+        component_id = _component_key(component)
         recipe = db.scalar(
             select(Recipe)
             .where(Recipe.id == int(component["recipe_id"]), Recipe.household_id == HOUSEHOLD_ID)
@@ -162,7 +169,7 @@ def update_planning(cycle_id: int, slot_id: int, payload: PlannedMealPlanningUpd
         raise HTTPException(status_code=404, detail="No planned meal in this slot")
 
     valid_component_ids = {
-        int(component["meal_recipe_id"])
+        _component_key(component)
         for component in json.loads(slot.planned_meal.snapshot_components)
     }
     unknown = set(payload.component_serving_overrides) - valid_component_ids
