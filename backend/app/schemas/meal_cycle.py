@@ -26,7 +26,7 @@ class SlotPopulationRule(BaseModel):
 class PopulationRulesUpdate(BaseModel):
     include_meal_ids: list[int] = Field(default_factory=list)
     exclude_meal_ids: list[int] = Field(default_factory=list)
-    slot_rules: dict[int, SlotPopulationRule] = Field(default_factory=dict)
+    slot_rules: dict[str, SlotPopulationRule] = Field(default_factory=dict)
 
 
 class MealSlotDefinitionRead(MealSlotDefinitionInput):
