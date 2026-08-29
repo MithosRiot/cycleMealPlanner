@@ -9,7 +9,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 a { color: inherit; text-decoration: none; }
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 
 .app-shell {
@@ -90,7 +90,15 @@ button { cursor: pointer; }
 }
 .settings-card-wide { grid-column: 1 / -1; }
 .settings-card h2 { margin-top: 0; }
-.form-stack, .editable-list, .location-list { display: grid; gap: 10px; }
+.settings-link {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: #263746;
+  color: white;
+}
+.form-stack, .editable-list, .location-list, .data-list, .tag-list { display: grid; gap: 10px; }
 .form-stack label { display: grid; gap: 6px; }
 .inline-form, .location-form, .editable-row, .location-edit-row {
   display: grid;
@@ -101,7 +109,7 @@ button { cursor: pointer; }
 .location-form { grid-template-columns: 2fr 1fr 1.4fr auto; }
 .editable-row { grid-template-columns: 1fr auto auto; }
 .location-edit-row { grid-template-columns: 2fr 1fr 1.4fr auto auto; }
-input, select {
+input, select, textarea {
   min-width: 0;
   width: 100%;
   padding: 9px 10px;
@@ -109,6 +117,7 @@ input, select {
   border-radius: 8px;
   background: white;
 }
+textarea { resize: vertical; }
 button {
   padding: 9px 12px;
   border: 0;
@@ -118,7 +127,8 @@ button {
 }
 button:disabled { opacity: 0.55; cursor: default; }
 .button-secondary { background: #e8edf1; color: #263746; }
-.editable-list, .location-list { margin-top: 14px; }
+.button-danger { background: #a83b32; }
+.editable-list, .location-list, .data-list, .tag-list { margin-top: 14px; }
 .error-banner, .field-error { color: #b42318; }
 .error-banner {
   padding: 12px 14px;
@@ -128,10 +138,59 @@ button:disabled { opacity: 0.55; cursor: default; }
 }
 .field-error { grid-column: 1 / -1; }
 
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.search-controls { display: flex; align-items: center; gap: 12px; min-width: min(440px, 50%); }
+.check-label { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.check-label input { width: auto; }
+.ingredient-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(260px, 2fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #dfe5ea;
+  border-radius: 10px;
+}
+.ingredient-row.is-archived { opacity: 0.58; }
+.muted-line { margin-top: 4px; color: #687784; font-size: 0.875rem; }
+.ingredient-meta { display: flex; flex-wrap: wrap; gap: 7px; }
+.ingredient-meta span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #eef2f5;
+  color: #43515d;
+  font-size: 0.8rem;
+}
+.row-actions { display: flex; gap: 7px; justify-content: flex-end; }
+.ingredient-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.ingredient-form label { display: grid; gap: 6px; }
+.ingredient-form small { color: #687784; }
+.ingredient-check { align-self: end; padding-bottom: 10px; }
+.form-wide { grid-column: 1 / -1; }
+.form-actions { display: flex; gap: 8px; }
+.category-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
 @media (max-width: 900px) {
   .settings-grid { grid-template-columns: 1fr; }
   .settings-card-wide { grid-column: auto; }
-  .location-form, .location-edit-row { grid-template-columns: 1fr; }
+  .location-form, .location-edit-row, .ingredient-row { grid-template-columns: 1fr; }
+  .section-heading { display: grid; }
+  .search-controls { min-width: 0; width: 100%; }
+  .row-actions { justify-content: flex-start; }
 }
 
 @media (max-width: 760px) {
@@ -151,5 +210,7 @@ button:disabled { opacity: 0.55; cursor: default; }
   .sidebar a { white-space: nowrap; }
   .content { padding: 16px; }
   .page-card { padding: 22px; }
-  .inline-form, .editable-row { grid-template-columns: 1fr; }
+  .inline-form, .editable-row, .category-row, .ingredient-form { grid-template-columns: 1fr; }
+  .form-wide { grid-column: auto; }
+  .search-controls { display: grid; }
 }

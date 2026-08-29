@@ -159,6 +159,12 @@ export default function SettingsPage() {
 
       <div className="settings-grid">
         <section className="settings-card">
+          <h2>Ingredients & Tags</h2>
+          <p>Manage canonical ingredients, aliases, default storage, units, and reusable recipe tags.</p>
+          <a className="settings-link" href="/settings/ingredients">Manage ingredients & tags</a>
+        </section>
+
+        <section className="settings-card">
           <h2>Household</h2>
           <form onSubmit={submitHousehold} className="form-stack">
             <label>
