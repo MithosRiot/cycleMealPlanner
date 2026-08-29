@@ -22,7 +22,8 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Reproducible seeded manual-testing database with sample ingredients, recipes, Meals, Inventory, and a seven-day sample cycle.
 - Planned serving targets, planned leftover servings, per-component serving overrides, deterministic scaled component/ingredient requirements, persistence, and Meal Plan quantity controls.
 - Persistent inventory-aware Shopping Lists with safe same-family unit aggregation, current-inventory subtraction, category grouping, source traceability, deterministic regeneration, manual quantity adjustments, and Shopping UI.
+- Shopping completion and purchase intake with actual purchased quantity/unit, storage and date metadata, skip state, exactly-once Inventory lot creation, PURCHASE transactions, persisted completion state, and Shopping intake controls.
 
 ### Known limitations
-- Shopping completion/purchase intake, reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
+- Reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
 - The development database currently defaults to `./data`; packaged Windows persistence will be moved outside the installation directory.
