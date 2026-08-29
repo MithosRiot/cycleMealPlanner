@@ -4,6 +4,7 @@ import logging
 from fastapi import FastAPI
 from sqlalchemy import text
 
+from app.api.reference import router as reference_router
 from app.config import get_settings
 from app.database.migrations import run_migrations
 from app.database.session import engine
@@ -26,6 +27,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
+app.include_router(reference_router)
 
 
 @app.get("/health", tags=["system"])
