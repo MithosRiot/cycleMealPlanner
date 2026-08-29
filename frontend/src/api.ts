@@ -8,6 +8,15 @@ export type Household = {
   default_servings: string
 }
 
+export type MeasurementUnit = {
+  id: number
+  code: string
+  name: string
+  unit_family: string
+  base_multiplier: string
+  allows_fraction: boolean
+}
+
 export type ShoppingCategory = {
   id: number
   household_id: number
@@ -23,6 +32,43 @@ export type InventoryLocation = {
   name: string
   location_type: string
   sort_order: number
+  active: boolean
+}
+
+export type IngredientAlias = {
+  id: number
+  alias: string
+}
+
+export type Ingredient = {
+  id: number
+  household_id: number
+  name: string
+  shopping_category_id: number | null
+  preferred_unit_id: number | null
+  default_location_id: number | null
+  perishable: boolean
+  active: boolean
+  notes: string | null
+  aliases: IngredientAlias[]
+}
+
+export type IngredientInput = {
+  name: string
+  shopping_category_id: number | null
+  preferred_unit_id: number | null
+  default_location_id: number | null
+  perishable: boolean
+  notes: string | null
+  aliases: string[]
+  active?: boolean
+}
+
+export type Tag = {
+  id: number
+  household_id: number
+  name: string
+  category: string
   active: boolean
 }
 
@@ -57,6 +103,10 @@ export function updateHousehold(input: { name: string; default_servings: string 
     method: 'PUT',
     body: JSON.stringify(input),
   })
+}
+
+export function fetchMeasurementUnits(): Promise<MeasurementUnit[]> {
+  return jsonRequest<MeasurementUnit[]>('/api/reference/units')
 }
 
 export function fetchShoppingCategories(): Promise<ShoppingCategory[]> {
@@ -116,4 +166,49 @@ export function updateInventoryLocation(location: InventoryLocation): Promise<In
 
 export function archiveInventoryLocation(id: number): Promise<void> {
   return jsonRequest<void>(`/api/reference/inventory-locations/${id}`, { method: 'DELETE' })
+}
+
+export function fetchIngredients(search = '', includeInactive = false): Promise<Ingredient[]> {
+  const params = new URLSearchParams()
+  if (search.trim()) params.set('search', search.trim())
+  if (includeInactive) params.set('include_inactive', 'true')
+  const query = params.toString()
+  return jsonRequest<Ingredient[]>(`/api/ingredients${query ? `?${query}` : ''}`)
+}
+
+export function createIngredient(input: IngredientInput): Promise<Ingredient> {
+  return jsonRequest<Ingredient>('/api/ingredients', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateIngredient(ingredient: Ingredient, input: IngredientInput): Promise<Ingredient> {
+  return jsonRequest<Ingredient>(`/api/ingredients/${ingredient.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ ...input, active: input.active ?? ingredient.active }),
+  })
+}
+
+export function archiveIngredient(id: number): Promise<void> {
+  return jsonRequest<void>(`/api/ingredients/${id}`, { method: 'DELETE' })
+}
+
+export function fetchTags(includeInactive = false): Promise<Tag[]> {
+  return jsonRequest<Tag[]>(`/api/tags${includeInactive ? '?include_inactive=true' : ''}`)
+}
+
+export function createTag(input: { name: string; category: string }): Promise<Tag> {
+  return jsonRequest<Tag>('/api/tags', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function updateTag(tag: Tag): Promise<Tag> {
+  return jsonRequest<Tag>(`/api/tags/${tag.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name: tag.name, category: tag.category, active: tag.active }),
+  })
+}
+
+export function archiveTag(id: number): Promise<void> {
+  return jsonRequest<void>(`/api/tags/${id}`, { method: 'DELETE' })
 }
