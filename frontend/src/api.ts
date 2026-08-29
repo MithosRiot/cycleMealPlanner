@@ -70,6 +70,21 @@ export function createShoppingCategory(input: { name: string; sort_order: number
   })
 }
 
+export function updateShoppingCategory(category: ShoppingCategory): Promise<ShoppingCategory> {
+  return jsonRequest<ShoppingCategory>(`/api/reference/shopping-categories/${category.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      name: category.name,
+      sort_order: category.sort_order,
+      active: category.active,
+    }),
+  })
+}
+
+export function archiveShoppingCategory(id: number): Promise<void> {
+  return jsonRequest<void>(`/api/reference/shopping-categories/${id}`, { method: 'DELETE' })
+}
+
 export function fetchInventoryLocations(): Promise<InventoryLocation[]> {
   return jsonRequest<InventoryLocation[]>('/api/reference/inventory-locations')
 }
@@ -84,4 +99,21 @@ export function createInventoryLocation(input: {
     method: 'POST',
     body: JSON.stringify(input),
   })
+}
+
+export function updateInventoryLocation(location: InventoryLocation): Promise<InventoryLocation> {
+  return jsonRequest<InventoryLocation>(`/api/reference/inventory-locations/${location.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      name: location.name,
+      parent_location_id: location.parent_location_id,
+      location_type: location.location_type,
+      sort_order: location.sort_order,
+      active: location.active,
+    }),
+  })
+}
+
+export function archiveInventoryLocation(id: number): Promise<void> {
+  return jsonRequest<void>(`/api/reference/inventory-locations/${id}`, { method: 'DELETE' })
 }
