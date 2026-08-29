@@ -9,6 +9,7 @@ import './MealPages.css'
 import MealPlanPage from './MealPlanPage'
 import { RecipeDetailPage, RecipeEditorPage, RecipesPage } from './RecipePages'
 import SettingsPage from './SettingsPage'
+import ShoppingPage from './ShoppingPage'
 
 const navigation = [
   ['Dashboard', '/'],
@@ -78,7 +79,7 @@ function App() {
           <Route path="/meals/:mealId/edit" element={<MealEditorPage />} />
           <Route path="/meal-plan" element={<MealPlanPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
-          <Route path="/shopping" element={<PlaceholderPage title="Shopping" />} />
+          <Route path="/shopping" element={<ShoppingPage />} />
           <Route path="/leftovers" element={<PlaceholderPage title="Leftovers" />} />
           <Route path="/history" element={<PlaceholderPage title="History" />} />
           <Route path="/settings" element={<SettingsPage />} />
