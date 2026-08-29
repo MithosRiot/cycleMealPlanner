@@ -1,0 +1,45 @@
+.inventory-page { display: grid; gap: 20px; }
+.inventory-add-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+.inventory-add-form label { display: grid; gap: 6px; }
+.inventory-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) minmax(180px, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+.segmented-control { display: flex; gap: 6px; }
+.inventory-groups { display: grid; gap: 18px; }
+.inventory-group { display: grid; gap: 8px; }
+.inventory-group h3 { margin: 0; }
+.inventory-lot-row {
+  display: grid;
+  grid-template-columns: minmax(230px, 2fr) minmax(360px, 2fr) minmax(220px, 1.3fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #dfe5ea;
+  border-radius: 10px;
+}
+.inventory-actions {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) repeat(3, auto);
+  gap: 6px;
+  align-items: center;
+}
+.inventory-actions:last-child { grid-template-columns: minmax(130px, 1fr) auto; }
+
+@media (max-width: 1050px) {
+  .inventory-add-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-lot-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .inventory-add-form, .inventory-toolbar, .inventory-actions, .inventory-actions:last-child { grid-template-columns: 1fr; }
+  .segmented-control { display: grid; grid-template-columns: 1fr 1fr; }
+}
