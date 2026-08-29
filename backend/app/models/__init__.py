@@ -5,6 +5,7 @@ from app.models.meal_cycle import CycleSlot, MealCycle, MealSlotDefinition
 from app.models.planned_meal import PlannedMeal
 from app.models.recipe import Recipe, RecipeIngredient, RecipeMealType, recipe_tags
 from app.models.reference import Household, InventoryLocation, MeasurementUnit, ShoppingCategory
+from app.models.shopping import ShoppingList, ShoppingListItem
 
 __all__ = [
     "Household",
@@ -28,4 +29,6 @@ __all__ = [
     "MealSlotDefinition",
     "CycleSlot",
     "PlannedMeal",
+    "ShoppingList",
+    "ShoppingListItem",
 ]
