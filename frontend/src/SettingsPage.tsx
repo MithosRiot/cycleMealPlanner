@@ -1,15 +1,87 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  archiveInventoryLocation,
+  archiveShoppingCategory,
   createInventoryLocation,
   createShoppingCategory,
   fetchHousehold,
   fetchInventoryLocations,
   fetchShoppingCategories,
+  InventoryLocation,
+  ShoppingCategory,
   updateHousehold,
+  updateInventoryLocation,
+  updateShoppingCategory,
 } from './api'
 
 const LOCATION_TYPES = ['PANTRY', 'REFRIGERATOR', 'FREEZER', 'SPICE', 'OTHER']
+
+function CategoryRow({ category }: { category: ShoppingCategory }) {
+  const queryClient = useQueryClient()
+  const [name, setName] = useState(category.name)
+  const updateCategory = useMutation({
+    mutationFn: updateShoppingCategory,
+    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ['shopping-categories'] }),
+  })
+  const archiveCategory = useMutation({
+    mutationFn: archiveShoppingCategory,
+    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ['shopping-categories'] }),
+  })
+
+  return (
+    <div className="editable-row">
+      <input value={name} onChange={(event) => setName(event.target.value)} />
+      <button type="button" onClick={() => updateCategory.mutate({ ...category, name })}>Save</button>
+      <button type="button" className="button-secondary" onClick={() => archiveCategory.mutate(category.id)}>Archive</button>
+    </div>
+  )
+}
+
+function LocationRow({ location, locations }: { location: InventoryLocation; locations: InventoryLocation[] }) {
+  const queryClient = useQueryClient()
+  const [name, setName] = useState(location.name)
+  const [type, setType] = useState(location.location_type)
+  const [parentId, setParentId] = useState(location.parent_location_id?.toString() ?? '')
+  const updateLocation = useMutation({
+    mutationFn: updateInventoryLocation,
+    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ['inventory-locations'] }),
+  })
+  const archiveLocation = useMutation({
+    mutationFn: archiveInventoryLocation,
+    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ['inventory-locations'] }),
+  })
+
+  const error = updateLocation.error ?? archiveLocation.error
+
+  return (
+    <div className="location-edit-row">
+      <input value={name} onChange={(event) => setName(event.target.value)} />
+      <select value={type} onChange={(event) => setType(event.target.value)}>
+        {LOCATION_TYPES.map((value) => <option key={value}>{value}</option>)}
+      </select>
+      <select value={parentId} onChange={(event) => setParentId(event.target.value)}>
+        <option value="">Top level</option>
+        {locations.filter((item) => item.id !== location.id).map((item) => (
+          <option key={item.id} value={item.id}>{item.name}</option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={() => updateLocation.mutate({
+          ...location,
+          name,
+          location_type: type,
+          parent_location_id: parentId ? Number(parentId) : null,
+        })}
+      >
+        Save
+      </button>
+      <button type="button" className="button-secondary" onClick={() => archiveLocation.mutate(location.id)}>Archive</button>
+      {error instanceof Error && <small className="field-error">{error.message}</small>}
+    </div>
+  )
+}
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
@@ -119,9 +191,9 @@ export default function SettingsPage() {
             />
             <button type="submit" disabled={addCategory.isPending}>Add</button>
           </form>
-          <ul className="simple-list">
-            {categories.data?.map((category) => <li key={category.id}>{category.name}</li>)}
-          </ul>
+          <div className="editable-list">
+            {categories.data?.map((category) => <CategoryRow key={category.id} category={category} />)}
+          </div>
         </section>
 
         <section className="settings-card settings-card-wide">
@@ -145,16 +217,9 @@ export default function SettingsPage() {
             <button type="submit" disabled={addLocation.isPending}>Add location</button>
           </form>
           <div className="location-list">
-            {locations.data?.map((location) => {
-              const parent = locations.data?.find((item) => item.id === location.parent_location_id)
-              return (
-                <div key={location.id} className="location-row">
-                  <strong>{location.name}</strong>
-                  <span>{location.location_type}</span>
-                  <span>{parent ? `Inside ${parent.name}` : 'Top level'}</span>
-                </div>
-              )
-            })}
+            {locations.data?.map((location) => (
+              <LocationRow key={location.id} location={location} locations={locations.data ?? []} />
+            ))}
           </div>
         </section>
       </div>
