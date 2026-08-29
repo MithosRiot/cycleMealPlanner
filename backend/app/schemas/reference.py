@@ -32,6 +32,10 @@ class ShoppingCategoryCreate(BaseModel):
     sort_order: int = Field(default=0, ge=0)
 
 
+class ShoppingCategoryUpdate(ShoppingCategoryCreate):
+    active: bool = True
+
+
 class ShoppingCategoryRead(ShoppingCategoryCreate):
     model_config = ConfigDict(from_attributes=True)
 
@@ -45,6 +49,10 @@ class InventoryLocationCreate(BaseModel):
     parent_location_id: int | None = None
     location_type: str = Field(default="OTHER", min_length=1, max_length=30)
     sort_order: int = Field(default=0, ge=0)
+
+
+class InventoryLocationUpdate(InventoryLocationCreate):
+    active: bool = True
 
 
 class InventoryLocationRead(InventoryLocationCreate):
