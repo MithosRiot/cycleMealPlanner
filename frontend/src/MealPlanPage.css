@@ -32,6 +32,7 @@
 .planning-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin-top: .55rem; }
 .planning-grid label, .component-override-list label { display: grid; gap: .25rem; font-size: .82rem; color: #43515d; }
 .planning-note { margin: .45rem 0; color: #687784; font-size: .78rem; }
+.planning-warning { margin: .5rem 0; border: 1px solid #d8c99b; background: #fbf7e8; border-radius: 7px; padding: .6rem; color: #6f5e2e; }
 .component-overrides { margin: .45rem 0; }
 .component-override-list { display: grid; gap: .45rem; margin-top: .45rem; }
 .component-override-list label { grid-template-columns: minmax(0, 1fr) 90px; align-items: center; }
@@ -43,9 +44,19 @@
 .population-rule-list label { display: grid; grid-template-columns: minmax(0, 1fr) 90px; gap: .5rem; align-items: center; font-size: .82rem; color: #43515d; }
 .smart-preference-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; margin: .65rem 0; }
 .smart-preference-grid label { display: grid; gap: .3rem; color: #43515d; font-size: .82rem; font-weight: 600; }
+.expiration-suggestions { margin: .85rem 0 1rem; border: 1px solid #d7dfe6; background: #f8fafb; border-radius: 8px; padding: .7rem; }
+.expiration-suggestions h3 { margin: 0; }
+.expiration-suggestion-list { display: grid; gap: .65rem; margin-top: .65rem; }
+.expiration-suggestion-card { display: grid; gap: .5rem; border: 1px solid #cdd8df; background: #ffffff; border-radius: 8px; padding: .7rem; }
+.expiration-suggestion-heading { display: flex; justify-content: space-between; gap: .75rem; align-items: baseline; }
+.expiration-suggestion-heading span { color: #687784; font-size: .82rem; }
+.expiration-match-list { display: grid; gap: .35rem; }
+.expiration-match-list > div { display: grid; gap: .15rem; padding: .4rem .5rem; border-radius: 6px; background: #f5f8fa; }
+.expiration-match-list span { color: #5d6974; font-size: .8rem; }
+.expiration-action { margin: 0; color: #344b5f; font-size: .84rem; font-weight: 600; }
 .meal-plan-page .button-secondary { background: #e8edf1; color: #263746; border: 1px solid #ccd6dd; }
 .meal-plan-page .button-secondary:hover { background: #dbe3e9; }
 .meal-plan-page .button-link { background: #263746; color: #ffffff; }
 .meal-plan-page .eyebrow { color: #52606d; }
 .button-row { display: flex; gap: .5rem; flex-wrap: wrap; }
-@media (max-width: 900px) { .meal-plan-layout { grid-template-columns: 1fr; } .form-grid, .planning-grid, .smart-preference-grid { grid-template-columns: 1fr; } .slot-editor-row { grid-template-columns: 2rem 1fr; } .slot-editor-row button { grid-column: auto; } .section-heading { align-items: flex-start; flex-direction: column; } .population-rule-list { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .meal-plan-layout { grid-template-columns: 1fr; } .form-grid, .planning-grid, .smart-preference-grid { grid-template-columns: 1fr; } .slot-editor-row { grid-template-columns: 2rem 1fr; } .slot-editor-row button { grid-column: auto; } .section-heading, .expiration-suggestion-heading { align-items: flex-start; flex-direction: column; } .population-rule-list { grid-template-columns: 1fr; } }
