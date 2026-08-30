@@ -59,6 +59,22 @@ export type ExpirationSuggestionsResponse = {
   suggestions: ExpirationSuggestion[]
 }
 
+export type CycleValidationIssue = {
+  severity: 'ERROR' | 'WARNING'
+  code: string
+  message: string
+  context: Record<string, unknown>
+}
+
+export type CycleValidationResponse = {
+  meal_cycle_id: number
+  meal_cycle_name: string
+  valid: boolean
+  error_count: number
+  warning_count: number
+  issues: CycleValidationIssue[]
+}
+
 export type ScaledPlannedComponent = {
   meal_recipe_id: number
   recipe_id: number
@@ -134,6 +150,7 @@ async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
 export const fetchMealCycles = (): Promise<MealCycle[]> => jsonRequest('/api/meal-cycles')
 export const fetchMealCycle = (id: number): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}`)
 export const fetchExpirationSuggestions = (id: number): Promise<ExpirationSuggestionsResponse> => jsonRequest(`/api/meal-cycles/${id}/expiration-suggestions`)
+export const fetchCycleValidation = (id: number): Promise<CycleValidationResponse> => jsonRequest(`/api/meal-cycles/${id}/validate`)
 export const createMealCycle = (input: MealCycleInput): Promise<MealCycle> => jsonRequest('/api/meal-cycles', { method: 'POST', body: JSON.stringify(input) })
 export const updateMealCycle = (id: number, input: MealCycleInput): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'PUT', body: JSON.stringify(input) })
 export const updatePopulationRules = (id: number, input: PopulationRules): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/population-rules`, { method: 'PUT', body: JSON.stringify(input) })
