@@ -20,6 +20,7 @@ from app.schemas.planned_meal import (
     PlannedMealRead,
     RandomFillResult,
 )
+from app.services.normalization import normalize_name
 
 router = APIRouter(prefix="/api/meal-cycles", tags=["meal-placement"])
 HOUSEHOLD_ID = 1
@@ -152,6 +153,30 @@ def _place(db: Session, slot: CycleSlot, meal: Meal) -> PlannedMeal:
     return planned
 
 
+def _parse_population_rules(cycle: MealCycle) -> dict:
+    try:
+        rules = json.loads(cycle.population_rules or "{}")
+        return rules if isinstance(rules, dict) else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _filter_by_population_rules(meals: list[Meal], slot_label: str, rules: dict) -> list[Meal]:
+    global_include = {int(value) for value in rules.get("include_meal_ids", [])}
+    global_exclude = {int(value) for value in rules.get("exclude_meal_ids", [])}
+    slot_rule = rules.get("slot_rules", {}).get(normalize_name(slot_label), {})
+    slot_include = {int(value) for value in slot_rule.get("include_meal_ids", [])}
+    slot_exclude = {int(value) for value in slot_rule.get("exclude_meal_ids", [])}
+
+    eligible = meals
+    if global_include:
+        eligible = [meal for meal in eligible if meal.id in global_include]
+    eligible = [meal for meal in eligible if meal.id not in global_exclude]
+    if slot_include:
+        eligible = [meal for meal in eligible if meal.id in slot_include]
+    return [meal for meal in eligible if meal.id not in slot_exclude]
+
+
 @router.post("/{cycle_id}/slots/{slot_id}/planned-meal", response_model=PlannedMealRead, status_code=status.HTTP_201_CREATED)
 def assign_meal(cycle_id: int, slot_id: int, payload: PlannedMealAssign, db: Session = Depends(get_db)) -> PlannedMeal:
     slot = _load_slot(db, cycle_id, slot_id)
@@ -249,12 +274,15 @@ def random_fill(cycle_id: int, db: Session = Depends(get_db)) -> RandomFillResul
     if not meals:
         return RandomFillResult(filled_count=0)
 
+    rules = _parse_population_rules(cycle)
     filled = 0
     for slot in cycle.slots:
         if slot.planned_meal is not None:
             continue
-        label = slot.slot_definition.label.strip().casefold()
-        eligible = [meal for meal in meals if any(mt.meal_type.casefold() == label for mt in meal.meal_types)]
+        label = slot.slot_definition.label.strip()
+        label_key = normalize_name(label)
+        typed = [meal for meal in meals if any(normalize_name(mt.meal_type) == label_key for mt in meal.meal_types)]
+        eligible = _filter_by_population_rules(typed, label, rules)
         if not eligible:
             continue
         _place(db, slot, random.choice(eligible))

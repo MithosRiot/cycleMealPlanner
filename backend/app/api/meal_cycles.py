@@ -1,11 +1,19 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.database.session import get_db
+from app.models.meal import Meal
 from app.models.meal_cycle import CycleSlot, MealCycle, MealSlotDefinition
-from app.schemas.meal_cycle import MealCycleInput, MealCycleRead, MealSlotDefinitionInput
+from app.schemas.meal_cycle import (
+    MealCycleInput,
+    MealCycleRead,
+    MealSlotDefinitionInput,
+    PopulationRulesUpdate,
+)
 from app.services.normalization import normalize_name
 
 
@@ -76,6 +84,23 @@ def _apply_cycle(db: Session, cycle: MealCycle, payload: MealCycleInput) -> None
             )
 
 
+def _validate_rule_ids(db: Session, meal_ids: set[int]) -> None:
+    if not meal_ids:
+        return
+    active_ids = set(
+        db.scalars(
+            select(Meal.id).where(
+                Meal.household_id == HOUSEHOLD_ID,
+                Meal.active.is_(True),
+                Meal.id.in_(meal_ids),
+            )
+        )
+    )
+    missing = meal_ids - active_ids
+    if missing:
+        raise HTTPException(status_code=422, detail=f"Unknown or archived Meal: {min(missing)}")
+
+
 @router.get("", response_model=list[MealCycleRead])
 def list_meal_cycles(db: Session = Depends(get_db)) -> list[MealCycle]:
     return list(
@@ -106,6 +131,7 @@ def create_meal_cycle(payload: MealCycleInput, db: Session = Depends(get_db)) ->
         status="DRAFT",
         start_date=payload.start_date,
         notes=payload.notes,
+        population_rules="{}",
     )
     db.add(cycle)
     try:
@@ -126,6 +152,45 @@ def update_meal_cycle(cycle_id: int, payload: MealCycleInput, db: Session = Depe
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Meal cycle name already exists") from exc
+    return _load_cycle(db, cycle.id)
+
+
+@router.put("/{cycle_id}/population-rules", response_model=MealCycleRead)
+def update_population_rules(cycle_id: int, payload: PopulationRulesUpdate, db: Session = Depends(get_db)) -> MealCycle:
+    cycle = _load_cycle(db, cycle_id)
+    valid_slot_labels = {normalize_name(slot.label) for slot in cycle.slot_definitions}
+
+    global_include = set(payload.include_meal_ids)
+    global_exclude = set(payload.exclude_meal_ids)
+    if global_include & global_exclude:
+        raise HTTPException(status_code=422, detail="A Meal cannot be both included and excluded for the cycle")
+
+    all_ids = global_include | global_exclude
+    normalized_slot_rules: dict[str, dict[str, list[int]]] = {}
+    for label, rule in payload.slot_rules.items():
+        normalized_label = normalize_name(label)
+        if normalized_label not in valid_slot_labels:
+            raise HTTPException(status_code=422, detail=f"Unknown slot label: {label}")
+        include_ids = set(rule.include_meal_ids)
+        exclude_ids = set(rule.exclude_meal_ids)
+        if include_ids & exclude_ids:
+            raise HTTPException(status_code=422, detail=f"A Meal cannot be both included and excluded for slot {label}")
+        all_ids |= include_ids | exclude_ids
+        normalized_slot_rules[normalized_label] = {
+            "include_meal_ids": sorted(include_ids),
+            "exclude_meal_ids": sorted(exclude_ids),
+        }
+
+    _validate_rule_ids(db, all_ids)
+    cycle.population_rules = json.dumps(
+        {
+            "include_meal_ids": sorted(global_include),
+            "exclude_meal_ids": sorted(global_exclude),
+            "slot_rules": normalized_slot_rules,
+        },
+        sort_keys=True,
+    )
+    db.commit()
     return _load_cycle(db, cycle.id)
 
 

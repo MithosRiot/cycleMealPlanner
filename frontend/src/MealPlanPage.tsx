@@ -9,14 +9,16 @@ import {
   fetchMealCycles,
   type MealCycleInput,
   type PlannedMeal,
+  type PopulationRules,
   movePlannedMeal,
   randomFillMealCycle,
   removePlannedMeal,
   setPlannedMealLock,
   updateMealCycle,
   updatePlannedMealPlanning,
+  updatePopulationRules,
 } from './mealCyclesApi'
-import { fetchMeals } from './mealsApi'
+import { fetchMeals, type Meal } from './mealsApi'
 import './MealPlanPage.css'
 
 const DEFAULT_SLOTS = ['Breakfast', 'Lunch', 'Dinner']
@@ -27,6 +29,8 @@ type PlanningInput = {
   component_serving_overrides: Record<number, string>
 }
 
+type RuleMode = 'ANY' | 'INCLUDE' | 'EXCLUDE'
+
 function makeDraft(): MealCycleInput {
   return {
     name: '',
@@ -35,6 +39,41 @@ function makeDraft(): MealCycleInput {
     notes: null,
     slot_definitions: DEFAULT_SLOTS.map((label, index) => ({ label, sort_order: index })),
   }
+}
+
+function emptyPopulationRules(): PopulationRules {
+  return { include_meal_ids: [], exclude_meal_ids: [], slot_rules: {} }
+}
+
+function normalizeSlotLabel(label: string): string {
+  return label.trim().toLocaleLowerCase().replace(/\s+/g, ' ')
+}
+
+function parsePopulationRules(value: string): PopulationRules {
+  try {
+    const parsed = JSON.parse(value || '{}') as Partial<PopulationRules>
+    return {
+      include_meal_ids: parsed.include_meal_ids ?? [],
+      exclude_meal_ids: parsed.exclude_meal_ids ?? [],
+      slot_rules: parsed.slot_rules ?? {},
+    }
+  } catch {
+    return emptyPopulationRules()
+  }
+}
+
+function ruleMode(includeIds: number[], excludeIds: number[], mealId: number): RuleMode {
+  if (includeIds.includes(mealId)) return 'INCLUDE'
+  if (excludeIds.includes(mealId)) return 'EXCLUDE'
+  return 'ANY'
+}
+
+function applyRuleMode(includeIds: number[], excludeIds: number[], mealId: number, mode: RuleMode) {
+  const include = includeIds.filter((id) => id !== mealId)
+  const exclude = excludeIds.filter((id) => id !== mealId)
+  if (mode === 'INCLUDE') include.push(mealId)
+  if (mode === 'EXCLUDE') exclude.push(mealId)
+  return { include_meal_ids: include, exclude_meal_ids: exclude }
 }
 
 function componentKey(component: { meal_recipe_id?: number; sort_order?: number }): number {
@@ -82,6 +121,54 @@ function PlanningControls({ placement, recipes, onSave, disabled }: { placement:
         </div>
       </details>
       <button type="button" className="button-secondary" disabled={disabled || !servings || Number(servings) <= 0 || Number(leftovers) < 0} onClick={() => onSave({ planned_servings: servings, planned_leftover_servings: leftovers || '0', component_serving_overrides: overrides })}>Save quantities</button>
+    </details>
+  )
+}
+
+function PopulationRulesControls({ initialRules, meals, slotLabels, disabled, onSave }: { initialRules: PopulationRules; meals: Meal[]; slotLabels: string[]; disabled: boolean; onSave: (rules: PopulationRules) => void }) {
+  const [rules, setRules] = useState<PopulationRules>(initialRules)
+
+  function setGlobal(mealId: number, mode: RuleMode) {
+    setRules((current) => ({ ...current, ...applyRuleMode(current.include_meal_ids, current.exclude_meal_ids, mealId, mode) }))
+  }
+
+  function setSlot(label: string, mealId: number, mode: RuleMode) {
+    const key = normalizeSlotLabel(label)
+    setRules((current) => {
+      const existing = current.slot_rules[key] ?? { include_meal_ids: [], exclude_meal_ids: [] }
+      return {
+        ...current,
+        slot_rules: {
+          ...current.slot_rules,
+          [key]: applyRuleMode(existing.include_meal_ids, existing.exclude_meal_ids, mealId, mode),
+        },
+      }
+    })
+  }
+
+  return (
+    <details className="population-rules">
+      <summary>Population rules</summary>
+      <p className="planning-note">Include creates an allow-list when at least one Meal is included. Exclude always removes a Meal. Slot rules narrow the cycle rule further.</p>
+      <div className="population-rule-section">
+        <h4>Whole cycle</h4>
+        <div className="population-rule-list">
+          {meals.map((meal) => <label key={meal.id}><span>{meal.name}</span><select value={ruleMode(rules.include_meal_ids, rules.exclude_meal_ids, meal.id)} onChange={(event) => setGlobal(meal.id, event.target.value as RuleMode)}><option value="ANY">Any</option><option value="INCLUDE">Include</option><option value="EXCLUDE">Exclude</option></select></label>)}
+        </div>
+      </div>
+      {slotLabels.map((label) => {
+        const key = normalizeSlotLabel(label)
+        const slotRule = rules.slot_rules[key] ?? { include_meal_ids: [], exclude_meal_ids: [] }
+        return (
+          <details className="population-slot-rules" key={key}>
+            <summary>{label} rules</summary>
+            <div className="population-rule-list">
+              {meals.map((meal) => <label key={meal.id}><span>{meal.name}</span><select value={ruleMode(slotRule.include_meal_ids, slotRule.exclude_meal_ids, meal.id)} onChange={(event) => setSlot(label, meal.id, event.target.value as RuleMode)}><option value="ANY">Any</option><option value="INCLUDE">Include</option><option value="EXCLUDE">Exclude</option></select></label>)}
+            </div>
+          </details>
+        )
+      })}
+      <button type="button" className="button-secondary" disabled={disabled} onClick={() => onSave(rules)}>Save population rules</button>
     </details>
   )
 }
@@ -134,6 +221,14 @@ export default function MealPlanPage() {
       setEditingId(null)
       setDraft(makeDraft())
     },
+  })
+
+  const populationMutation = useMutation({
+    mutationFn: (rules: PopulationRules) => {
+      if (selectedId === null) throw new Error('Select a cycle first')
+      return updatePopulationRules(selectedId, rules)
+    },
+    onSuccess: async () => { if (selectedId !== null) await refreshCycle(selectedId) },
   })
 
   type PlacementAction =
@@ -207,6 +302,8 @@ export default function MealPlanPage() {
                 <div><p className="eyebrow">{selected.data.status}</p><h2>{selected.data.name}</h2><p>{selected.data.duration_days} days · {selected.data.start_date ? `Starts ${selected.data.start_date}` : 'No start date yet'}</p></div>
                 <div className="button-row"><button type="button" className="button-secondary" onClick={() => placementMutation.mutate({ type: 'random' })}>Random fill empty</button><button type="button" className="button-secondary" onClick={startEdit}>Edit cycle</button><button type="button" className="button-secondary" onClick={() => deleteMutation.mutate(selected.data!.id)}>Delete cycle</button></div>
               </div>
+              <PopulationRulesControls key={`${selected.data.id}-${selected.data.population_rules}`} initialRules={parsePopulationRules(selected.data.population_rules)} meals={meals.data ?? []} slotLabels={selected.data.slot_definitions.map((slot) => slot.label)} disabled={populationMutation.isPending} onSave={(rules) => populationMutation.mutate(rules)} />
+              {populationMutation.isError && <div className="error-banner">{(populationMutation.error as Error).message}</div>}
               {placementMutation.isError && <div className="error-banner">{(placementMutation.error as Error).message}</div>}
               <div className="cycle-grid">
                 {slotGrid.map(({ day, slots }) => (
