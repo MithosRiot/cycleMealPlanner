@@ -5,6 +5,7 @@ import {
   assignPlannedMeal,
   createMealCycle,
   deleteMealCycle,
+  fetchExpirationSuggestions,
   fetchMealCycle,
   fetchMealCycles,
   type MealCycleInput,
@@ -227,6 +228,12 @@ export default function MealPlanPage() {
   const tags = useQuery({ queryKey: ['tags', 'planner'], queryFn: () => fetchTags() })
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const selected = useQuery({ queryKey: ['meal-cycle', selectedId], queryFn: () => fetchMealCycle(selectedId as number), enabled: selectedId !== null })
+  const expiration = useQuery({
+    queryKey: ['expiration-suggestions', selectedId],
+    queryFn: () => fetchExpirationSuggestions(selectedId as number),
+    enabled: selectedId !== null && Boolean(selected.data?.start_date),
+    retry: false,
+  })
   const [draft, setDraft] = useState<MealCycleInput>(makeDraft())
   const [editingId, setEditingId] = useState<number | null>(null)
   const [mealChoices, setMealChoices] = useState<Record<number, number>>({})
@@ -244,6 +251,7 @@ export default function MealPlanPage() {
   async function refreshCycle(cycleId: number) {
     await queryClient.invalidateQueries({ queryKey: ['meal-cycles'] })
     await queryClient.invalidateQueries({ queryKey: ['meal-cycle', cycleId] })
+    await queryClient.invalidateQueries({ queryKey: ['expiration-suggestions', cycleId] })
   }
 
   const saveMutation = useMutation({
@@ -339,6 +347,29 @@ export default function MealPlanPage() {
               </div>
               <PopulationRulesControls key={`${selected.data.id}-${selected.data.population_rules}`} initialRules={parsePopulationRules(selected.data.population_rules)} meals={meals.data ?? []} slotLabels={selected.data.slot_definitions.map((slot) => slot.label)} disabled={populationMutation.isPending} onSave={(rules) => populationMutation.mutate(rules)} />
               <SmartPlanningControls key={`${selected.data.id}-${selected.data.smart_preferences}`} initial={parseSmartPreferences(selected.data.smart_preferences)} tags={tags.data ?? []} disabled={smartMutation.isPending} onSave={(preferences) => smartMutation.mutate(preferences)} />
+              <section className="expiration-suggestions">
+                <div className="section-heading">
+                  <div><h3>Expiration-aware suggestions</h3><p className="planning-note">Uses dated Inventory lots and the cycle start date to identify Meals that can use expiring ingredients sooner.</p></div>
+                  {selected.data.start_date && <button type="button" className="button-secondary" disabled={expiration.isFetching} onClick={() => expiration.refetch()}>Refresh suggestions</button>}
+                </div>
+                {!selected.data.start_date && <div className="planning-warning">Set a cycle start date to evaluate expiration timing.</div>}
+                {selected.data.start_date && expiration.isPending && <p className="planning-note">Checking expiring Inventory…</p>}
+                {selected.data.start_date && expiration.isError && <div className="error-banner">{(expiration.error as Error).message}</div>}
+                {selected.data.start_date && expiration.data?.suggestions.length === 0 && <p className="planning-note">No planned Meals currently match usable dated Inventory before expiration.</p>}
+                <div className="expiration-suggestion-list">
+                  {expiration.data?.suggestions.map((suggestion) => (
+                    <article className="expiration-suggestion-card" key={suggestion.planned_meal_id}>
+                      <div className="expiration-suggestion-heading"><strong>{suggestion.meal_name}</strong><span>Day {suggestion.day_number} · {suggestion.planned_date}</span></div>
+                      <div className="expiration-match-list">
+                        {suggestion.expiring_matches.map((match) => <div key={`${match.inventory_lot_id}-${match.ingredient_id}`}><strong>{match.ingredient_name}</strong><span>Lot #{match.inventory_lot_id}: {match.usable_quantity} {match.unit_code} usable · expires {match.expiration_date} ({match.days_until_expiration_on_planned_date} days after planned date)</span></div>)}
+                      </div>
+                      {suggestion.can_move_earlier && <p className="expiration-action">Earlier empty same-slot day{suggestion.suggested_empty_day_numbers.length === 1 ? '' : 's'}: {suggestion.suggested_empty_day_numbers.join(', ')}</p>}
+                      {suggestion.can_swap_earlier && <p className="expiration-action">Earlier unlocked same-slot swap day{suggestion.suggested_swap_day_numbers.length === 1 ? '' : 's'}: {suggestion.suggested_swap_day_numbers.join(', ')}</p>}
+                      {!suggestion.can_move_earlier && !suggestion.can_swap_earlier && <p className="planning-note">No earlier same-slot move or unlocked swap opportunity is currently available.</p>}
+                    </article>
+                  ))}
+                </div>
+              </section>
               {populationMutation.isError && <div className="error-banner">{(populationMutation.error as Error).message}</div>}
               {smartMutation.isError && <div className="error-banner">{(smartMutation.error as Error).message}</div>}
               {placementMutation.isError && <div className="error-banner">{(placementMutation.error as Error).message}</div>}
