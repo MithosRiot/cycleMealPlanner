@@ -96,17 +96,21 @@ def test_population_rules_constrain_random_fill_and_persist() -> None:
             f"/api/meal-cycles/{cycle_id}/population-rules",
             json={
                 "include_meal_ids": [breakfast_a, breakfast_b, dinner_a, dinner_b],
-                "exclude_meal_ids": [breakfast_b],
+                "exclude_meal_ids": [],
                 "slot_rules": {
+                    "Breakfast": {
+                        "include_meal_ids": [],
+                        "exclude_meal_ids": [breakfast_b],
+                    },
                     "Dinner": {
                         "include_meal_ids": [dinner_b],
                         "exclude_meal_ids": [],
-                    }
+                    },
                 },
             },
         )
         assert rules_response.status_code == 200
-        assert '"breakfast"' not in rules_response.json()["population_rules"]
+        assert '"breakfast"' in rules_response.json()["population_rules"]
         assert '"dinner"' in rules_response.json()["population_rules"]
 
         filled = client.post(f"/api/meal-cycles/{cycle_id}/random-fill")
