@@ -40,6 +40,23 @@ class RecipeAdvancePrepRead(BaseModel):
     sort_order: int
 
 
+class RecipeEquipmentInput(BaseModel):
+    equipment_id: int
+    quantity: int = Field(default=1, ge=1)
+    notes: str | None = None
+    sort_order: int = Field(default=0, ge=0)
+
+
+class RecipeEquipmentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    recipe_id: int
+    equipment_id: int
+    quantity: int
+    notes: str | None
+    sort_order: int
+
+
 class RecipeIngredientInput(BaseModel):
     ingredient_id: int
     prep_group_key: str | None = Field(default=None, max_length=80)
@@ -92,6 +109,7 @@ class RecipeBase(BaseModel):
     tag_ids: list[int] = Field(default_factory=list)
     prep_groups: list[RecipePrepGroupInput] = Field(default_factory=list)
     advance_prep: list[RecipeAdvancePrepInput] = Field(default_factory=list)
+    equipment: list[RecipeEquipmentInput] = Field(default_factory=list)
     ingredients: list[RecipeIngredientInput] = Field(default_factory=list)
 
 
@@ -122,6 +140,7 @@ class RecipeRead(BaseModel):
     tags: list[TagRead]
     prep_groups: list[RecipePrepGroupRead]
     advance_prep: list[RecipeAdvancePrepRead]
+    equipment: list[RecipeEquipmentRead]
     ingredients: list[RecipeIngredientRead]
 
 
