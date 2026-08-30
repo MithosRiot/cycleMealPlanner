@@ -24,6 +24,7 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Persistent inventory-aware Shopping Lists with safe same-family unit aggregation, current-inventory subtraction, category grouping, source traceability, deterministic regeneration, manual quantity adjustments, and Shopping UI.
 - Shopping completion and purchase intake with actual purchased quantity/unit, storage and date metadata, skip state, exactly-once Inventory lot creation, PURCHASE transactions, persisted completion state, and Shopping intake controls.
 - Cycle-level and slot-specific Meal population rules with include/exclude pools, persisted configuration, backward-compatible unrestricted cycles, and rule-aware random fill.
+- Smart planning preferences with repeat spacing, favorite weighting, tag weighting, prior-planning history penalties, persisted configuration, and weighted random population layered on top of population rules.
 
 ### Known limitations
 - Reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
