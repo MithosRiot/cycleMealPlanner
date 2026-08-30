@@ -10,6 +10,7 @@ import {
   RecipeVariant,
   RecipeVariantInput,
   RecipeVariantOverrideInput,
+  scaleRecipe,
   updateRecipeVariant,
 } from './api'
 
@@ -35,6 +36,10 @@ export default function RecipeVariantsEditor({ recipe, ingredients, units }: { r
   const [draft, setDraft] = useState<RecipeVariantInput | null>(null)
   const form = draft ?? (selected ? toInput(selected) : blankVariant(variants.data?.length ?? 0))
   const ingredientNames = useMemo(() => new Map(ingredients.map((item) => [item.id, item.name])), [ingredients])
+  const activeVariants = variants.data?.filter((item) => item.active) ?? []
+  const [previewVariantId, setPreviewVariantId] = useState<number | null>(null)
+  const [previewServings, setPreviewServings] = useState(recipe.base_servings)
+  const preview = useMutation({ mutationFn: () => scaleRecipe(recipe.id, previewServings, {}, {}, previewVariantId) })
 
   const save = useMutation({
     mutationFn: () => editingId === 'new' ? createRecipeVariant(recipe.id, form) : updateRecipeVariant(recipe.id, editingId as number, form),
@@ -70,5 +75,7 @@ export default function RecipeVariantsEditor({ recipe, ingredients, units }: { r
       {save.error instanceof Error && <p className="field-error">{save.error.message}</p>}
       <div className="form-actions"><button type="button" disabled={save.isPending || !form.name.trim()} onClick={() => save.mutate()}>Save variant</button><button type="button" className="button-secondary" onClick={() => { setEditingId(null); setDraft(null) }}>Cancel</button></div>
     </div>}
+
+    {activeVariants.length > 0 && <div className="recipe-ingredient-editor" style={{ marginTop: 12 }}><h3>Variant serving preview</h3><div className="editor-grid"><label>Variant<select value={previewVariantId ?? ''} onChange={(event) => setPreviewVariantId(event.target.value ? Number(event.target.value) : null)}><option value="">Base Recipe</option>{activeVariants.map((variant) => <option key={variant.id} value={variant.id}>{variant.name}</option>)}</select></label><label>Requested servings<input type="number" min="0.1" step="0.1" value={previewServings} onChange={(event) => setPreviewServings(event.target.value)} /></label></div><button type="button" onClick={() => preview.mutate()}>Preview variant</button>{preview.error instanceof Error && <p className="field-error">{preview.error.message}</p>}{preview.data && <div className="recipe-ingredient-list" style={{ marginTop: 12 }}>{preview.data.ingredients.map((item) => <div className="muted-line" key={item.recipe_ingredient_id}><strong>{ingredientNames.get(item.ingredient_id) ?? `Ingredient #${item.ingredient_id}`}</strong> · {item.quantity} {item.unit_code}{item.prep_method ? ` · ${item.prep_method}` : ''}{item.manual_review ? ' · Manual review' : ''}</div>)}</div>}</div>}
   </section>
 }
