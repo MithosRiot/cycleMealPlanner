@@ -37,6 +37,7 @@ class Recipe(Base):
 
     prep_groups: Mapped[list[RecipePrepGroup]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipePrepGroup.sort_order")
     advance_prep: Mapped[list[RecipeAdvancePrep]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeAdvancePrep.sort_order")
+    equipment: Mapped[list[RecipeEquipment]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeEquipment.sort_order")
     ingredients: Mapped[list[RecipeIngredient]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeIngredient.sort_order")
     meal_types: Mapped[list[RecipeMealType]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeMealType.meal_type")
     tags: Mapped[list[Tag]] = relationship(secondary=recipe_tags)
@@ -81,6 +82,25 @@ class RecipeAdvancePrep(Base):
         CheckConstraint("lead_time_minutes >= 0", name="ck_recipe_advance_prep_lead_nonnegative"),
         CheckConstraint("duration_minutes IS NULL OR duration_minutes >= 0", name="ck_recipe_advance_prep_duration_nonnegative"),
         CheckConstraint("sort_order >= 0", name="ck_recipe_advance_prep_sort_order_nonnegative"),
+    )
+
+
+class RecipeEquipment(Base):
+    __tablename__ = "recipe_equipment"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
+    equipment_id: Mapped[int] = mapped_column(ForeignKey("equipment.id", ondelete="RESTRICT"), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    notes: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    recipe: Mapped[Recipe] = relationship(back_populates="equipment")
+
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_recipe_equipment_quantity_positive"),
+        CheckConstraint("sort_order >= 0", name="ck_recipe_equipment_sort_order_nonnegative"),
+        UniqueConstraint("recipe_id", "equipment_id", name="uq_recipe_equipment_recipe_equipment"),
     )
 
 
