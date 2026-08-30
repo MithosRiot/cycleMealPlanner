@@ -26,6 +26,39 @@ export type SmartPlanningPreferences = {
   tag_weights: Record<number, number>
 }
 
+export type ExpiringMatch = {
+  ingredient_id: number
+  ingredient_name: string
+  inventory_lot_id: number
+  expiration_date: string
+  days_until_expiration_on_planned_date: number
+  usable_quantity: string
+  unit_id: number
+  unit_code: string
+}
+
+export type ExpirationSuggestion = {
+  planned_meal_id: number
+  cycle_slot_id: number
+  meal_id: number
+  meal_name: string
+  day_number: number
+  planned_date: string
+  urgency_days: number
+  expiring_matches: ExpiringMatch[]
+  suggested_empty_day_numbers: number[]
+  suggested_swap_day_numbers: number[]
+  can_move_earlier: boolean
+  can_swap_earlier: boolean
+}
+
+export type ExpirationSuggestionsResponse = {
+  meal_cycle_id: number
+  meal_cycle_name: string
+  start_date: string
+  suggestions: ExpirationSuggestion[]
+}
+
 export type ScaledPlannedComponent = {
   meal_recipe_id: number
   recipe_id: number
@@ -100,6 +133,7 @@ async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const fetchMealCycles = (): Promise<MealCycle[]> => jsonRequest('/api/meal-cycles')
 export const fetchMealCycle = (id: number): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}`)
+export const fetchExpirationSuggestions = (id: number): Promise<ExpirationSuggestionsResponse> => jsonRequest(`/api/meal-cycles/${id}/expiration-suggestions`)
 export const createMealCycle = (input: MealCycleInput): Promise<MealCycle> => jsonRequest('/api/meal-cycles', { method: 'POST', body: JSON.stringify(input) })
 export const updateMealCycle = (id: number, input: MealCycleInput): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'PUT', body: JSON.stringify(input) })
 export const updatePopulationRules = (id: number, input: PopulationRules): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/population-rules`, { method: 'PUT', body: JSON.stringify(input) })
