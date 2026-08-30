@@ -115,6 +115,52 @@ class RecipeIngredientRead(BaseModel):
     substitutions: list[RecipeIngredientSubstitutionRead] = Field(default_factory=list)
 
 
+class RecipeVariantOverrideInput(BaseModel):
+    recipe_ingredient_id: int
+    quantity: Decimal | None = Field(default=None, ge=0)
+    unit_id: int | None = None
+    substitution_id: int | None = None
+    preparation: str | None = Field(default=None, max_length=160)
+    prep_method: str | None = Field(default=None, max_length=80)
+    prep_size: str | None = Field(default=None, max_length=80)
+    prep_state: str | None = Field(default=None, max_length=80)
+    notes: str | None = None
+
+
+class RecipeVariantOverrideRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    variant_id: int
+    recipe_ingredient_id: int
+    quantity: Decimal | None
+    unit_id: int | None
+    substitution_id: int | None
+    preparation: str | None
+    prep_method: str | None
+    prep_size: str | None
+    prep_state: str | None
+    notes: str | None
+
+
+class RecipeVariantInput(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    notes: str | None = None
+    active: bool = True
+    sort_order: int = Field(default=0, ge=0)
+    overrides: list[RecipeVariantOverrideInput] = Field(default_factory=list)
+
+
+class RecipeVariantRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    recipe_id: int
+    name: str
+    notes: str | None
+    active: bool
+    sort_order: int
+    overrides: list[RecipeVariantOverrideRead] = Field(default_factory=list)
+
+
 class RecipeBase(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     description: str | None = None
@@ -169,6 +215,7 @@ class RecipeScaleRequest(BaseModel):
     requested_servings: Decimal = Field(gt=0)
     unit_overrides: dict[int, str] = Field(default_factory=dict)
     substitution_overrides: dict[int, int] = Field(default_factory=dict)
+    variant_id: int | None = None
 
 
 class ScaledIngredientRead(BaseModel):
@@ -193,4 +240,5 @@ class RecipeScaleResponse(BaseModel):
     base_servings: Decimal
     requested_servings: Decimal
     scale_factor: Decimal
+    variant_id: int | None = None
     ingredients: list[ScaledIngredientRead]
