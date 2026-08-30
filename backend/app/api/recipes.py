@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.database.session import get_db
 from app.engines.recipe_scaling import scale_quantity
 from app.models.ingredient import Ingredient, Tag
-from app.models.recipe import Recipe, RecipeIngredient, RecipeMealType, RecipePrepGroup
+from app.models.recipe import Recipe, RecipeAdvancePrep, RecipeIngredient, RecipeMealType, RecipePrepGroup
 from app.models.reference import MeasurementUnit
 from app.schemas.recipe import RecipeCreate, RecipeRead, RecipeScaleRequest, RecipeScaleResponse, RecipeUpdate
 from app.services.normalization import normalize_name
@@ -21,6 +21,7 @@ DEFAULT_HOUSEHOLD_ID = 1
 def _recipe_statement():
     return select(Recipe).options(
         selectinload(Recipe.prep_groups),
+        selectinload(Recipe.advance_prep),
         selectinload(Recipe.ingredients),
         selectinload(Recipe.meal_types),
         selectinload(Recipe.tags),
@@ -52,6 +53,7 @@ def _recipe_payload(recipe: Recipe) -> dict:
         "meal_types": [item.meal_type for item in recipe.meal_types],
         "tags": recipe.tags,
         "prep_groups": recipe.prep_groups,
+        "advance_prep": recipe.advance_prep,
         "ingredients": recipe.ingredients,
     }
 
@@ -71,6 +73,10 @@ def _validate_recipe_references(db: Session, payload: RecipeCreate | RecipeUpdat
             raise HTTPException(status_code=400, detail=f"Ingredient {item.ingredient_id} not found")
         if db.get(MeasurementUnit, item.unit_id) is None:
             raise HTTPException(status_code=400, detail=f"Measurement unit {item.unit_id} not found")
+        if item.prep_group_key and item.prep_group_key not in known_group_keys:
+            raise HTTPException(status_code=422, detail=f"Unknown prep group key {item.prep_group_key}")
+
+    for item in payload.advance_prep:
         if item.prep_group_key and item.prep_group_key not in known_group_keys:
             raise HTTPException(status_code=422, detail=f"Unknown prep group key {item.prep_group_key}")
 
@@ -114,6 +120,7 @@ def _save_recipe(db: Session, recipe: Recipe, payload: RecipeCreate | RecipeUpda
 
     db.add(recipe)
     recipe.ingredients.clear()
+    recipe.advance_prep.clear()
     recipe.prep_groups.clear()
     recipe.meal_types.clear()
     recipe.tags = []
@@ -125,6 +132,18 @@ def _save_recipe(db: Session, recipe: Recipe, payload: RecipeCreate | RecipeUpda
         recipe.prep_groups.append(model)
         db.flush()
         group_ids[group.client_key] = model.id
+
+    for item in sorted(payload.advance_prep, key=lambda value: value.sort_order):
+        recipe.advance_prep.append(
+            RecipeAdvancePrep(
+                prep_group_id=group_ids.get(item.prep_group_key) if item.prep_group_key else None,
+                title=item.title.strip(),
+                lead_time_minutes=item.lead_time_minutes,
+                duration_minutes=item.duration_minutes,
+                instructions=item.instructions.strip() if item.instructions else None,
+                sort_order=item.sort_order,
+            )
+        )
 
     for item in payload.ingredients:
         recipe.ingredients.append(
