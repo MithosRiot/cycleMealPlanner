@@ -125,11 +125,36 @@ class RecipeIngredient(Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
     recipe: Mapped[Recipe] = relationship(back_populates="ingredients")
+    substitutions: Mapped[list[RecipeIngredientSubstitution]] = relationship(
+        back_populates="recipe_ingredient",
+        cascade="all, delete-orphan",
+        order_by="RecipeIngredientSubstitution.sort_order",
+    )
 
     __table_args__ = (
         CheckConstraint("quantity >= 0", name="ck_recipe_ingredients_quantity_nonnegative"),
         CheckConstraint("sort_order >= 0", name="ck_recipe_ingredients_sort_order_nonnegative"),
         CheckConstraint("scaling_mode IN ('LINEAR','FIXED','ROUND_UP','MANUAL')", name="ck_recipe_ingredients_scaling_mode"),
+    )
+
+
+class RecipeIngredientSubstitution(Base):
+    __tablename__ = "recipe_ingredient_substitutions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recipe_ingredient_id: Mapped[int] = mapped_column(ForeignKey("recipe_ingredients.id", ondelete="CASCADE"), nullable=False)
+    substitute_ingredient_id: Mapped[int] = mapped_column(ForeignKey("ingredients.id", ondelete="RESTRICT"), nullable=False)
+    ratio: Mapped[Decimal] = mapped_column(Numeric(14, 6), nullable=False, default=Decimal("1"))
+    preferred: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    recipe_ingredient: Mapped[RecipeIngredient] = relationship(back_populates="substitutions")
+
+    __table_args__ = (
+        CheckConstraint("ratio > 0", name="ck_recipe_ingredient_substitutions_ratio_positive"),
+        CheckConstraint("sort_order >= 0", name="ck_recipe_ingredient_substitutions_sort_order_nonnegative"),
+        UniqueConstraint("recipe_ingredient_id", "substitute_ingredient_id", name="uq_recipe_ingredient_substitutions_alternate"),
     )
 
 
