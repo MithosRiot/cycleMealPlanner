@@ -27,6 +27,7 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Smart planning preferences with repeat spacing, favorite weighting, tag weighting, prior-planning history penalties, persisted configuration, and weighted random population layered on top of population rules.
 - Expiration-aware Meal Plan analysis that matches dated Inventory lots to planned ingredient requirements, performs safe same-family conversion, ranks urgency, and suggests earlier same-slot move/swap opportunities without mutating the plan.
 - Deterministic cycle validation with structured errors/warnings for empty slots, broken Meal/Recipe dependencies, MANUAL scaling review, Inventory shortages, incompatible unit families, expiration risks, and population-rule gaps, plus a Plan Validation UI.
+- Recipe prep groups and structured ingredient prep fields for method, size/shape, and prep state, with editor assignment/reordering, grouped Recipe detail display, and scaling metadata preservation.
 
 ### Known limitations
 - Reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.

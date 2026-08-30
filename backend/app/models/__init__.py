@@ -3,7 +3,7 @@ from app.models.inventory import InventoryLot, InventoryTransaction
 from app.models.meal import Meal, MealMealType, MealRecipe, meal_tags
 from app.models.meal_cycle import CycleSlot, MealCycle, MealSlotDefinition
 from app.models.planned_meal import PlannedMeal
-from app.models.recipe import Recipe, RecipeIngredient, RecipeMealType, recipe_tags
+from app.models.recipe import Recipe, RecipeIngredient, RecipeMealType, RecipePrepGroup, recipe_tags
 from app.models.reference import Household, InventoryLocation, MeasurementUnit, ShoppingCategory
 from app.models.shopping import ShoppingList, ShoppingListItem
 
@@ -16,6 +16,7 @@ __all__ = [
     "IngredientAlias",
     "Tag",
     "Recipe",
+    "RecipePrepGroup",
     "RecipeIngredient",
     "RecipeMealType",
     "recipe_tags",
