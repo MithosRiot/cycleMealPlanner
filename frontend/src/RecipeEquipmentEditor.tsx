@@ -1,4 +1,5 @@
 import { Equipment, RecipeEquipmentInput } from './api'
+import './equipment.css'
 
 export default function RecipeEquipmentEditor({ items, equipment, onChange }: { items: RecipeEquipmentInput[]; equipment: Equipment[]; onChange: (items: RecipeEquipmentInput[]) => void }) {
   function normalize(next: RecipeEquipmentInput[]) { return next.map((item, index) => ({ ...item, sort_order: index })) }
