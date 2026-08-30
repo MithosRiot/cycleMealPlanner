@@ -13,10 +13,30 @@ class RecipePrepGroupInput(BaseModel):
 
 class RecipePrepGroupRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     id: int
     recipe_id: int
     name: str
+    sort_order: int
+
+
+class RecipeAdvancePrepInput(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    lead_time_minutes: int = Field(ge=0)
+    duration_minutes: int | None = Field(default=None, ge=0)
+    instructions: str | None = None
+    prep_group_key: str | None = Field(default=None, max_length=80)
+    sort_order: int = Field(default=0, ge=0)
+
+
+class RecipeAdvancePrepRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    recipe_id: int
+    prep_group_id: int | None
+    title: str
+    lead_time_minutes: int
+    duration_minutes: int | None
+    instructions: str | None
     sort_order: int
 
 
@@ -39,7 +59,6 @@ class RecipeIngredientInput(BaseModel):
 
 class RecipeIngredientRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     id: int
     recipe_id: int
     ingredient_id: int
@@ -72,6 +91,7 @@ class RecipeBase(BaseModel):
     meal_types: list[str] = Field(default_factory=list)
     tag_ids: list[int] = Field(default_factory=list)
     prep_groups: list[RecipePrepGroupInput] = Field(default_factory=list)
+    advance_prep: list[RecipeAdvancePrepInput] = Field(default_factory=list)
     ingredients: list[RecipeIngredientInput] = Field(default_factory=list)
 
 
@@ -85,7 +105,6 @@ class RecipeUpdate(RecipeBase):
 
 class RecipeRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     id: int
     household_id: int
     name: str
@@ -102,6 +121,7 @@ class RecipeRead(BaseModel):
     meal_types: list[str]
     tags: list[TagRead]
     prep_groups: list[RecipePrepGroupRead]
+    advance_prep: list[RecipeAdvancePrepRead]
     ingredients: list[RecipeIngredientRead]
 
 
