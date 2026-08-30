@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.database.session import get_db
+from app.models.ingredient import Tag
 from app.models.meal import Meal
 from app.models.meal_cycle import CycleSlot, MealCycle, MealSlotDefinition
 from app.schemas.meal_cycle import (
@@ -13,6 +14,7 @@ from app.schemas.meal_cycle import (
     MealCycleRead,
     MealSlotDefinitionInput,
     PopulationRulesUpdate,
+    SmartPlanningPreferencesUpdate,
 )
 from app.services.normalization import normalize_name
 
@@ -66,10 +68,7 @@ def _apply_cycle(db: Session, cycle: MealCycle, payload: MealCycleInput) -> None
     cycle.slot_definitions.clear()
     db.flush()
 
-    definitions = [
-        MealSlotDefinition(label=slot.label, sort_order=slot.sort_order)
-        for slot in slot_inputs
-    ]
+    definitions = [MealSlotDefinition(label=slot.label, sort_order=slot.sort_order) for slot in slot_inputs]
     cycle.slot_definitions.extend(definitions)
     db.flush()
 
@@ -107,10 +106,7 @@ def list_meal_cycles(db: Session = Depends(get_db)) -> list[MealCycle]:
         db.scalars(
             select(MealCycle)
             .where(MealCycle.household_id == HOUSEHOLD_ID)
-            .options(
-                selectinload(MealCycle.slot_definitions),
-                selectinload(MealCycle.slots),
-            )
+            .options(selectinload(MealCycle.slot_definitions), selectinload(MealCycle.slots))
             .order_by(MealCycle.id.desc())
         ).unique()
     )
@@ -132,6 +128,7 @@ def create_meal_cycle(payload: MealCycleInput, db: Session = Depends(get_db)) ->
         start_date=payload.start_date,
         notes=payload.notes,
         population_rules="{}",
+        smart_preferences="{}",
     )
     db.add(cycle)
     try:
@@ -187,6 +184,41 @@ def update_population_rules(cycle_id: int, payload: PopulationRulesUpdate, db: S
             "include_meal_ids": sorted(global_include),
             "exclude_meal_ids": sorted(global_exclude),
             "slot_rules": normalized_slot_rules,
+        },
+        sort_keys=True,
+    )
+    db.commit()
+    return _load_cycle(db, cycle.id)
+
+
+@router.put("/{cycle_id}/smart-preferences", response_model=MealCycleRead)
+def update_smart_preferences(cycle_id: int, payload: SmartPlanningPreferencesUpdate, db: Session = Depends(get_db)) -> MealCycle:
+    cycle = _load_cycle(db, cycle_id)
+    tag_weights = {int(tag_id): float(weight) for tag_id, weight in payload.tag_weights.items()}
+    invalid_weights = [tag_id for tag_id, weight in tag_weights.items() if weight <= 0 or weight > 10]
+    if invalid_weights:
+        raise HTTPException(status_code=422, detail=f"Tag weight must be greater than 0 and at most 10: {min(invalid_weights)}")
+
+    if tag_weights:
+        active_tag_ids = set(
+            db.scalars(
+                select(Tag.id).where(
+                    Tag.household_id == HOUSEHOLD_ID,
+                    Tag.active.is_(True),
+                    Tag.id.in_(set(tag_weights)),
+                )
+            )
+        )
+        missing = set(tag_weights) - active_tag_ids
+        if missing:
+            raise HTTPException(status_code=422, detail=f"Unknown or archived Tag: {min(missing)}")
+
+    cycle.smart_preferences = json.dumps(
+        {
+            "repeat_spacing_days": payload.repeat_spacing_days,
+            "favorite_boost": payload.favorite_boost,
+            "history_penalty": payload.history_penalty,
+            "tag_weights": {str(tag_id): weight for tag_id, weight in sorted(tag_weights.items())},
         },
         sort_keys=True,
     )

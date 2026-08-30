@@ -3,7 +3,7 @@ import random
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database.session import get_db
@@ -50,7 +50,7 @@ def _load_meal(db: Session, meal_id: int) -> Meal:
     meal = db.scalar(
         select(Meal)
         .where(Meal.id == meal_id, Meal.household_id == HOUSEHOLD_ID, Meal.active.is_(True))
-        .options(selectinload(Meal.meal_types), selectinload(Meal.recipes))
+        .options(selectinload(Meal.meal_types), selectinload(Meal.recipes), selectinload(Meal.tags))
     )
     if meal is None:
         raise HTTPException(status_code=400, detail="Active meal not found")
@@ -153,10 +153,10 @@ def _place(db: Session, slot: CycleSlot, meal: Meal) -> PlannedMeal:
     return planned
 
 
-def _parse_population_rules(cycle: MealCycle) -> dict:
+def _parse_json_dict(raw: str | None) -> dict:
     try:
-        rules = json.loads(cycle.population_rules or "{}")
-        return rules if isinstance(rules, dict) else {}
+        value = json.loads(raw or "{}")
+        return value if isinstance(value, dict) else {}
     except json.JSONDecodeError:
         return {}
 
@@ -177,6 +177,45 @@ def _filter_by_population_rules(meals: list[Meal], slot_label: str, rules: dict)
     return [meal for meal in eligible if meal.id not in slot_exclude]
 
 
+def _repeat_spaced(eligible: list[Meal], day_number: int, spacing: int, placements: list[tuple[int, int]]) -> list[Meal]:
+    if spacing <= 0:
+        return eligible
+    allowed = [
+        meal for meal in eligible
+        if all(existing_meal_id != meal.id or abs(existing_day - day_number) > spacing for existing_day, existing_meal_id in placements)
+    ]
+    return allowed or eligible
+
+
+def _history_counts(db: Session, current_cycle_id: int) -> dict[int, int]:
+    rows = db.execute(
+        select(PlannedMeal.meal_id, func.count(PlannedMeal.id))
+        .join(CycleSlot, CycleSlot.id == PlannedMeal.cycle_slot_id)
+        .join(MealCycle, MealCycle.id == CycleSlot.cycle_id)
+        .where(MealCycle.household_id == HOUSEHOLD_ID, MealCycle.id != current_cycle_id)
+        .group_by(PlannedMeal.meal_id)
+    ).all()
+    return {int(meal_id): int(count) for meal_id, count in rows}
+
+
+def _meal_weight(meal: Meal, preferences: dict, history_counts: dict[int, int]) -> float:
+    weight = 1.0
+    favorite_boost = float(preferences.get("favorite_boost", 1.0) or 1.0)
+    if meal.favorite:
+        weight *= max(1.0, favorite_boost)
+
+    tag_weights = {int(tag_id): float(value) for tag_id, value in preferences.get("tag_weights", {}).items()}
+    for tag in meal.tags:
+        if tag.id in tag_weights:
+            weight *= max(0.01, tag_weights[tag.id])
+
+    history_penalty = min(max(float(preferences.get("history_penalty", 0.0) or 0.0), 0.0), 1.0)
+    prior_count = history_counts.get(meal.id, 0)
+    if prior_count and history_penalty:
+        weight /= 1.0 + (prior_count * history_penalty)
+    return max(weight, 0.000001)
+
+
 @router.post("/{cycle_id}/slots/{slot_id}/planned-meal", response_model=PlannedMealRead, status_code=status.HTTP_201_CREATED)
 def assign_meal(cycle_id: int, slot_id: int, payload: PlannedMealAssign, db: Session = Depends(get_db)) -> PlannedMeal:
     slot = _load_slot(db, cycle_id, slot_id)
@@ -193,10 +232,7 @@ def update_planning(cycle_id: int, slot_id: int, payload: PlannedMealPlanningUpd
     if slot.planned_meal is None:
         raise HTTPException(status_code=404, detail="No planned meal in this slot")
 
-    valid_component_ids = {
-        _component_key(component)
-        for component in json.loads(slot.planned_meal.snapshot_components)
-    }
+    valid_component_ids = {_component_key(component) for component in json.loads(slot.planned_meal.snapshot_components)}
     unknown = set(payload.component_serving_overrides) - valid_component_ids
     if unknown:
         raise HTTPException(status_code=422, detail=f"Unknown planned component: {min(unknown)}")
@@ -268,15 +304,24 @@ def random_fill(cycle_id: int, db: Session = Depends(get_db)) -> RandomFillResul
         db.scalars(
             select(Meal)
             .where(Meal.household_id == HOUSEHOLD_ID, Meal.active.is_(True))
-            .options(selectinload(Meal.meal_types), selectinload(Meal.recipes))
+            .options(selectinload(Meal.meal_types), selectinload(Meal.recipes), selectinload(Meal.tags))
         ).unique()
     )
     if not meals:
         return RandomFillResult(filled_count=0)
 
-    rules = _parse_population_rules(cycle)
+    rules = _parse_json_dict(cycle.population_rules)
+    preferences = _parse_json_dict(cycle.smart_preferences)
+    repeat_spacing = int(preferences.get("repeat_spacing_days", 0) or 0)
+    history_counts = _history_counts(db, cycle.id)
+    placements = [
+        (slot.day_number, slot.planned_meal.meal_id)
+        for slot in cycle.slots
+        if slot.planned_meal is not None
+    ]
+
     filled = 0
-    for slot in cycle.slots:
+    for slot in sorted(cycle.slots, key=lambda value: (value.day_number, value.sort_order, value.id)):
         if slot.planned_meal is not None:
             continue
         label = slot.slot_definition.label.strip()
@@ -285,7 +330,11 @@ def random_fill(cycle_id: int, db: Session = Depends(get_db)) -> RandomFillResul
         eligible = _filter_by_population_rules(typed, label, rules)
         if not eligible:
             continue
-        _place(db, slot, random.choice(eligible))
+        eligible = _repeat_spaced(eligible, slot.day_number, repeat_spacing, placements)
+        weights = [_meal_weight(meal, preferences, history_counts) for meal in eligible]
+        selected = random.choices(eligible, weights=weights, k=1)[0]
+        _place(db, slot, selected)
+        placements.append((slot.day_number, selected.id))
         filled += 1
 
     db.commit()

@@ -19,6 +19,13 @@ export type PopulationRules = {
   slot_rules: Record<string, SlotPopulationRule>
 }
 
+export type SmartPlanningPreferences = {
+  repeat_spacing_days: number
+  favorite_boost: number
+  history_penalty: number
+  tag_weights: Record<number, number>
+}
+
 export type ScaledPlannedComponent = {
   meal_recipe_id: number
   recipe_id: number
@@ -76,6 +83,7 @@ export type MealCycle = {
   start_date: string | null
   notes: string | null
   population_rules: string
+  smart_preferences: string
   slot_definitions: MealSlotDefinition[]
   slots: CycleSlot[]
 }
@@ -95,6 +103,7 @@ export const fetchMealCycle = (id: number): Promise<MealCycle> => jsonRequest(`/
 export const createMealCycle = (input: MealCycleInput): Promise<MealCycle> => jsonRequest('/api/meal-cycles', { method: 'POST', body: JSON.stringify(input) })
 export const updateMealCycle = (id: number, input: MealCycleInput): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'PUT', body: JSON.stringify(input) })
 export const updatePopulationRules = (id: number, input: PopulationRules): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/population-rules`, { method: 'PUT', body: JSON.stringify(input) })
+export const updateSmartPlanningPreferences = (id: number, input: SmartPlanningPreferences): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/smart-preferences`, { method: 'PUT', body: JSON.stringify(input) })
 export const deleteMealCycle = (id: number): Promise<void> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'DELETE' })
 export const assignPlannedMeal = (cycleId: number, slotId: number, mealId: number): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal`, { method: 'POST', body: JSON.stringify({ meal_id: mealId }) })
 export const updatePlannedMealPlanning = (cycleId: number, slotId: number, input: { planned_servings: string; planned_leftover_servings: string; component_serving_overrides: Record<number, string> }): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal/planning`, { method: 'PUT', body: JSON.stringify(input) })

@@ -29,6 +29,13 @@ class PopulationRulesUpdate(BaseModel):
     slot_rules: dict[str, SlotPopulationRule] = Field(default_factory=dict)
 
 
+class SmartPlanningPreferencesUpdate(BaseModel):
+    repeat_spacing_days: int = Field(default=0, ge=0, le=365)
+    favorite_boost: float = Field(default=1.0, ge=1.0, le=10.0)
+    history_penalty: float = Field(default=0.0, ge=0.0, le=1.0)
+    tag_weights: dict[int, float] = Field(default_factory=dict)
+
+
 class MealSlotDefinitionRead(MealSlotDefinitionInput):
     model_config = ConfigDict(from_attributes=True)
 
@@ -58,5 +65,6 @@ class MealCycleRead(BaseModel):
     start_date: date | None
     notes: str | None
     population_rules: str
+    smart_preferences: str
     slot_definitions: list[MealSlotDefinitionRead]
     slots: list[CycleSlotRead]

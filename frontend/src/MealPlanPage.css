@@ -26,7 +26,7 @@
 .placement-card small { color: #5d6974; }
 .placement-actions, .move-control { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .assign-control { grid-template-columns: minmax(0, 1fr) auto; }
-.assign-control select, .move-control select, .cycle-editor input, .cycle-editor textarea, .planning-controls input, .population-rules select { min-width: 0; background: #ffffff; color: #1f2933; border-color: #b9c5cf; }
+.assign-control select, .move-control select, .cycle-editor input, .cycle-editor textarea, .planning-controls input, .population-rules select, .smart-preferences input { min-width: 0; background: #ffffff; color: #1f2933; border-color: #b9c5cf; }
 .planning-controls { border-top: 1px solid #cdd8df; padding-top: .45rem; }
 .planning-controls > summary, .component-overrides > summary, .population-rules > summary, .population-slot-rules > summary { cursor: pointer; color: #344b5f; font-weight: 700; }
 .planning-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin-top: .55rem; }
@@ -41,9 +41,11 @@
 .population-rule-section h4 { margin: 0 0 .45rem; }
 .population-rule-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .4rem; margin: .45rem 0 .7rem; }
 .population-rule-list label { display: grid; grid-template-columns: minmax(0, 1fr) 90px; gap: .5rem; align-items: center; font-size: .82rem; color: #43515d; }
+.smart-preference-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; margin: .65rem 0; }
+.smart-preference-grid label { display: grid; gap: .3rem; color: #43515d; font-size: .82rem; font-weight: 600; }
 .meal-plan-page .button-secondary { background: #e8edf1; color: #263746; border: 1px solid #ccd6dd; }
 .meal-plan-page .button-secondary:hover { background: #dbe3e9; }
 .meal-plan-page .button-link { background: #263746; color: #ffffff; }
 .meal-plan-page .eyebrow { color: #52606d; }
 .button-row { display: flex; gap: .5rem; flex-wrap: wrap; }
-@media (max-width: 900px) { .meal-plan-layout { grid-template-columns: 1fr; } .form-grid, .planning-grid { grid-template-columns: 1fr; } .slot-editor-row { grid-template-columns: 2rem 1fr; } .slot-editor-row button { grid-column: auto; } .section-heading { align-items: flex-start; flex-direction: column; } .population-rule-list { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .meal-plan-layout { grid-template-columns: 1fr; } .form-grid, .planning-grid, .smart-preference-grid { grid-template-columns: 1fr; } .slot-editor-row { grid-template-columns: 2rem 1fr; } .slot-editor-row button { grid-column: auto; } .section-heading { align-items: flex-start; flex-direction: column; } .population-rule-list { grid-template-columns: 1fr; } }

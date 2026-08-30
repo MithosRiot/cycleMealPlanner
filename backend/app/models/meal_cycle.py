@@ -20,6 +20,7 @@ class MealCycle(Base):
     start_date: Mapped[date | None] = mapped_column()
     notes: Mapped[str | None] = mapped_column(Text)
     population_rules: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    smart_preferences: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
 
     slot_definitions: Mapped[list[MealSlotDefinition]] = relationship(
         back_populates="cycle",
