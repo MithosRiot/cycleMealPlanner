@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database.session import get_db
 from app.engines.recipe_scaling import scale_quantity
+from app.models.equipment import Equipment
 from app.models.ingredient import Ingredient, Tag
-from app.models.recipe import Recipe, RecipeAdvancePrep, RecipeIngredient, RecipeMealType, RecipePrepGroup
+from app.models.recipe import Recipe, RecipeAdvancePrep, RecipeEquipment, RecipeIngredient, RecipeMealType, RecipePrepGroup
 from app.models.reference import MeasurementUnit
 from app.schemas.recipe import RecipeCreate, RecipeRead, RecipeScaleRequest, RecipeScaleResponse, RecipeUpdate
 from app.services.normalization import normalize_name
@@ -22,6 +23,7 @@ def _recipe_statement():
     return select(Recipe).options(
         selectinload(Recipe.prep_groups),
         selectinload(Recipe.advance_prep),
+        selectinload(Recipe.equipment),
         selectinload(Recipe.ingredients),
         selectinload(Recipe.meal_types),
         selectinload(Recipe.tags),
@@ -54,6 +56,7 @@ def _recipe_payload(recipe: Recipe) -> dict:
         "tags": recipe.tags,
         "prep_groups": recipe.prep_groups,
         "advance_prep": recipe.advance_prep,
+        "equipment": recipe.equipment,
         "ingredients": recipe.ingredients,
     }
 
@@ -79,6 +82,14 @@ def _validate_recipe_references(db: Session, payload: RecipeCreate | RecipeUpdat
     for item in payload.advance_prep:
         if item.prep_group_key and item.prep_group_key not in known_group_keys:
             raise HTTPException(status_code=422, detail=f"Unknown prep group key {item.prep_group_key}")
+
+    equipment_ids = [item.equipment_id for item in payload.equipment]
+    if len(set(equipment_ids)) != len(equipment_ids):
+        raise HTTPException(status_code=422, detail="A Recipe cannot list the same Equipment more than once")
+    if equipment_ids:
+        available = list(db.scalars(select(Equipment).where(Equipment.id.in_(equipment_ids), Equipment.household_id == DEFAULT_HOUSEHOLD_ID, Equipment.active.is_(True))))
+        if len(available) != len(equipment_ids):
+            raise HTTPException(status_code=400, detail="One or more Equipment items were not found or are archived")
 
     unique_tag_ids = list(dict.fromkeys(payload.tag_ids))
     tags: list[Tag] = []
@@ -121,6 +132,7 @@ def _save_recipe(db: Session, recipe: Recipe, payload: RecipeCreate | RecipeUpda
     db.add(recipe)
     recipe.ingredients.clear()
     recipe.advance_prep.clear()
+    recipe.equipment.clear()
     recipe.prep_groups.clear()
     recipe.meal_types.clear()
     recipe.tags = []
@@ -141,6 +153,16 @@ def _save_recipe(db: Session, recipe: Recipe, payload: RecipeCreate | RecipeUpda
                 lead_time_minutes=item.lead_time_minutes,
                 duration_minutes=item.duration_minutes,
                 instructions=item.instructions.strip() if item.instructions else None,
+                sort_order=item.sort_order,
+            )
+        )
+
+    for item in sorted(payload.equipment, key=lambda value: value.sort_order):
+        recipe.equipment.append(
+            RecipeEquipment(
+                equipment_id=item.equipment_id,
+                quantity=item.quantity,
+                notes=item.notes.strip() if item.notes else None,
                 sort_order=item.sort_order,
             )
         )
