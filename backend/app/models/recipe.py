@@ -35,16 +35,9 @@ class Recipe(Base):
     favorite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    ingredients: Mapped[list[RecipeIngredient]] = relationship(
-        back_populates="recipe",
-        cascade="all, delete-orphan",
-        order_by="RecipeIngredient.sort_order",
-    )
-    meal_types: Mapped[list[RecipeMealType]] = relationship(
-        back_populates="recipe",
-        cascade="all, delete-orphan",
-        order_by="RecipeMealType.meal_type",
-    )
+    prep_groups: Mapped[list[RecipePrepGroup]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipePrepGroup.sort_order")
+    ingredients: Mapped[list[RecipeIngredient]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeIngredient.sort_order")
+    meal_types: Mapped[list[RecipeMealType]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeMealType.meal_type")
     tags: Mapped[list[Tag]] = relationship(secondary=recipe_tags)
 
     __table_args__ = (
@@ -56,16 +49,33 @@ class Recipe(Base):
     )
 
 
+class RecipePrepGroup(Base):
+    __tablename__ = "recipe_prep_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    recipe: Mapped[Recipe] = relationship(back_populates="prep_groups")
+
+    __table_args__ = (CheckConstraint("sort_order >= 0", name="ck_recipe_prep_groups_sort_order_nonnegative"),)
+
+
 class RecipeIngredient(Base):
     __tablename__ = "recipe_ingredients"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
     ingredient_id: Mapped[int] = mapped_column(ForeignKey("ingredients.id", ondelete="RESTRICT"), nullable=False)
+    prep_group_id: Mapped[int | None] = mapped_column(ForeignKey("recipe_prep_groups.id", ondelete="SET NULL"))
     quantity: Mapped[Decimal] = mapped_column(Numeric(14, 6), nullable=False)
     unit_id: Mapped[int] = mapped_column(ForeignKey("measurement_units.id", ondelete="RESTRICT"), nullable=False)
     display_text: Mapped[str | None] = mapped_column(String(160))
     preparation: Mapped[str | None] = mapped_column(String(160))
+    prep_method: Mapped[str | None] = mapped_column(String(80))
+    prep_size: Mapped[str | None] = mapped_column(String(80))
+    prep_state: Mapped[str | None] = mapped_column(String(80))
     optional: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     scaling_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="LINEAR")
     required_state: Mapped[str] = mapped_column(String(30), nullable=False, default="ANY")
@@ -77,10 +87,7 @@ class RecipeIngredient(Base):
     __table_args__ = (
         CheckConstraint("quantity >= 0", name="ck_recipe_ingredients_quantity_nonnegative"),
         CheckConstraint("sort_order >= 0", name="ck_recipe_ingredients_sort_order_nonnegative"),
-        CheckConstraint(
-            "scaling_mode IN ('LINEAR','FIXED','ROUND_UP','MANUAL')",
-            name="ck_recipe_ingredients_scaling_mode",
-        ),
+        CheckConstraint("scaling_mode IN ('LINEAR','FIXED','ROUND_UP','MANUAL')", name="ck_recipe_ingredients_scaling_mode"),
     )
 
 
