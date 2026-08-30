@@ -30,6 +30,7 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Recipe prep groups and structured ingredient prep fields for method, size/shape, and prep state, with editor assignment/reordering, grouped Recipe detail display, and scaling metadata preservation.
 - Ordered Recipe advance-prep definitions with lead time, optional duration/instructions, optional prep-group links, editor management, and Recipe detail display for later scheduling workflows.
 - Reusable household Equipment records plus ordered Recipe equipment requirements with quantity/notes, Settings management, Recipe editor/detail UI, archive-safe references, and unchanged serving scaling.
+- Recipe ingredient substitutions with ordered alternates, conversion ratios, one preferred default, notes, nested Recipe editing, Recipe detail display, and per-use substitution selection in the serving-scale preview.
 
 ### Known limitations
 - Reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
