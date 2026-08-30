@@ -13,6 +13,7 @@ from app.api.meal_cycles import router as meal_cycles_router
 from app.api.meals import router as meals_router
 from app.api.planned_meals import router as planned_meals_router
 from app.api.recipes import router as recipes_router
+from app.api.recipe_outputs import router as recipe_outputs_router
 from app.api.recipe_variants import router as recipe_variants_router
 from app.api.reference import router as reference_router
 from app.api.shopping import router as shopping_router
@@ -42,6 +43,7 @@ app.include_router(reference_router)
 app.include_router(ingredients_router)
 app.include_router(equipment_router)
 app.include_router(recipes_router)
+app.include_router(recipe_outputs_router)
 app.include_router(recipe_variants_router)
 app.include_router(inventory_router)
 app.include_router(meals_router)
