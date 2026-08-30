@@ -29,6 +29,7 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Deterministic cycle validation with structured errors/warnings for empty slots, broken Meal/Recipe dependencies, MANUAL scaling review, Inventory shortages, incompatible unit families, expiration risks, and population-rule gaps, plus a Plan Validation UI.
 - Recipe prep groups and structured ingredient prep fields for method, size/shape, and prep state, with editor assignment/reordering, grouped Recipe detail display, and scaling metadata preservation.
 - Ordered Recipe advance-prep definitions with lead time, optional duration/instructions, optional prep-group links, editor management, and Recipe detail display for later scheduling workflows.
+- Reusable household Equipment records plus ordered Recipe equipment requirements with quantity/notes, Settings management, Recipe editor/detail UI, archive-safe references, and unchanged serving scaling.
 
 ### Known limitations
 - Reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
