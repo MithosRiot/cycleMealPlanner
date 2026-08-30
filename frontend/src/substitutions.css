@@ -1,0 +1,28 @@
+.substitution-editor {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #dfe5ea;
+}
+.substitution-editor h4 { margin: 0 0 4px; }
+.substitution-editor .section-heading-row p { margin: 0; }
+.substitution-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.5fr) minmax(90px, .6fr) auto minmax(180px, 1.2fr) auto auto auto;
+  gap: 8px;
+  align-items: end;
+}
+.substitution-row label { display: grid; gap: 6px; }
+.scale-substitution-select { display: grid; gap: 5px; margin-top: 10px; }
+.ingredient-detail-with-substitutions { align-items: start; }
+.ingredient-substitution-summary {
+  grid-column: 1 / -1;
+  color: #687784;
+  font-size: .82rem;
+  padding-top: 2px;
+}
+@media (max-width: 1050px) {
+  .substitution-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .substitution-row { grid-template-columns: 1fr; }
+}
