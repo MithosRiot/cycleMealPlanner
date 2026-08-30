@@ -39,6 +39,7 @@ class Recipe(Base):
     advance_prep: Mapped[list[RecipeAdvancePrep]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeAdvancePrep.sort_order")
     equipment: Mapped[list[RecipeEquipment]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeEquipment.sort_order")
     ingredients: Mapped[list[RecipeIngredient]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeIngredient.sort_order")
+    variants: Mapped[list[RecipeVariant]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeVariant.sort_order")
     meal_types: Mapped[list[RecipeMealType]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeMealType.meal_type")
     tags: Mapped[list[Tag]] = relationship(secondary=recipe_tags)
 
@@ -155,6 +156,53 @@ class RecipeIngredientSubstitution(Base):
         CheckConstraint("ratio > 0", name="ck_recipe_ingredient_substitutions_ratio_positive"),
         CheckConstraint("sort_order >= 0", name="ck_recipe_ingredient_substitutions_sort_order_nonnegative"),
         UniqueConstraint("recipe_ingredient_id", "substitute_ingredient_id", name="uq_recipe_ingredient_substitutions_alternate"),
+    )
+
+
+class RecipeVariant(Base):
+    __tablename__ = "recipe_variants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    recipe: Mapped[Recipe] = relationship(back_populates="variants")
+    overrides: Mapped[list[RecipeVariantIngredientOverride]] = relationship(
+        back_populates="variant",
+        cascade="all, delete-orphan",
+        order_by="RecipeVariantIngredientOverride.id",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("recipe_id", "normalized_name", name="uq_recipe_variants_recipe_normalized_name"),
+        CheckConstraint("sort_order >= 0", name="ck_recipe_variants_sort_order_nonnegative"),
+    )
+
+
+class RecipeVariantIngredientOverride(Base):
+    __tablename__ = "recipe_variant_ingredient_overrides"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    variant_id: Mapped[int] = mapped_column(ForeignKey("recipe_variants.id", ondelete="CASCADE"), nullable=False)
+    recipe_ingredient_id: Mapped[int] = mapped_column(ForeignKey("recipe_ingredients.id", ondelete="CASCADE"), nullable=False)
+    quantity: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
+    unit_id: Mapped[int | None] = mapped_column(ForeignKey("measurement_units.id", ondelete="RESTRICT"))
+    substitution_id: Mapped[int | None] = mapped_column(ForeignKey("recipe_ingredient_substitutions.id", ondelete="SET NULL"))
+    preparation: Mapped[str | None] = mapped_column(String(160))
+    prep_method: Mapped[str | None] = mapped_column(String(80))
+    prep_size: Mapped[str | None] = mapped_column(String(80))
+    prep_state: Mapped[str | None] = mapped_column(String(80))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    variant: Mapped[RecipeVariant] = relationship(back_populates="overrides")
+
+    __table_args__ = (
+        UniqueConstraint("variant_id", "recipe_ingredient_id", name="uq_recipe_variant_override_ingredient"),
+        CheckConstraint("quantity IS NULL OR quantity >= 0", name="ck_recipe_variant_override_quantity_nonnegative"),
     )
 
 
