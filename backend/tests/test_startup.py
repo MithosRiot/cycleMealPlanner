@@ -12,10 +12,8 @@ def test_health_endpoint_and_migrations() -> None:
         assert response.json() == {"status": "ok"}
 
     with engine.connect() as connection:
-        migration_version = connection.execute(
-            text("SELECT version_num FROM alembic_version")
-        ).scalar_one()
-        assert migration_version == "0013_smart_planning_preferences"
+        migration_version = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        assert migration_version == "0014_recipe_prep_groups"
 
 
 def test_sqlite_foreign_keys_and_wal_are_enabled() -> None:
