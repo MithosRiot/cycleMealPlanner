@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.database.session import get_db
 from app.engines.recipe_scaling import scale_quantity
 from app.models.ingredient import Ingredient, Tag
-from app.models.recipe import Recipe, RecipeIngredient, RecipeMealType
+from app.models.recipe import Recipe, RecipeIngredient, RecipeMealType, RecipePrepGroup
 from app.models.reference import MeasurementUnit
 from app.schemas.recipe import RecipeCreate, RecipeRead, RecipeScaleRequest, RecipeScaleResponse, RecipeUpdate
 from app.services.normalization import normalize_name
@@ -20,6 +20,7 @@ DEFAULT_HOUSEHOLD_ID = 1
 
 def _recipe_statement():
     return select(Recipe).options(
+        selectinload(Recipe.prep_groups),
         selectinload(Recipe.ingredients),
         selectinload(Recipe.meal_types),
         selectinload(Recipe.tags),
@@ -27,9 +28,7 @@ def _recipe_statement():
 
 
 def _recipe_or_404(db: Session, recipe_id: int) -> Recipe:
-    recipe = db.scalar(
-        _recipe_statement().where(Recipe.id == recipe_id, Recipe.household_id == DEFAULT_HOUSEHOLD_ID)
-    )
+    recipe = db.scalar(_recipe_statement().where(Recipe.id == recipe_id, Recipe.household_id == DEFAULT_HOUSEHOLD_ID))
     if recipe is None:
         raise HTTPException(status_code=404, detail="Recipe not found")
     return recipe
@@ -52,6 +51,7 @@ def _recipe_payload(recipe: Recipe) -> dict:
         "active": recipe.active,
         "meal_types": [item.meal_type for item in recipe.meal_types],
         "tags": recipe.tags,
+        "prep_groups": recipe.prep_groups,
         "ingredients": recipe.ingredients,
     }
 
@@ -60,25 +60,24 @@ def _validate_recipe_references(db: Session, payload: RecipeCreate | RecipeUpdat
     if payload.yield_unit_id is not None and db.get(MeasurementUnit, payload.yield_unit_id) is None:
         raise HTTPException(status_code=400, detail="Yield measurement unit not found")
 
+    group_keys = [group.client_key.strip() for group in payload.prep_groups]
+    if len(set(group_keys)) != len(group_keys):
+        raise HTTPException(status_code=422, detail="Prep group keys must be unique")
+    known_group_keys = set(group_keys)
+
     for item in payload.ingredients:
         ingredient = db.get(Ingredient, item.ingredient_id)
         if ingredient is None or ingredient.household_id != DEFAULT_HOUSEHOLD_ID:
             raise HTTPException(status_code=400, detail=f"Ingredient {item.ingredient_id} not found")
         if db.get(MeasurementUnit, item.unit_id) is None:
             raise HTTPException(status_code=400, detail=f"Measurement unit {item.unit_id} not found")
+        if item.prep_group_key and item.prep_group_key not in known_group_keys:
+            raise HTTPException(status_code=422, detail=f"Unknown prep group key {item.prep_group_key}")
 
     unique_tag_ids = list(dict.fromkeys(payload.tag_ids))
     tags: list[Tag] = []
     if unique_tag_ids:
-        tags = list(
-            db.scalars(
-                select(Tag).where(
-                    Tag.id.in_(unique_tag_ids),
-                    Tag.household_id == DEFAULT_HOUSEHOLD_ID,
-                    Tag.active.is_(True),
-                )
-            )
-        )
+        tags = list(db.scalars(select(Tag).where(Tag.id.in_(unique_tag_ids), Tag.household_id == DEFAULT_HOUSEHOLD_ID, Tag.active.is_(True))))
         if len(tags) != len(unique_tag_ids):
             raise HTTPException(status_code=400, detail="One or more tags were not found")
 
@@ -91,10 +90,7 @@ def _save_recipe(db: Session, recipe: Recipe, payload: RecipeCreate | RecipeUpda
     if not normalized_name:
         raise HTTPException(status_code=422, detail="Recipe name cannot be blank")
 
-    existing = select(Recipe.id).where(
-        Recipe.household_id == DEFAULT_HOUSEHOLD_ID,
-        Recipe.normalized_name == normalized_name,
-    )
+    existing = select(Recipe.id).where(Recipe.household_id == DEFAULT_HOUSEHOLD_ID, Recipe.normalized_name == normalized_name)
     if recipe.id is not None:
         existing = existing.where(Recipe.id != recipe.id)
     if db.scalar(existing) is not None:
@@ -118,18 +114,30 @@ def _save_recipe(db: Session, recipe: Recipe, payload: RecipeCreate | RecipeUpda
 
     db.add(recipe)
     recipe.ingredients.clear()
+    recipe.prep_groups.clear()
     recipe.meal_types.clear()
     recipe.tags = []
     db.flush()
+
+    group_ids: dict[str, int] = {}
+    for group in sorted(payload.prep_groups, key=lambda value: value.sort_order):
+        model = RecipePrepGroup(name=group.name.strip(), sort_order=group.sort_order)
+        recipe.prep_groups.append(model)
+        db.flush()
+        group_ids[group.client_key] = model.id
 
     for item in payload.ingredients:
         recipe.ingredients.append(
             RecipeIngredient(
                 ingredient_id=item.ingredient_id,
+                prep_group_id=group_ids.get(item.prep_group_key) if item.prep_group_key else None,
                 quantity=item.quantity,
                 unit_id=item.unit_id,
                 display_text=item.display_text.strip() if item.display_text else None,
                 preparation=item.preparation.strip() if item.preparation else None,
+                prep_method=item.prep_method.strip() if item.prep_method else None,
+                prep_size=item.prep_size.strip() if item.prep_size else None,
+                prep_state=item.prep_state.strip() if item.prep_state else None,
                 optional=item.optional,
                 scaling_mode=item.scaling_mode.upper(),
                 required_state=item.required_state.strip().upper(),
@@ -150,14 +158,7 @@ def _save_recipe(db: Session, recipe: Recipe, payload: RecipeCreate | RecipeUpda
 
 
 @router.get("", response_model=list[RecipeRead])
-def list_recipes(
-    search: str | None = Query(default=None, max_length=160),
-    meal_type: str | None = Query(default=None, max_length=30),
-    tag_id: int | None = None,
-    favorite: bool | None = None,
-    include_inactive: bool = False,
-    db: Session = Depends(get_db),
-) -> list[dict]:
+def list_recipes(search: str | None = Query(default=None, max_length=160), meal_type: str | None = Query(default=None, max_length=30), tag_id: int | None = None, favorite: bool | None = None, include_inactive: bool = False, db: Session = Depends(get_db)) -> list[dict]:
     statement = _recipe_statement().where(Recipe.household_id == DEFAULT_HOUSEHOLD_ID)
     if not include_inactive:
         statement = statement.where(Recipe.active.is_(True))
@@ -180,21 +181,13 @@ def get_recipe(recipe_id: int, db: Session = Depends(get_db)) -> dict:
 
 @router.post("", response_model=RecipeRead, status_code=status.HTTP_201_CREATED)
 def create_recipe(payload: RecipeCreate, db: Session = Depends(get_db)) -> dict:
-    recipe = Recipe(
-        household_id=DEFAULT_HOUSEHOLD_ID,
-        name=payload.name.strip(),
-        normalized_name=normalize_name(payload.name),
-        base_servings=payload.base_servings,
-    )
-    saved = _save_recipe(db, recipe, payload)
-    return _recipe_payload(saved)
+    recipe = Recipe(household_id=DEFAULT_HOUSEHOLD_ID, name=payload.name.strip(), normalized_name=normalize_name(payload.name), base_servings=payload.base_servings)
+    return _recipe_payload(_save_recipe(db, recipe, payload))
 
 
 @router.put("/{recipe_id}", response_model=RecipeRead)
 def update_recipe(recipe_id: int, payload: RecipeUpdate, db: Session = Depends(get_db)) -> dict:
-    recipe = _recipe_or_404(db, recipe_id)
-    saved = _save_recipe(db, recipe, payload)
-    return _recipe_payload(saved)
+    return _recipe_payload(_save_recipe(db, _recipe_or_404(db, recipe_id), payload))
 
 
 @router.delete("/{recipe_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -214,10 +207,7 @@ def scale_recipe(recipe_id: int, payload: RecipeScaleRequest, db: Session = Depe
         source_unit = db.get(MeasurementUnit, item.unit_id)
         if source_unit is None:
             raise HTTPException(status_code=409, detail=f"Stored unit {item.unit_id} no longer exists")
-
-        scaled_quantity, manual_review = scale_quantity(
-            Decimal(item.quantity), scale_factor, item.scaling_mode
-        )
+        scaled_quantity, manual_review = scale_quantity(Decimal(item.quantity), scale_factor, item.scaling_mode)
         target_unit = source_unit
         requested_unit_code = payload.unit_overrides.get(item.id)
         if requested_unit_code:
@@ -229,22 +219,19 @@ def scale_recipe(recipe_id: int, payload: RecipeScaleRequest, db: Session = Depe
             except UnitConversionError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        scaled_items.append(
-            {
-                "recipe_ingredient_id": item.id,
-                "ingredient_id": item.ingredient_id,
-                "quantity": scaled_quantity,
-                "unit_id": target_unit.id,
-                "unit_code": target_unit.code,
-                "scaling_mode": item.scaling_mode,
-                "manual_review": manual_review,
-            }
-        )
+        scaled_items.append({
+            "recipe_ingredient_id": item.id,
+            "ingredient_id": item.ingredient_id,
+            "prep_group_id": item.prep_group_id,
+            "quantity": scaled_quantity,
+            "unit_id": target_unit.id,
+            "unit_code": target_unit.code,
+            "scaling_mode": item.scaling_mode,
+            "manual_review": manual_review,
+            "preparation": item.preparation,
+            "prep_method": item.prep_method,
+            "prep_size": item.prep_size,
+            "prep_state": item.prep_state,
+        })
 
-    return {
-        "recipe_id": recipe.id,
-        "base_servings": recipe.base_servings,
-        "requested_servings": payload.requested_servings,
-        "scale_factor": scale_factor,
-        "ingredients": scaled_items,
-    }
+    return {"recipe_id": recipe.id, "base_servings": recipe.base_servings, "requested_servings": payload.requested_servings, "scale_factor": scale_factor, "ingredients": scaled_items}
