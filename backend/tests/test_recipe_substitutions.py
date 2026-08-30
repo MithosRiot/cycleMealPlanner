@@ -1,3 +1,4 @@
+from decimal import Decimal
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -86,7 +87,7 @@ def test_recipe_substitutions_round_trip_and_per_use_scale() -> None:
         assert preferred["canonical_ingredient_id"] == canonical["id"]
         assert preferred["ingredient_id"] == almond["id"]
         assert preferred["substitution_id"] == row["substitutions"][0]["id"]
-        assert preferred["quantity"] == "5.000000"
+        assert Decimal(preferred["quantity"]) == Decimal("5")
 
         oat_scale = client.post(
             f"/api/recipes/{recipe['id']}/scale",
@@ -95,7 +96,7 @@ def test_recipe_substitutions_round_trip_and_per_use_scale() -> None:
         assert oat_scale.status_code == 200
         oat_result = oat_scale.json()["ingredients"][0]
         assert oat_result["ingredient_id"] == oat["id"]
-        assert oat_result["quantity"] == "2.000000"
+        assert Decimal(oat_result["quantity"]) == Decimal("2")
 
         reloaded = client.get(f"/api/recipes/{recipe['id']}")
         assert reloaded.status_code == 200
