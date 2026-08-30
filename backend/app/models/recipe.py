@@ -36,6 +36,7 @@ class Recipe(Base):
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     prep_groups: Mapped[list[RecipePrepGroup]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipePrepGroup.sort_order")
+    advance_prep: Mapped[list[RecipeAdvancePrep]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeAdvancePrep.sort_order")
     ingredients: Mapped[list[RecipeIngredient]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeIngredient.sort_order")
     meal_types: Mapped[list[RecipeMealType]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeMealType.meal_type")
     tags: Mapped[list[Tag]] = relationship(secondary=recipe_tags)
@@ -60,6 +61,27 @@ class RecipePrepGroup(Base):
     recipe: Mapped[Recipe] = relationship(back_populates="prep_groups")
 
     __table_args__ = (CheckConstraint("sort_order >= 0", name="ck_recipe_prep_groups_sort_order_nonnegative"),)
+
+
+class RecipeAdvancePrep(Base):
+    __tablename__ = "recipe_advance_prep"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
+    prep_group_id: Mapped[int | None] = mapped_column(ForeignKey("recipe_prep_groups.id", ondelete="SET NULL"))
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    lead_time_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    instructions: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    recipe: Mapped[Recipe] = relationship(back_populates="advance_prep")
+
+    __table_args__ = (
+        CheckConstraint("lead_time_minutes >= 0", name="ck_recipe_advance_prep_lead_nonnegative"),
+        CheckConstraint("duration_minutes IS NULL OR duration_minutes >= 0", name="ck_recipe_advance_prep_duration_nonnegative"),
+        CheckConstraint("sort_order >= 0", name="ck_recipe_advance_prep_sort_order_nonnegative"),
+    )
 
 
 class RecipeIngredient(Base):

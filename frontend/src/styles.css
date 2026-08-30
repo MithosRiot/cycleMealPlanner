@@ -178,7 +178,7 @@ button:disabled { opacity: 0.55; cursor: default; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
-.ingredient-form label, .editor-grid label, .advanced-grid label, .scale-form label { display: grid; gap: 6px; }
+.ingredient-form label, .editor-grid label, .advanced-grid label, .scale-form label, .advance-prep-grid label { display: grid; gap: 6px; }
 .ingredient-form small { color: #687784; }
 .ingredient-check { align-self: end; padding-bottom: 10px; }
 .form-wide, .span-2 { grid-column: 1 / -1; }
@@ -247,6 +247,20 @@ button:disabled { opacity: 0.55; cursor: default; }
   gap: 8px;
   align-items: center;
 }
+.prep-group-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+}
+.advance-prep-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(180px, 1.2fr);
+  gap: 14px;
+  align-items: end;
+}
+.advance-prep-instructions { grid-column: 1 / -1; }
+.advance-prep-actions { margin-top: 12px; }
 .advanced-panel { margin-top: 10px; }
 .advanced-panel summary { cursor: pointer; color: #52606d; font-weight: 600; }
 .advanced-grid { margin-top: 10px; }
@@ -265,14 +279,45 @@ button:disabled { opacity: 0.55; cursor: default; }
   padding: 10px 0;
   border-bottom: 1px solid #edf0f2;
 }
+
+/* Advance Prep detail uses a dedicated five-column table-like layout. */
+.editor-card:has(> h2 + .ingredient-detail-list) > .ingredient-detail-list > .ingredient-detail-row {
+  grid-template-columns: minmax(180px, 1.4fr) minmax(120px, .75fr) minmax(110px, .65fr) minmax(130px, .8fr) minmax(220px, 1.6fr);
+  align-items: start;
+}
+.editor-card:has(> h2 + .ingredient-detail-list) > .ingredient-detail-list > .ingredient-detail-row > strong,
+.editor-card:has(> h2 + .ingredient-detail-list) > .ingredient-detail-list > .ingredient-detail-row > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.editor-card:has(> h2 + .ingredient-detail-list) > .ingredient-detail-list > .ingredient-detail-row > strong::before,
+.editor-card:has(> h2 + .ingredient-detail-list) > .ingredient-detail-list > .ingredient-detail-row > span::before {
+  color: #687784;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.editor-card:has(> h2 + .ingredient-detail-list) > .ingredient-detail-list > .ingredient-detail-row > strong::before { content: "Task"; }
+.editor-card:has(> h2 + .ingredient-detail-list) > .ingredient-detail-list > .ingredient-detail-row > span:nth-of-type(1)::before { content: "Lead time"; }
+.editor-card:has(> h2 + .ingredient-detail-list) > .ingredient-detail-list > .ingredient-detail-row > span:nth-of-type(2)::before { content: "Duration"; }
+.editor-card:has(> h2 + .ingredient-detail-list) > .ingredient-detail-list > .ingredient-detail-row > span:nth-of-type(3)::before { content: "Prep group"; }
+.editor-card:has(> h2 + .ingredient-detail-list) > .ingredient-detail-list > .ingredient-detail-row > span:nth-of-type(4)::before { content: "Instructions"; }
 .warning-text { font-size: 0.8rem; font-weight: 700; }
 
 @media (max-width: 1050px) {
   .ingredient-main-row { grid-template-columns: 1fr 100px 130px; }
   .ingredient-main-row input:nth-of-type(2), .ingredient-main-row button { grid-column: auto; }
+  .prep-group-row { grid-template-columns: 1fr auto auto auto; }
+  .advance-prep-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filter-bar { grid-template-columns: 1fr 1fr; }
   .recipe-detail-grid { grid-template-columns: 1fr; }
   .ingredient-detail-row { grid-template-columns: 1.4fr 1fr 1fr; }
+  .editor-card:has(> h2 + .ingredient-detail-list) > .ingredient-detail-list > .ingredient-detail-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
@@ -282,7 +327,8 @@ button:disabled { opacity: 0.55; cursor: default; }
   .section-heading, .page-heading { display: grid; }
   .search-controls { min-width: 0; width: 100%; }
   .row-actions { justify-content: flex-start; }
-  .ingredient-main-row, .ingredient-detail-row { grid-template-columns: 1fr; }
+  .ingredient-main-row, .ingredient-detail-row, .prep-group-row { grid-template-columns: 1fr; }
+  .editor-card:has(> h2 + .ingredient-detail-list) > .ingredient-detail-list > .ingredient-detail-row { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
@@ -302,8 +348,8 @@ button:disabled { opacity: 0.55; cursor: default; }
   .sidebar a { white-space: nowrap; }
   .content { padding: 16px; }
   .page-card { padding: 22px; }
-  .inline-form, .editable-row, .category-row, .ingredient-form, .editor-grid, .advanced-grid, .filter-bar, .scale-form { grid-template-columns: 1fr; }
-  .form-wide, .span-2 { grid-column: auto; }
+  .inline-form, .editable-row, .category-row, .ingredient-form, .editor-grid, .advanced-grid, .advance-prep-grid, .filter-bar, .scale-form { grid-template-columns: 1fr; }
+  .form-wide, .span-2, .advance-prep-instructions { grid-column: auto; }
   .search-controls { display: grid; }
   .header-actions { justify-content: flex-start; }
 }
