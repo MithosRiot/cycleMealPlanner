@@ -8,6 +8,17 @@ export type MealSlotDefinition = MealSlotDefinitionInput & {
   cycle_id: number
 }
 
+export type SlotPopulationRule = {
+  include_meal_ids: number[]
+  exclude_meal_ids: number[]
+}
+
+export type PopulationRules = {
+  include_meal_ids: number[]
+  exclude_meal_ids: number[]
+  slot_rules: Record<string, SlotPopulationRule>
+}
+
 export type ScaledPlannedComponent = {
   meal_recipe_id: number
   recipe_id: number
@@ -64,6 +75,7 @@ export type MealCycle = {
   status: 'DRAFT'
   start_date: string | null
   notes: string | null
+  population_rules: string
   slot_definitions: MealSlotDefinition[]
   slots: CycleSlot[]
 }
@@ -82,6 +94,7 @@ export const fetchMealCycles = (): Promise<MealCycle[]> => jsonRequest('/api/mea
 export const fetchMealCycle = (id: number): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}`)
 export const createMealCycle = (input: MealCycleInput): Promise<MealCycle> => jsonRequest('/api/meal-cycles', { method: 'POST', body: JSON.stringify(input) })
 export const updateMealCycle = (id: number, input: MealCycleInput): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'PUT', body: JSON.stringify(input) })
+export const updatePopulationRules = (id: number, input: PopulationRules): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/population-rules`, { method: 'PUT', body: JSON.stringify(input) })
 export const deleteMealCycle = (id: number): Promise<void> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'DELETE' })
 export const assignPlannedMeal = (cycleId: number, slotId: number, mealId: number): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal`, { method: 'POST', body: JSON.stringify({ meal_id: mealId }) })
 export const updatePlannedMealPlanning = (cycleId: number, slotId: number, input: { planned_servings: string; planned_leftover_servings: string; component_serving_overrides: Record<number, string> }): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal/planning`, { method: 'PUT', body: JSON.stringify(input) })
