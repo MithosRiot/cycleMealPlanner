@@ -100,7 +100,13 @@ def test_recipe_substitutions_round_trip_and_per_use_scale() -> None:
 
         reloaded = client.get(f"/api/recipes/{recipe['id']}")
         assert reloaded.status_code == 200
-        assert reloaded.json()["ingredients"][0]["substitutions"] == row["substitutions"]
+        reloaded_subs = reloaded.json()["ingredients"][0]["substitutions"]
+        assert [sub["id"] for sub in reloaded_subs] == [sub["id"] for sub in row["substitutions"]]
+        assert [sub["substitute_ingredient_id"] for sub in reloaded_subs] == [almond["id"], oat["id"]]
+        assert [Decimal(sub["ratio"]) for sub in reloaded_subs] == [Decimal("1.25"), Decimal("0.5")]
+        assert [sub["preferred"] for sub in reloaded_subs] == [True, False]
+        assert [sub["notes"] for sub in reloaded_subs] == ["Preferred", None]
+        assert [sub["sort_order"] for sub in reloaded_subs] == [0, 1]
 
 
 def test_substitution_validation_and_manual_review() -> None:
