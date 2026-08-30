@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 
 from app.api.cycle_validation import router as cycle_validation_router
+from app.api.equipment import router as equipment_router
 from app.api.expiration_planning import router as expiration_planning_router
 from app.api.ingredients import router as ingredients_router
 from app.api.inventory import router as inventory_router
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.include_router(reference_router)
 app.include_router(ingredients_router)
+app.include_router(equipment_router)
 app.include_router(recipes_router)
 app.include_router(inventory_router)
 app.include_router(meals_router)
