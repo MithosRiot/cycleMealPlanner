@@ -9,7 +9,7 @@ from app.database.session import get_db
 from app.engines.recipe_scaling import scale_quantity
 from app.models.equipment import Equipment
 from app.models.ingredient import Ingredient, Tag
-from app.models.recipe import Recipe, RecipeAdvancePrep, RecipeEquipment, RecipeIngredient, RecipeMealType, RecipePrepGroup
+from app.models.recipe import Recipe, RecipeAdvancePrep, RecipeEquipment, RecipeIngredient, RecipeIngredientSubstitution, RecipeMealType, RecipePrepGroup
 from app.models.reference import MeasurementUnit
 from app.schemas.recipe import RecipeCreate, RecipeRead, RecipeScaleRequest, RecipeScaleResponse, RecipeUpdate
 from app.services.normalization import normalize_name
@@ -24,7 +24,7 @@ def _recipe_statement():
         selectinload(Recipe.prep_groups),
         selectinload(Recipe.advance_prep),
         selectinload(Recipe.equipment),
-        selectinload(Recipe.ingredients),
+        selectinload(Recipe.ingredients).selectinload(RecipeIngredient.substitutions),
         selectinload(Recipe.meal_types),
         selectinload(Recipe.tags),
     )
@@ -78,6 +78,18 @@ def _validate_recipe_references(db: Session, payload: RecipeCreate | RecipeUpdat
             raise HTTPException(status_code=400, detail=f"Measurement unit {item.unit_id} not found")
         if item.prep_group_key and item.prep_group_key not in known_group_keys:
             raise HTTPException(status_code=422, detail=f"Unknown prep group key {item.prep_group_key}")
+
+        substitute_ids = [sub.substitute_ingredient_id for sub in item.substitutions]
+        if len(set(substitute_ids)) != len(substitute_ids):
+            raise HTTPException(status_code=422, detail="A Recipe ingredient cannot list the same substitute more than once")
+        if item.ingredient_id in substitute_ids:
+            raise HTTPException(status_code=422, detail="An ingredient cannot substitute for itself")
+        if sum(1 for sub in item.substitutions if sub.preferred) > 1:
+            raise HTTPException(status_code=422, detail="Only one preferred substitution is allowed per Recipe ingredient")
+        if substitute_ids:
+            substitutes = list(db.scalars(select(Ingredient).where(Ingredient.id.in_(substitute_ids), Ingredient.household_id == DEFAULT_HOUSEHOLD_ID, Ingredient.active.is_(True))))
+            if len(substitutes) != len(substitute_ids):
+                raise HTTPException(status_code=400, detail="One or more substitute ingredients were not found or are archived")
 
     for item in payload.advance_prep:
         if item.prep_group_key and item.prep_group_key not in known_group_keys:
@@ -167,25 +179,36 @@ def _save_recipe(db: Session, recipe: Recipe, payload: RecipeCreate | RecipeUpda
             )
         )
 
-    for item in payload.ingredients:
-        recipe.ingredients.append(
-            RecipeIngredient(
-                ingredient_id=item.ingredient_id,
-                prep_group_id=group_ids.get(item.prep_group_key) if item.prep_group_key else None,
-                quantity=item.quantity,
-                unit_id=item.unit_id,
-                display_text=item.display_text.strip() if item.display_text else None,
-                preparation=item.preparation.strip() if item.preparation else None,
-                prep_method=item.prep_method.strip() if item.prep_method else None,
-                prep_size=item.prep_size.strip() if item.prep_size else None,
-                prep_state=item.prep_state.strip() if item.prep_state else None,
-                optional=item.optional,
-                scaling_mode=item.scaling_mode.upper(),
-                required_state=item.required_state.strip().upper(),
-                sort_order=item.sort_order,
-                notes=item.notes.strip() if item.notes else None,
-            )
+    for item in sorted(payload.ingredients, key=lambda value: value.sort_order):
+        model = RecipeIngredient(
+            ingredient_id=item.ingredient_id,
+            prep_group_id=group_ids.get(item.prep_group_key) if item.prep_group_key else None,
+            quantity=item.quantity,
+            unit_id=item.unit_id,
+            display_text=item.display_text.strip() if item.display_text else None,
+            preparation=item.preparation.strip() if item.preparation else None,
+            prep_method=item.prep_method.strip() if item.prep_method else None,
+            prep_size=item.prep_size.strip() if item.prep_size else None,
+            prep_state=item.prep_state.strip() if item.prep_state else None,
+            optional=item.optional,
+            scaling_mode=item.scaling_mode.upper(),
+            required_state=item.required_state.strip().upper(),
+            sort_order=item.sort_order,
+            notes=item.notes.strip() if item.notes else None,
         )
+        recipe.ingredients.append(model)
+        db.flush()
+        for sub in sorted(item.substitutions, key=lambda value: value.sort_order):
+            model.substitutions.append(
+                RecipeIngredientSubstitution(
+                    substitute_ingredient_id=sub.substitute_ingredient_id,
+                    ratio=sub.ratio,
+                    preferred=sub.preferred,
+                    notes=sub.notes.strip() if sub.notes else None,
+                    sort_order=sub.sort_order,
+                )
+            )
+
     for meal_type in meal_types:
         recipe.meal_types.append(RecipeMealType(meal_type=meal_type))
     recipe.tags = tags
@@ -249,6 +272,23 @@ def scale_recipe(recipe_id: int, payload: RecipeScaleRequest, db: Session = Depe
         if source_unit is None:
             raise HTTPException(status_code=409, detail=f"Stored unit {item.unit_id} no longer exists")
         scaled_quantity, manual_review = scale_quantity(Decimal(item.quantity), scale_factor, item.scaling_mode)
+
+        selected_substitution = None
+        requested_sub_id = payload.substitution_overrides.get(item.id)
+        if requested_sub_id is not None:
+            selected_substitution = next((sub for sub in item.substitutions if sub.id == requested_sub_id), None)
+            if selected_substitution is None:
+                raise HTTPException(status_code=400, detail=f"Substitution {requested_sub_id} is not valid for Recipe ingredient {item.id}")
+        else:
+            selected_substitution = next((sub for sub in item.substitutions if sub.preferred), None)
+
+        output_ingredient_id = item.ingredient_id
+        substitution_id = None
+        if selected_substitution is not None:
+            scaled_quantity *= Decimal(selected_substitution.ratio)
+            output_ingredient_id = selected_substitution.substitute_ingredient_id
+            substitution_id = selected_substitution.id
+
         target_unit = source_unit
         requested_unit_code = payload.unit_overrides.get(item.id)
         if requested_unit_code:
@@ -262,7 +302,9 @@ def scale_recipe(recipe_id: int, payload: RecipeScaleRequest, db: Session = Depe
 
         scaled_items.append({
             "recipe_ingredient_id": item.id,
-            "ingredient_id": item.ingredient_id,
+            "ingredient_id": output_ingredient_id,
+            "canonical_ingredient_id": item.ingredient_id,
+            "substitution_id": substitution_id,
             "prep_group_id": item.prep_group_id,
             "quantity": scaled_quantity,
             "unit_id": target_unit.id,
