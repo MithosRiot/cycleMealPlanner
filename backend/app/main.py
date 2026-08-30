@@ -4,6 +4,7 @@ import logging
 from fastapi import FastAPI
 from sqlalchemy import text
 
+from app.api.cycle_validation import router as cycle_validation_router
 from app.api.expiration_planning import router as expiration_planning_router
 from app.api.ingredients import router as ingredients_router
 from app.api.inventory import router as inventory_router
@@ -43,6 +44,7 @@ app.include_router(meals_router)
 app.include_router(meal_cycles_router)
 app.include_router(planned_meals_router)
 app.include_router(expiration_planning_router)
+app.include_router(cycle_validation_router)
 app.include_router(shopping_router)
 
 
