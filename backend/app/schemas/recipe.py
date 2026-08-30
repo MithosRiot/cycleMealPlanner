@@ -57,6 +57,25 @@ class RecipeEquipmentRead(BaseModel):
     sort_order: int
 
 
+class RecipeIngredientSubstitutionInput(BaseModel):
+    substitute_ingredient_id: int
+    ratio: Decimal = Field(default=Decimal("1"), gt=0)
+    preferred: bool = False
+    notes: str | None = None
+    sort_order: int = Field(default=0, ge=0)
+
+
+class RecipeIngredientSubstitutionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    recipe_ingredient_id: int
+    substitute_ingredient_id: int
+    ratio: Decimal
+    preferred: bool
+    notes: str | None
+    sort_order: int
+
+
 class RecipeIngredientInput(BaseModel):
     ingredient_id: int
     prep_group_key: str | None = Field(default=None, max_length=80)
@@ -72,6 +91,7 @@ class RecipeIngredientInput(BaseModel):
     required_state: str = Field(default="ANY", max_length=30)
     sort_order: int = Field(default=0, ge=0)
     notes: str | None = None
+    substitutions: list[RecipeIngredientSubstitutionInput] = Field(default_factory=list)
 
 
 class RecipeIngredientRead(BaseModel):
@@ -92,6 +112,7 @@ class RecipeIngredientRead(BaseModel):
     required_state: str
     sort_order: int
     notes: str | None
+    substitutions: list[RecipeIngredientSubstitutionRead] = Field(default_factory=list)
 
 
 class RecipeBase(BaseModel):
@@ -147,11 +168,14 @@ class RecipeRead(BaseModel):
 class RecipeScaleRequest(BaseModel):
     requested_servings: Decimal = Field(gt=0)
     unit_overrides: dict[int, str] = Field(default_factory=dict)
+    substitution_overrides: dict[int, int] = Field(default_factory=dict)
 
 
 class ScaledIngredientRead(BaseModel):
     recipe_ingredient_id: int
     ingredient_id: int
+    canonical_ingredient_id: int
+    substitution_id: int | None
     prep_group_id: int | None
     quantity: Decimal
     unit_id: int
