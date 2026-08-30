@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { fetchHealth } from './api'
+import CycleValidationPage from './CycleValidationPage'
 import IngredientsPage from './IngredientsPage'
 import InventoryPage from './InventoryPage'
 import './InventoryPage.css'
@@ -16,6 +17,7 @@ const navigation = [
   ['Recipes', '/recipes'],
   ['Meals', '/meals'],
   ['Meal Plan', '/meal-plan'],
+  ['Plan Validation', '/meal-plan/validation'],
   ['Inventory', '/inventory'],
   ['Shopping', '/shopping'],
   ['Leftovers', '/leftovers'],
@@ -78,6 +80,7 @@ function App() {
           <Route path="/meals/:mealId" element={<MealDetailPage />} />
           <Route path="/meals/:mealId/edit" element={<MealEditorPage />} />
           <Route path="/meal-plan" element={<MealPlanPage />} />
+          <Route path="/meal-plan/validation" element={<CycleValidationPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/shopping" element={<ShoppingPage />} />
           <Route path="/leftovers" element={<PlaceholderPage title="Leftovers" />} />

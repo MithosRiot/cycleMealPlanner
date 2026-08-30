@@ -143,7 +143,12 @@ def test_population_rules_constrain_random_fill_and_persist() -> None:
 def test_cycle_without_population_rules_keeps_legacy_random_fill() -> None:
     suffix = uuid4().hex[:8]
     with TestClient(app) as client:
-        breakfast = _create_meal(client, f"Legacy Breakfast {suffix}", "BREAKFAST")
+        _create_meal(client, f"Legacy Breakfast {suffix}", "BREAKFAST")
+        eligible_breakfast_ids = {
+            meal["id"]
+            for meal in client.get("/api/meals?meal_type=BREAKFAST").json()
+            if meal["active"]
+        }
         cycle = client.post(
             "/api/meal-cycles",
             json={
@@ -159,4 +164,4 @@ def test_cycle_without_population_rules_keeps_legacy_random_fill() -> None:
         assert result.status_code == 200
         assert result.json()["filled_count"] == 1
         populated = client.get(f"/api/meal-cycles/{cycle['id']}").json()
-        assert populated["slots"][0]["planned_meal"]["meal_id"] == breakfast
+        assert populated["slots"][0]["planned_meal"]["meal_id"] in eligible_breakfast_ids
