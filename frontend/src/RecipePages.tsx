@@ -11,6 +11,7 @@ import {
   fetchTags,
   Ingredient,
   MeasurementUnit,
+  RecipeAdvancePrepInput,
   RecipeIngredientInput,
   RecipeInput,
   RecipePrepGroupInput,
@@ -25,6 +26,11 @@ const COMMON_MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Dessert', '
 function numberOrNull(value: string): number | null { return value.trim() ? Number(value) : null }
 function groupKey(id: number): string { return `group-${id}` }
 function newGroupKey(): string { return `new-${Date.now()}-${Math.random().toString(36).slice(2)}` }
+function leadTimeLabel(minutes: number): string {
+  if (minutes % 1440 === 0 && minutes >= 1440) return `${minutes / 1440} day${minutes === 1440 ? '' : 's'} before`
+  if (minutes % 60 === 0 && minutes >= 60) return `${minutes / 60} hour${minutes === 60 ? '' : 's'} before`
+  return `${minutes} minute${minutes === 1 ? '' : 's'} before`
+}
 
 function emptyIngredient(units: MeasurementUnit[], ingredients: Ingredient[]): RecipeIngredientInput {
   const ingredient = ingredients[0]
@@ -95,7 +101,7 @@ function RecipeIngredientEditor({ value, index, ingredients, units, prepGroups, 
   </div>
 }
 
-function PrepGroupEditor({ groups, ingredients, onChange }: { groups: RecipePrepGroupInput[]; ingredients: RecipeIngredientInput[]; onChange: (groups: RecipePrepGroupInput[], ingredients?: RecipeIngredientInput[]) => void }) {
+function PrepGroupEditor({ groups, ingredients, advancePrep, onChange }: { groups: RecipePrepGroupInput[]; ingredients: RecipeIngredientInput[]; advancePrep: RecipeAdvancePrepInput[]; onChange: (groups: RecipePrepGroupInput[], ingredients?: RecipeIngredientInput[], advancePrep?: RecipeAdvancePrepInput[]) => void }) {
   function normalize(next: RecipePrepGroupInput[]) { return next.map((group, index) => ({ ...group, sort_order: index })) }
   return <section className="editor-card">
     <div className="section-heading-row"><div><h2>Prep Groups</h2><p>Optional sections for organizing ingredient prep.</p></div><button type="button" onClick={() => onChange([...groups, { client_key: newGroupKey(), name: `Prep group ${groups.length + 1}`, sort_order: groups.length }])}>Add prep group</button></div>
@@ -103,7 +109,33 @@ function PrepGroupEditor({ groups, ingredients, onChange }: { groups: RecipePrep
       <input value={group.name} onChange={(event) => onChange(groups.map((current, currentIndex) => currentIndex === index ? { ...current, name: event.target.value } : current))} />
       <button type="button" className="button-secondary" disabled={index === 0} onClick={() => { const copy = [...groups]; [copy[index - 1], copy[index]] = [copy[index], copy[index - 1]]; onChange(normalize(copy)) }}>↑</button>
       <button type="button" className="button-secondary" disabled={index === groups.length - 1} onClick={() => { const copy = [...groups]; [copy[index], copy[index + 1]] = [copy[index + 1], copy[index]]; onChange(normalize(copy)) }}>↓</button>
-      <button type="button" className="button-secondary" onClick={() => onChange(normalize(groups.filter((_, currentIndex) => currentIndex !== index)), ingredients.map((item) => item.prep_group_key === group.client_key ? { ...item, prep_group_key: null } : item))}>Remove</button>
+      <button type="button" className="button-secondary" onClick={() => onChange(
+        normalize(groups.filter((_, currentIndex) => currentIndex !== index)),
+        ingredients.map((item) => item.prep_group_key === group.client_key ? { ...item, prep_group_key: null } : item),
+        advancePrep.map((item) => item.prep_group_key === group.client_key ? { ...item, prep_group_key: null } : item),
+      )}>Remove</button>
+    </div>)}</div>
+  </section>
+}
+
+function AdvancePrepEditor({ items, prepGroups, onChange }: { items: RecipeAdvancePrepInput[]; prepGroups: RecipePrepGroupInput[]; onChange: (items: RecipeAdvancePrepInput[]) => void }) {
+  function normalize(next: RecipeAdvancePrepInput[]) { return next.map((item, index) => ({ ...item, sort_order: index })) }
+  function patch(index: number, update: Partial<RecipeAdvancePrepInput>) { onChange(items.map((item, currentIndex) => currentIndex === index ? { ...item, ...update } : item)) }
+  return <section className="editor-card">
+    <div className="section-heading-row"><div><h2>Advance Prep</h2><p>Define work that must happen before cooking. Scheduling comes in a later milestone.</p></div><button type="button" onClick={() => onChange([...items, { title: `Prep task ${items.length + 1}`, lead_time_minutes: 60, duration_minutes: null, instructions: null, prep_group_key: null, sort_order: items.length }])}>Add advance prep</button></div>
+    <div className="recipe-ingredient-list">{items.map((item, index) => <div className="recipe-ingredient-editor" key={`${item.title}-${index}`}>
+      <div className="advanced-grid">
+        <label>Title<input required value={item.title} onChange={(event) => patch(index, { title: event.target.value })} /></label>
+        <label>Lead time (minutes)<input type="number" min="0" value={item.lead_time_minutes} onChange={(event) => patch(index, { lead_time_minutes: Number(event.target.value) })} /></label>
+        <label>Duration (minutes)<input type="number" min="0" value={item.duration_minutes ?? ''} onChange={(event) => patch(index, { duration_minutes: numberOrNull(event.target.value) })} /></label>
+        <label>Prep group<select value={item.prep_group_key ?? ''} onChange={(event) => patch(index, { prep_group_key: event.target.value || null })}><option value="">None</option>{prepGroups.map((group) => <option key={group.client_key} value={group.client_key}>{group.name}</option>)}</select></label>
+        <label className="span-2">Instructions<textarea value={item.instructions ?? ''} onChange={(event) => patch(index, { instructions: event.target.value || null })} /></label>
+      </div>
+      <div className="form-actions">
+        <button type="button" className="button-secondary" disabled={index === 0} onClick={() => { const copy = [...items]; [copy[index - 1], copy[index]] = [copy[index], copy[index - 1]]; onChange(normalize(copy)) }}>Move up</button>
+        <button type="button" className="button-secondary" disabled={index === items.length - 1} onClick={() => { const copy = [...items]; [copy[index], copy[index + 1]] = [copy[index + 1], copy[index]]; onChange(normalize(copy)) }}>Move down</button>
+        <button type="button" className="button-secondary" onClick={() => onChange(normalize(items.filter((_, currentIndex) => currentIndex !== index)))}>Remove</button>
+      </div>
     </div>)}</div>
   </section>
 }
@@ -127,15 +159,16 @@ export function RecipeEditorPage() {
       const prep_groups = recipe.prep_groups.map((group) => ({ client_key: groupKey(group.id), name: group.name, sort_order: group.sort_order }))
       return {
         name: recipe.name, description: recipe.description, base_servings: recipe.base_servings, serving_unit: recipe.serving_unit, yield_quantity: recipe.yield_quantity, yield_unit_id: recipe.yield_unit_id, prep_time_minutes: recipe.prep_time_minutes, cook_time_minutes: recipe.cook_time_minutes, notes: recipe.notes, favorite: recipe.favorite, meal_types: recipe.meal_types, tag_ids: recipe.tags.map((tag) => tag.id), prep_groups,
+        advance_prep: recipe.advance_prep.map((item) => ({ title: item.title, lead_time_minutes: item.lead_time_minutes, duration_minutes: item.duration_minutes, instructions: item.instructions, prep_group_key: item.prep_group_id ? groupKey(item.prep_group_id) : null, sort_order: item.sort_order })),
         ingredients: recipe.ingredients.map((item) => ({ ingredient_id: item.ingredient_id, prep_group_key: item.prep_group_id ? groupKey(item.prep_group_id) : null, quantity: item.quantity, unit_id: item.unit_id, display_text: item.display_text, preparation: item.preparation, prep_method: item.prep_method, prep_size: item.prep_size, prep_state: item.prep_state, optional: item.optional, scaling_mode: item.scaling_mode, required_state: item.required_state, sort_order: item.sort_order, notes: item.notes })), active: recipe.active,
       }
     }
-    return { name: '', description: null, base_servings: '4', serving_unit: 'servings', yield_quantity: null, yield_unit_id: null, prep_time_minutes: null, cook_time_minutes: null, notes: null, favorite: false, meal_types: [], tag_ids: [], prep_groups: [], ingredients: [] }
+    return { name: '', description: null, base_servings: '4', serving_unit: 'servings', yield_quantity: null, yield_unit_id: null, prep_time_minutes: null, cook_time_minutes: null, notes: null, favorite: false, meal_types: [], tag_ids: [], prep_groups: [], advance_prep: [], ingredients: [] }
   }, [recipe])
 
   const form = draft ?? initialDraft
   function patch(update: Partial<RecipeInput>) { setDraft({ ...form, ...update }) }
-  const save = useMutation({ mutationFn: async () => { const payload: RecipeInput = { ...form, prep_groups: form.prep_groups.map((group, index) => ({ ...group, sort_order: index })), ingredients: form.ingredients.map((item, index) => ({ ...item, sort_order: index })) }; return recipe ? updateRecipe(recipe, payload) : createRecipe(payload) }, onSuccess: async (saved) => { await queryClient.invalidateQueries({ queryKey: ['recipes'] }); await queryClient.invalidateQueries({ queryKey: ['recipe', saved.id] }); navigate(`/recipes/${saved.id}`) } })
+  const save = useMutation({ mutationFn: async () => { const payload: RecipeInput = { ...form, prep_groups: form.prep_groups.map((group, index) => ({ ...group, sort_order: index })), advance_prep: form.advance_prep.map((item, index) => ({ ...item, sort_order: index })), ingredients: form.ingredients.map((item, index) => ({ ...item, sort_order: index })) }; return recipe ? updateRecipe(recipe, payload) : createRecipe(payload) }, onSuccess: async (saved) => { await queryClient.invalidateQueries({ queryKey: ['recipes'] }); await queryClient.invalidateQueries({ queryKey: ['recipe', saved.id] }); navigate(`/recipes/${saved.id}`) } })
   function submit(event: FormEvent) { event.preventDefault(); save.mutate() }
   if (editingId !== null && recipeQuery.isPending) return <p>Loading recipe…</p>
 
@@ -156,7 +189,8 @@ export function RecipeEditorPage() {
         <label className="checkbox-label"><input type="checkbox" checked={form.favorite} onChange={(event) => patch({ favorite: event.target.checked })} />Favorite</label>
       </div></section>
       <section className="editor-card"><h2>Meal Types</h2><div className="chip-checks">{COMMON_MEAL_TYPES.map((type) => <label key={type} className={`chip-check ${form.meal_types.includes(type) ? 'selected' : ''}`}><input type="checkbox" checked={form.meal_types.includes(type)} onChange={(event) => patch({ meal_types: event.target.checked ? [...form.meal_types, type] : form.meal_types.filter((item) => item !== type) })} />{type}</label>)}</div><h3>Tags</h3><div className="chip-checks">{tagsQuery.data?.map((tag) => <label key={tag.id} className={`chip-check ${form.tag_ids.includes(tag.id) ? 'selected' : ''}`}><input type="checkbox" checked={form.tag_ids.includes(tag.id)} onChange={(event) => patch({ tag_ids: event.target.checked ? [...form.tag_ids, tag.id] : form.tag_ids.filter((id) => id !== tag.id) })} />{tag.name}</label>)}</div></section>
-      <PrepGroupEditor groups={form.prep_groups} ingredients={form.ingredients} onChange={(prep_groups, nextIngredients) => patch({ prep_groups, ...(nextIngredients ? { ingredients: nextIngredients } : {}) })} />
+      <PrepGroupEditor groups={form.prep_groups} ingredients={form.ingredients} advancePrep={form.advance_prep} onChange={(prep_groups, nextIngredients, nextAdvancePrep) => patch({ prep_groups, ...(nextIngredients ? { ingredients: nextIngredients } : {}), ...(nextAdvancePrep ? { advance_prep: nextAdvancePrep } : {}) })} />
+      <AdvancePrepEditor items={form.advance_prep} prepGroups={form.prep_groups} onChange={(advance_prep) => patch({ advance_prep })} />
       <section className="editor-card"><div className="section-heading-row"><h2>Ingredients</h2><button type="button" disabled={!ingredients.length || !units.length} onClick={() => patch({ ingredients: [...form.ingredients, { ...emptyIngredient(units, ingredients), sort_order: form.ingredients.length }] })}>Add ingredient</button></div>{!ingredients.length && <p>Add ingredients under Settings → Ingredients & Tags before building recipes.</p>}<div className="recipe-ingredient-list">{form.ingredients.map((item, index) => <RecipeIngredientEditor key={`${item.ingredient_id}-${index}`} value={item} index={index} ingredients={ingredients} units={units} prepGroups={form.prep_groups} onChange={(next) => patch({ ingredients: form.ingredients.map((current, currentIndex) => currentIndex === index ? next : current) })} onRemove={() => patch({ ingredients: form.ingredients.filter((_current, currentIndex) => currentIndex !== index) })} />)}</div></section>
       <div className="form-actions"><button type="submit" disabled={save.isPending || !form.name.trim()}>Save recipe</button><Link className="button-link button-link-secondary" to={recipe ? `/recipes/${recipe.id}` : '/recipes'}>Cancel</Link></div>
     </form>
@@ -175,10 +209,12 @@ export function RecipeDetailPage() {
   if (recipe.isError || !recipe.data) return <div className="error-banner">Recipe could not be loaded.</div>
   const data = recipe.data; const ingredientList = ingredients.data ?? []; const unitList = units.data ?? []; const scaledById = new Map(scaleResult?.ingredients.map((item) => [item.recipe_ingredient_id, item]))
   const sections = [...data.prep_groups.map((group) => ({ id: group.id, name: group.name, sort_order: group.sort_order })), { id: null, name: 'Ungrouped', sort_order: 999999 }]
+  const prepGroupName = new Map(data.prep_groups.map((group) => [group.id, group.name]))
 
   return <section className="recipe-page">
     <header className="page-heading"><div><p className="eyebrow">Recipe</p><h1>{data.name} {data.favorite && '★'}</h1><p>{data.description}</p></div><div className="header-actions"><Link className="button-link" to={`/recipes/${data.id}/edit`}>Edit</Link><button type="button" className="button-secondary" onClick={() => archive.mutate()}>Archive</button></div></header>
     <div className="recipe-detail-grid"><section className="editor-card"><h2>Overview</h2><dl className="detail-list"><div><dt>Serves</dt><dd>{data.base_servings} {data.serving_unit}</dd></div><div><dt>Prep</dt><dd>{data.prep_time_minutes ?? 0} min</dd></div><div><dt>Cook</dt><dd>{data.cook_time_minutes ?? 0} min</dd></div></dl><div className="chip-row">{data.meal_types.map((type) => <span className="chip" key={type}>{type}</span>)}{data.tags.map((tag) => <span className="chip chip-muted" key={tag.id}>{tag.name}</span>)}</div></section><section className="editor-card"><h2>Serving Scaler</h2><form className="scale-form" onSubmit={(event) => { event.preventDefault(); scale.mutate(servings || data.base_servings) }}><label>Requested servings<input min="0.1" step="0.1" type="number" value={servings} placeholder={data.base_servings} onChange={(event) => setServings(event.target.value)} /></label><button type="submit" disabled={scale.isPending}>Preview</button></form>{scale.error instanceof Error && <p className="field-error">{scale.error.message}</p>}{scaleResult && <p>Scale factor: {scaleResult.scale_factor}×</p>}</section></div>
+    {data.advance_prep.length > 0 && <section className="editor-card"><h2>Advance Prep</h2><div className="ingredient-detail-list">{[...data.advance_prep].sort((a, b) => a.sort_order - b.sort_order).map((item) => <div key={item.id} className="ingredient-detail-row"><strong>{item.title}</strong><span>{leadTimeLabel(item.lead_time_minutes)}</span><span>{item.duration_minutes == null ? 'No duration estimate' : `${item.duration_minutes} min`}</span><span>{item.prep_group_id ? prepGroupName.get(item.prep_group_id) ?? 'Prep group' : 'Recipe-wide'}</span>{item.instructions && <span>{item.instructions}</span>}</div>)}</div></section>}
     <section className="editor-card"><h2>Ingredients</h2>{sections.sort((a, b) => a.sort_order - b.sort_order).map((section) => { const rows = data.ingredients.filter((item) => item.prep_group_id === section.id); if (!rows.length) return null; return <div key={section.id ?? 'ungrouped'}><h3>{section.name}</h3><div className="ingredient-detail-list">{rows.map((item) => { const scaled = scaledById.get(item.id); const prep = [item.prep_method, item.prep_size, item.prep_state].filter(Boolean).join(' · ') || item.preparation; return <div key={item.id} className="ingredient-detail-row"><strong>{ingredientName(item.ingredient_id, ingredientList)}</strong><span>{scaled?.quantity ?? item.quantity} {scaled?.unit_code ?? unitCode(item.unit_id, unitList)}</span><span>{prep || '—'}</span><span>{item.optional ? 'Optional' : item.scaling_mode}</span>{scaled?.manual_review && <span className="warning-text">Manual review</span>}</div> })}</div></div> })}</section>
     {data.notes && <section className="editor-card"><h2>Notes</h2><p>{data.notes}</p></section>}<Link className="text-link" to="/recipes">← Back to Recipe Library</Link>
   </section>
