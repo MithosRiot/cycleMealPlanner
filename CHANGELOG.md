@@ -32,6 +32,7 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Reusable household Equipment records plus ordered Recipe equipment requirements with quantity/notes, Settings management, Recipe editor/detail UI, archive-safe references, and unchanged serving scaling.
 - Recipe ingredient substitutions with ordered alternates, conversion ratios, one preferred default, notes, nested Recipe editing, Recipe detail display, and per-use substitution selection in the serving-scale preview.
 - Named Recipe variants with sparse ingredient quantity/unit/prep/substitution overrides, base-Recipe inheritance, variant-aware serving previews, archive/order support, and override preservation across base Recipe edits.
+- Reusable Recipe outputs and explicit cross-Recipe dependencies with quantity/unit/scaling rules, cycle prevention, archive-safe references, and dependency serving previews.
 
 ### Known limitations
 - Reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
