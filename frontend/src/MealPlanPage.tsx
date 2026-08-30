@@ -1,6 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchRecipes, type Recipe } from './api'
+import { fetchRecipes, fetchTags, type Recipe, type Tag } from './api'
 import {
   assignPlannedMeal,
   createMealCycle,
@@ -10,6 +10,7 @@ import {
   type MealCycleInput,
   type PlannedMeal,
   type PopulationRules,
+  type SmartPlanningPreferences,
   movePlannedMeal,
   randomFillMealCycle,
   removePlannedMeal,
@@ -17,6 +18,7 @@ import {
   updateMealCycle,
   updatePlannedMealPlanning,
   updatePopulationRules,
+  updateSmartPlanningPreferences,
 } from './mealCyclesApi'
 import { fetchMeals, type Meal } from './mealsApi'
 import './MealPlanPage.css'
@@ -45,6 +47,10 @@ function emptyPopulationRules(): PopulationRules {
   return { include_meal_ids: [], exclude_meal_ids: [], slot_rules: {} }
 }
 
+function defaultSmartPreferences(): SmartPlanningPreferences {
+  return { repeat_spacing_days: 0, favorite_boost: 1, history_penalty: 0, tag_weights: {} }
+}
+
 function normalizeSlotLabel(label: string): string {
   return label.trim().toLocaleLowerCase().replace(/\s+/g, ' ')
 }
@@ -59,6 +65,20 @@ function parsePopulationRules(value: string): PopulationRules {
     }
   } catch {
     return emptyPopulationRules()
+  }
+}
+
+function parseSmartPreferences(value: string): SmartPlanningPreferences {
+  try {
+    const parsed = JSON.parse(value || '{}') as Partial<SmartPlanningPreferences> & { tag_weights?: Record<string, number> }
+    return {
+      repeat_spacing_days: parsed.repeat_spacing_days ?? 0,
+      favorite_boost: parsed.favorite_boost ?? 1,
+      history_penalty: parsed.history_penalty ?? 0,
+      tag_weights: Object.fromEntries(Object.entries(parsed.tag_weights ?? {}).map(([key, weight]) => [Number(key), Number(weight)])),
+    }
+  } catch {
+    return defaultSmartPreferences()
   }
 }
 
@@ -136,13 +156,7 @@ function PopulationRulesControls({ initialRules, meals, slotLabels, disabled, on
     const key = normalizeSlotLabel(label)
     setRules((current) => {
       const existing = current.slot_rules[key] ?? { include_meal_ids: [], exclude_meal_ids: [] }
-      return {
-        ...current,
-        slot_rules: {
-          ...current.slot_rules,
-          [key]: applyRuleMode(existing.include_meal_ids, existing.exclude_meal_ids, mealId, mode),
-        },
-      }
+      return { ...current, slot_rules: { ...current.slot_rules, [key]: applyRuleMode(existing.include_meal_ids, existing.exclude_meal_ids, mealId, mode) } }
     })
   }
 
@@ -173,17 +187,46 @@ function PopulationRulesControls({ initialRules, meals, slotLabels, disabled, on
   )
 }
 
+function SmartPlanningControls({ initial, tags, disabled, onSave }: { initial: SmartPlanningPreferences; tags: Tag[]; disabled: boolean; onSave: (preferences: SmartPlanningPreferences) => void }) {
+  const [preferences, setPreferences] = useState<SmartPlanningPreferences>(initial)
+
+  return (
+    <details className="population-rules smart-preferences">
+      <summary>Smart planning preferences</summary>
+      <p className="planning-note">These settings affect random selection after meal-type and population-pool eligibility are applied.</p>
+      <div className="smart-preference-grid">
+        <label>Repeat spacing (days)<input type="number" min="0" max="365" value={preferences.repeat_spacing_days} onChange={(event) => setPreferences({ ...preferences, repeat_spacing_days: Number(event.target.value) })} /></label>
+        <label>Favorite boost<select value={preferences.favorite_boost} onChange={(event) => setPreferences({ ...preferences, favorite_boost: Number(event.target.value) })}><option value={1}>Off (1×)</option><option value={1.5}>1.5×</option><option value={2}>2×</option><option value={3}>3×</option></select></label>
+        <label>History penalty<select value={preferences.history_penalty} onChange={(event) => setPreferences({ ...preferences, history_penalty: Number(event.target.value) })}><option value={0}>Off</option><option value={0.25}>Light</option><option value={0.5}>Medium</option><option value={1}>Strong</option></select></label>
+      </div>
+      <div className="population-rule-section">
+        <h4>Tag preference weights</h4>
+        <p className="planning-note">1× is neutral. Higher weights make Meals with that tag more likely when they are otherwise eligible.</p>
+        <div className="population-rule-list">
+          {tags.map((tag) => <label key={tag.id}><span>{tag.name}</span><select value={preferences.tag_weights[tag.id] ?? 1} onChange={(event) => {
+            const weight = Number(event.target.value)
+            setPreferences((current) => {
+              const tag_weights = { ...current.tag_weights }
+              if (weight === 1) delete tag_weights[tag.id]
+              else tag_weights[tag.id] = weight
+              return { ...current, tag_weights }
+            })
+          }}><option value={1}>1×</option><option value={1.5}>1.5×</option><option value={2}>2×</option><option value={3}>3×</option><option value={5}>5×</option></select></label>)}
+        </div>
+      </div>
+      <button type="button" className="button-secondary" disabled={disabled} onClick={() => onSave(preferences)}>Save smart preferences</button>
+    </details>
+  )
+}
+
 export default function MealPlanPage() {
   const queryClient = useQueryClient()
   const cycles = useQuery({ queryKey: ['meal-cycles'], queryFn: fetchMealCycles })
   const meals = useQuery({ queryKey: ['meals', 'planner'], queryFn: () => fetchMeals() })
   const recipes = useQuery({ queryKey: ['recipes', 'planner'], queryFn: () => fetchRecipes() })
+  const tags = useQuery({ queryKey: ['tags', 'planner'], queryFn: () => fetchTags() })
   const [selectedId, setSelectedId] = useState<number | null>(null)
-  const selected = useQuery({
-    queryKey: ['meal-cycle', selectedId],
-    queryFn: () => fetchMealCycle(selectedId as number),
-    enabled: selectedId !== null,
-  })
+  const selected = useQuery({ queryKey: ['meal-cycle', selectedId], queryFn: () => fetchMealCycle(selectedId as number), enabled: selectedId !== null })
   const [draft, setDraft] = useState<MealCycleInput>(makeDraft())
   const [editingId, setEditingId] = useState<number | null>(null)
   const [mealChoices, setMealChoices] = useState<Record<number, number>>({})
@@ -205,29 +248,21 @@ export default function MealPlanPage() {
 
   const saveMutation = useMutation({
     mutationFn: () => editingId === null ? createMealCycle(draft) : updateMealCycle(editingId, draft),
-    onSuccess: async (cycle) => {
-      await refreshCycle(cycle.id)
-      setSelectedId(cycle.id)
-      setEditingId(null)
-      setDraft(makeDraft())
-    },
+    onSuccess: async (cycle) => { await refreshCycle(cycle.id); setSelectedId(cycle.id); setEditingId(null); setDraft(makeDraft()) },
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteMealCycle(id),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['meal-cycles'] })
-      setSelectedId(null)
-      setEditingId(null)
-      setDraft(makeDraft())
-    },
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ['meal-cycles'] }); setSelectedId(null); setEditingId(null); setDraft(makeDraft()) },
   })
 
   const populationMutation = useMutation({
-    mutationFn: (rules: PopulationRules) => {
-      if (selectedId === null) throw new Error('Select a cycle first')
-      return updatePopulationRules(selectedId, rules)
-    },
+    mutationFn: (rules: PopulationRules) => { if (selectedId === null) throw new Error('Select a cycle first'); return updatePopulationRules(selectedId, rules) },
+    onSuccess: async () => { if (selectedId !== null) await refreshCycle(selectedId) },
+  })
+
+  const smartMutation = useMutation({
+    mutationFn: (preferences: SmartPlanningPreferences) => { if (selectedId === null) throw new Error('Select a cycle first'); return updateSmartPlanningPreferences(selectedId, preferences) },
     onSuccess: async () => { if (selectedId !== null) await refreshCycle(selectedId) },
   })
 
@@ -275,7 +310,7 @@ export default function MealPlanPage() {
 
   return (
     <section className="meal-plan-page">
-      <header className="page-heading"><div><p className="eyebrow">Cycle Planning</p><h1>Meal Plan</h1><p>Place Meals, set serving targets and planned leftovers, lock choices, or fill eligible empty slots randomly.</p></div></header>
+      <header className="page-heading"><div><p className="eyebrow">Cycle Planning</p><h1>Meal Plan</h1><p>Place Meals, configure smart population, set serving targets and planned leftovers, or fill eligible empty slots.</p></div></header>
       <div className="meal-plan-layout">
         <aside className="cycle-list panel">
           <h2>Cycles</h2>
@@ -303,7 +338,9 @@ export default function MealPlanPage() {
                 <div className="button-row"><button type="button" className="button-secondary" onClick={() => placementMutation.mutate({ type: 'random' })}>Random fill empty</button><button type="button" className="button-secondary" onClick={startEdit}>Edit cycle</button><button type="button" className="button-secondary" onClick={() => deleteMutation.mutate(selected.data!.id)}>Delete cycle</button></div>
               </div>
               <PopulationRulesControls key={`${selected.data.id}-${selected.data.population_rules}`} initialRules={parsePopulationRules(selected.data.population_rules)} meals={meals.data ?? []} slotLabels={selected.data.slot_definitions.map((slot) => slot.label)} disabled={populationMutation.isPending} onSave={(rules) => populationMutation.mutate(rules)} />
+              <SmartPlanningControls key={`${selected.data.id}-${selected.data.smart_preferences}`} initial={parseSmartPreferences(selected.data.smart_preferences)} tags={tags.data ?? []} disabled={smartMutation.isPending} onSave={(preferences) => smartMutation.mutate(preferences)} />
               {populationMutation.isError && <div className="error-banner">{(populationMutation.error as Error).message}</div>}
+              {smartMutation.isError && <div className="error-banner">{(smartMutation.error as Error).message}</div>}
               {placementMutation.isError && <div className="error-banner">{(placementMutation.error as Error).message}</div>}
               <div className="cycle-grid">
                 {slotGrid.map(({ day, slots }) => (
