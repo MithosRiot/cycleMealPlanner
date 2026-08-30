@@ -5,12 +5,31 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.ingredient import TagRead
 
 
+class RecipePrepGroupInput(BaseModel):
+    client_key: str = Field(min_length=1, max_length=80)
+    name: str = Field(min_length=1, max_length=120)
+    sort_order: int = Field(default=0, ge=0)
+
+
+class RecipePrepGroupRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    recipe_id: int
+    name: str
+    sort_order: int
+
+
 class RecipeIngredientInput(BaseModel):
     ingredient_id: int
+    prep_group_key: str | None = Field(default=None, max_length=80)
     quantity: Decimal = Field(ge=0)
     unit_id: int
     display_text: str | None = Field(default=None, max_length=160)
     preparation: str | None = Field(default=None, max_length=160)
+    prep_method: str | None = Field(default=None, max_length=80)
+    prep_size: str | None = Field(default=None, max_length=80)
+    prep_state: str | None = Field(default=None, max_length=80)
     optional: bool = False
     scaling_mode: str = Field(default="LINEAR", pattern="^(LINEAR|FIXED|ROUND_UP|MANUAL)$")
     required_state: str = Field(default="ANY", max_length=30)
@@ -18,11 +37,25 @@ class RecipeIngredientInput(BaseModel):
     notes: str | None = None
 
 
-class RecipeIngredientRead(RecipeIngredientInput):
+class RecipeIngredientRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     recipe_id: int
+    ingredient_id: int
+    prep_group_id: int | None
+    quantity: Decimal
+    unit_id: int
+    display_text: str | None
+    preparation: str | None
+    prep_method: str | None
+    prep_size: str | None
+    prep_state: str | None
+    optional: bool
+    scaling_mode: str
+    required_state: str
+    sort_order: int
+    notes: str | None
 
 
 class RecipeBase(BaseModel):
@@ -38,6 +71,7 @@ class RecipeBase(BaseModel):
     favorite: bool = False
     meal_types: list[str] = Field(default_factory=list)
     tag_ids: list[int] = Field(default_factory=list)
+    prep_groups: list[RecipePrepGroupInput] = Field(default_factory=list)
     ingredients: list[RecipeIngredientInput] = Field(default_factory=list)
 
 
@@ -67,6 +101,7 @@ class RecipeRead(BaseModel):
     active: bool
     meal_types: list[str]
     tags: list[TagRead]
+    prep_groups: list[RecipePrepGroupRead]
     ingredients: list[RecipeIngredientRead]
 
 
@@ -78,11 +113,16 @@ class RecipeScaleRequest(BaseModel):
 class ScaledIngredientRead(BaseModel):
     recipe_ingredient_id: int
     ingredient_id: int
+    prep_group_id: int | None
     quantity: Decimal
     unit_id: int
     unit_code: str
     scaling_mode: str
     manual_review: bool
+    preparation: str | None
+    prep_method: str | None
+    prep_size: str | None
+    prep_state: str | None
 
 
 class RecipeScaleResponse(BaseModel):
