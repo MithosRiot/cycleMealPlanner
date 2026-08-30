@@ -98,7 +98,9 @@ def create_output(recipe_id: int, payload: RecipeOutputInput, db: Session = Depe
     if db.scalar(select(RecipeOutput.id).where(RecipeOutput.recipe_id == recipe_id, RecipeOutput.normalized_name == normalized)) is not None:
         raise HTTPException(status_code=409, detail="Output name already exists for this Recipe")
     model = RecipeOutput(recipe_id=recipe_id, name=payload.name.strip(), normalized_name=normalized, quantity=payload.quantity, unit_id=payload.unit_id, notes=payload.notes.strip() if payload.notes else None, active=payload.active, sort_order=payload.sort_order)
-    db.add(model); db.commit(); db.refresh(model)
+    db.add(model)
+    db.commit()
+    db.refresh(model)
     return model
 
 
@@ -114,8 +116,15 @@ def update_output(recipe_id: int, output_id: int, payload: RecipeOutputInput, db
     duplicate = db.scalar(select(RecipeOutput.id).where(RecipeOutput.recipe_id == recipe_id, RecipeOutput.normalized_name == normalized, RecipeOutput.id != output_id))
     if duplicate is not None:
         raise HTTPException(status_code=409, detail="Output name already exists for this Recipe")
-    model.name = payload.name.strip(); model.normalized_name = normalized; model.quantity = payload.quantity; model.unit_id = payload.unit_id; model.notes = payload.notes.strip() if payload.notes else None; model.active = payload.active; model.sort_order = payload.sort_order
-    db.commit(); db.refresh(model)
+    model.name = payload.name.strip()
+    model.normalized_name = normalized
+    model.quantity = payload.quantity
+    model.unit_id = payload.unit_id
+    model.notes = payload.notes.strip() if payload.notes else None
+    model.active = payload.active
+    model.sort_order = payload.sort_order
+    db.commit()
+    db.refresh(model)
     return model
 
 
@@ -138,7 +147,8 @@ def create_dependency(recipe_id: int, payload: RecipeDependencyInput, db: Sessio
     source_recipe = _recipe(db, output.recipe_id)
     if _would_cycle(db, recipe_id, source_recipe.id):
         raise HTTPException(status_code=422, detail="Recipe dependency would create a cycle")
-    source_unit = db.get(MeasurementUnit, output.unit_id); target_unit = db.get(MeasurementUnit, payload.unit_id)
+    source_unit = db.get(MeasurementUnit, output.unit_id)
+    target_unit = db.get(MeasurementUnit, payload.unit_id)
     if source_unit is None or target_unit is None:
         raise HTTPException(status_code=400, detail="Measurement unit not found")
     try:
@@ -148,7 +158,9 @@ def create_dependency(recipe_id: int, payload: RecipeDependencyInput, db: Sessio
     if db.scalar(select(RecipeDependency.id).where(RecipeDependency.recipe_id == recipe_id, RecipeDependency.recipe_output_id == payload.recipe_output_id)) is not None:
         raise HTTPException(status_code=409, detail="Recipe already depends on this output")
     model = RecipeDependency(recipe_id=recipe_id, recipe_output_id=payload.recipe_output_id, quantity=payload.quantity, unit_id=payload.unit_id, scaling_mode=payload.scaling_mode.upper(), notes=payload.notes.strip() if payload.notes else None, sort_order=payload.sort_order)
-    db.add(model); db.commit(); db.refresh(model)
+    db.add(model)
+    db.commit()
+    db.refresh(model)
     return model
 
 
@@ -159,9 +171,12 @@ def update_dependency(recipe_id: int, dependency_id: int, payload: RecipeDepende
     if model is None or model.recipe_id != recipe_id:
         raise HTTPException(status_code=404, detail="Recipe dependency not found")
     output = _output(db, payload.recipe_output_id)
+    if not output.active and model.recipe_output_id != output.id:
+        raise HTTPException(status_code=400, detail="Archived Recipe output cannot be selected")
     if output.recipe_id == recipe_id or _would_cycle(db, recipe_id, output.recipe_id):
         raise HTTPException(status_code=422, detail="Recipe dependency would create a cycle")
-    source_unit = db.get(MeasurementUnit, output.unit_id); target_unit = db.get(MeasurementUnit, payload.unit_id)
+    source_unit = db.get(MeasurementUnit, output.unit_id)
+    target_unit = db.get(MeasurementUnit, payload.unit_id)
     if source_unit is None or target_unit is None:
         raise HTTPException(status_code=400, detail="Measurement unit not found")
     try:
@@ -171,8 +186,14 @@ def update_dependency(recipe_id: int, dependency_id: int, payload: RecipeDepende
     duplicate = db.scalar(select(RecipeDependency.id).where(RecipeDependency.recipe_id == recipe_id, RecipeDependency.recipe_output_id == payload.recipe_output_id, RecipeDependency.id != dependency_id))
     if duplicate is not None:
         raise HTTPException(status_code=409, detail="Recipe already depends on this output")
-    model.recipe_output_id = payload.recipe_output_id; model.quantity = payload.quantity; model.unit_id = payload.unit_id; model.scaling_mode = payload.scaling_mode.upper(); model.notes = payload.notes.strip() if payload.notes else None; model.sort_order = payload.sort_order
-    db.commit(); db.refresh(model)
+    model.recipe_output_id = payload.recipe_output_id
+    model.quantity = payload.quantity
+    model.unit_id = payload.unit_id
+    model.scaling_mode = payload.scaling_mode.upper()
+    model.notes = payload.notes.strip() if payload.notes else None
+    model.sort_order = payload.sort_order
+    db.commit()
+    db.refresh(model)
     return model
 
 
@@ -182,7 +203,8 @@ def delete_dependency(recipe_id: int, dependency_id: int, db: Session = Depends(
     model = db.get(RecipeDependency, dependency_id)
     if model is None or model.recipe_id != recipe_id:
         raise HTTPException(status_code=404, detail="Recipe dependency not found")
-    db.delete(model); db.commit()
+    db.delete(model)
+    db.commit()
 
 
 @router.post("/{recipe_id}/dependencies/scale", response_model=DependencyScaleResponse)
