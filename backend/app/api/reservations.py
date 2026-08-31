@@ -1,5 +1,4 @@
 import json
-from collections import defaultdict
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,13 +6,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
-from app.models.inventory import InventoryLot
 from app.models.meal_cycle import CycleSlot, MealCycle
 from app.models.planned_meal import PlannedMeal
-from app.models.reference import MeasurementUnit
 from app.models.reservation import InventoryReservation
 from app.schemas.reservation import InventoryAvailabilityRead, ReservationCycleSummary
-from app.services.units import UnitConversionError, convert_quantity
+from app.services.inventory_availability import availability_rows
 
 router = APIRouter(tags=["reservations"])
 HOUSEHOLD_ID = 1
@@ -122,49 +119,4 @@ def regenerate_cycle_reservations(cycle_id: int, db: Session = Depends(get_db)) 
 
 @router.get("/api/inventory-availability", response_model=list[InventoryAvailabilityRead])
 def inventory_availability(db: Session = Depends(get_db)) -> list[InventoryAvailabilityRead]:
-    units = {unit.id: unit for unit in db.scalars(select(MeasurementUnit))}
-    lots = list(db.scalars(select(InventoryLot).where(InventoryLot.household_id == HOUSEHOLD_ID, InventoryLot.quantity > 0)))
-    reservations = list(db.scalars(select(InventoryReservation).where(InventoryReservation.household_id == HOUSEHOLD_ID, InventoryReservation.status == "ACTIVE")))
-
-    grouped_lots: dict[tuple[int, str], list[InventoryLot]] = defaultdict(list)
-    grouped_reservations: dict[tuple[int, str], list[InventoryReservation]] = defaultdict(list)
-    for lot in lots:
-        unit = units.get(lot.unit_id)
-        if unit is not None:
-            grouped_lots[(lot.ingredient_id, unit.unit_family)].append(lot)
-    for reservation in reservations:
-        unit = units.get(reservation.unit_id)
-        if unit is not None:
-            grouped_reservations[(reservation.ingredient_id, unit.unit_family)].append(reservation)
-
-    result: list[InventoryAvailabilityRead] = []
-    for key in sorted(set(grouped_lots) | set(grouped_reservations)):
-        lot_rows = grouped_lots.get(key, [])
-        reservation_rows = grouped_reservations.get(key, [])
-        reference_unit_id = lot_rows[0].unit_id if lot_rows else reservation_rows[0].unit_id
-        reference_unit = units[reference_unit_id]
-        physical = Decimal("0")
-        reserved = Decimal("0")
-        for lot in lot_rows:
-            try:
-                physical += convert_quantity(Decimal(lot.quantity), units[lot.unit_id], reference_unit)
-            except UnitConversionError:
-                continue
-        for reservation in reservation_rows:
-            try:
-                reserved += convert_quantity(Decimal(reservation.quantity), units[reservation.unit_id], reference_unit)
-            except UnitConversionError:
-                continue
-        available = max(Decimal("0"), physical - reserved)
-        shortage = max(Decimal("0"), reserved - physical)
-        result.append(InventoryAvailabilityRead(
-            ingredient_id=key[0],
-            unit_family=key[1],
-            unit_id=reference_unit.id,
-            unit_code=reference_unit.code,
-            physical_quantity=physical,
-            reserved_quantity=reserved,
-            available_quantity=available,
-            shortage_quantity=shortage,
-        ))
-    return result
+    return [InventoryAvailabilityRead(**row) for row in availability_rows(db)]
