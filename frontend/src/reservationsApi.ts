@@ -40,4 +40,4 @@ async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const fetchCycleReservations = (cycleId: number): Promise<ReservationCycleSummary> => jsonRequest(`/api/meal-cycles/${cycleId}/reservations`)
 export const regenerateCycleReservations = (cycleId: number): Promise<ReservationCycleSummary> => jsonRequest(`/api/meal-cycles/${cycleId}/reservations/regenerate`, { method: 'POST' })
-export const fetchInventoryAvailability = (): Promise<InventoryAvailability[]> => jsonRequest('/api/inventory/availability')
+export const fetchInventoryAvailability = (): Promise<InventoryAvailability[]> => jsonRequest('/api/inventory-availability')
