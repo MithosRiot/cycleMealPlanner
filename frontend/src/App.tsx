@@ -9,7 +9,7 @@ import { MealDetailPage, MealEditorPage, MealsPage } from './MealPages'
 import './MealPages.css'
 import MealPlanPage from './MealPlanPage'
 import { RecipeEditorPage, RecipesPage } from './RecipePages'
-import { RecipeDetailWithVariantsPage, RecipeEditorWithVariantsPage } from './RecipeVariantPages'
+import { RecipeDetailWithAdvancedPage, RecipeEditorWithAdvancedPage } from './RecipeOutputPages'
 import SettingsPage from './SettingsPage'
 import ShoppingPage from './ShoppingPage'
 
@@ -34,8 +34,8 @@ function App() {
       <Route path="/" element={<PlaceholderPage title="Dashboard" />} />
       <Route path="/recipes" element={<RecipesPage />} />
       <Route path="/recipes/new" element={<RecipeEditorPage />} />
-      <Route path="/recipes/:recipeId" element={<RecipeDetailWithVariantsPage />} />
-      <Route path="/recipes/:recipeId/edit" element={<RecipeEditorWithVariantsPage />} />
+      <Route path="/recipes/:recipeId" element={<RecipeDetailWithAdvancedPage />} />
+      <Route path="/recipes/:recipeId/edit" element={<RecipeEditorWithAdvancedPage />} />
       <Route path="/meals" element={<MealsPage />} />
       <Route path="/meals/new" element={<MealEditorPage />} />
       <Route path="/meals/:mealId" element={<MealDetailPage />} />
