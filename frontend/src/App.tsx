@@ -3,13 +3,12 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { fetchHealth } from './api'
 import CycleValidationPage from './CycleValidationPage'
 import IngredientsPage from './IngredientsPage'
-import InventoryPage from './InventoryPage'
 import './InventoryPage.css'
 import { MealDetailPage, MealEditorPage, MealsPage } from './MealPages'
 import './MealPages.css'
-import MealPlanPage from './MealPlanPage'
 import { RecipeEditorPage, RecipesPage } from './RecipePages'
 import { RecipeDetailWithAdvancedPage, RecipeEditorWithAdvancedPage } from './RecipeOutputPages'
+import { InventoryWithReservationsPage, MealPlanWithReservationsPage } from './ReservationIntegrationPages'
 import SettingsPage from './SettingsPage'
 import ShoppingPage from './ShoppingPage'
 
@@ -40,9 +39,9 @@ function App() {
       <Route path="/meals/new" element={<MealEditorPage />} />
       <Route path="/meals/:mealId" element={<MealDetailPage />} />
       <Route path="/meals/:mealId/edit" element={<MealEditorPage />} />
-      <Route path="/meal-plan" element={<MealPlanPage />} />
+      <Route path="/meal-plan" element={<MealPlanWithReservationsPage />} />
       <Route path="/meal-plan/validation" element={<CycleValidationPage />} />
-      <Route path="/inventory" element={<InventoryPage />} />
+      <Route path="/inventory" element={<InventoryWithReservationsPage />} />
       <Route path="/shopping" element={<ShoppingPage />} />
       <Route path="/leftovers" element={<PlaceholderPage title="Leftovers" />} />
       <Route path="/history" element={<PlaceholderPage title="History" />} />
