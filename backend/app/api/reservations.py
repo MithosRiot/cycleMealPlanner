@@ -120,7 +120,7 @@ def regenerate_cycle_reservations(cycle_id: int, db: Session = Depends(get_db)) 
     return _summary(db, cycle_id)
 
 
-@router.get("/api/inventory/availability", response_model=list[InventoryAvailabilityRead])
+@router.get("/api/inventory-availability", response_model=list[InventoryAvailabilityRead])
 def inventory_availability(db: Session = Depends(get_db)) -> list[InventoryAvailabilityRead]:
     units = {unit.id: unit for unit in db.scalars(select(MeasurementUnit))}
     lots = list(db.scalars(select(InventoryLot).where(InventoryLot.household_id == HOUSEHOLD_ID, InventoryLot.quantity > 0)))
