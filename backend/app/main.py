@@ -16,6 +16,7 @@ from app.api.recipes import router as recipes_router
 from app.api.recipe_outputs import router as recipe_outputs_router
 from app.api.recipe_variants import router as recipe_variants_router
 from app.api.reference import router as reference_router
+from app.api.reservations import router as reservations_router
 from app.api.shopping import router as shopping_router
 from app.config import get_settings
 from app.database.migrations import run_migrations
@@ -46,6 +47,7 @@ app.include_router(recipes_router)
 app.include_router(recipe_outputs_router)
 app.include_router(recipe_variants_router)
 app.include_router(inventory_router)
+app.include_router(reservations_router)
 app.include_router(meals_router)
 app.include_router(meal_cycles_router)
 app.include_router(planned_meals_router)
