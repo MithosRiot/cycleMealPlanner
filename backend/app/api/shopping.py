@@ -14,6 +14,7 @@ from app.models.meal_cycle import CycleSlot, MealCycle
 from app.models.reference import InventoryLocation, MeasurementUnit, ShoppingCategory
 from app.models.shopping import ShoppingList, ShoppingListItem
 from app.schemas.shopping import ShoppingItemAdjustment, ShoppingItemComplete, ShoppingListRead
+from app.services.inventory_availability import availability_for
 from app.services.units import convert_quantity
 
 router = APIRouter(prefix="/api/shopping", tags=["shopping"])
@@ -110,14 +111,6 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
         ingredient.id: ingredient
         for ingredient in db.scalars(select(Ingredient).where(Ingredient.household_id == HOUSEHOLD_ID))
     }
-    inventory_rows = list(
-        db.execute(
-            select(InventoryLot.ingredient_id, InventoryLot.quantity, InventoryLot.unit_id).where(
-                InventoryLot.household_id == HOUSEHOLD_ID,
-                InventoryLot.quantity > 0,
-            )
-        ).all()
-    )
 
     existing = db.scalar(
         select(ShoppingList)
@@ -193,21 +186,24 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
                 }
             )
 
-        inventory = Decimal("0")
-        for lot_ingredient_id, lot_quantity, lot_unit_id in inventory_rows:
-            if lot_ingredient_id != ingredient_id:
-                continue
-            lot_unit = units.get(lot_unit_id)
-            if lot_unit is None or lot_unit.unit_family != family:
-                continue
-            inventory += convert_quantity(Decimal(lot_quantity), lot_unit, target_unit)
-
-        shortage = max(required - inventory, Decimal("0"))
+        physical, reserved_elsewhere, available, _ = availability_for(
+            db,
+            ingredient_id,
+            family,
+            target_unit,
+            exclude_cycle_id=cycle.id,
+            units=units,
+        )
+        shortage = max(required - available, Decimal("0"))
         warnings = []
         if len(families_by_ingredient[ingredient_id]) > 1:
             warnings.append("Ingredient requirements use incompatible unit families and are kept separate.")
         if key in manual_review_groups:
             warnings.append("One or more recipe ingredients use MANUAL scaling; review this quantity.")
+        if reserved_elsewhere > 0:
+            warnings.append(
+                f"{reserved_elsewhere} {target_unit.code} of physical inventory is reserved for other planned cycles."
+            )
 
         item = existing_by_key.get(key)
         if item is None:
@@ -222,7 +218,7 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
         item.shopping_category_id = ingredient.shopping_category_id
         item.unit_id = target_unit.id
         item.required_quantity = required
-        item.inventory_quantity = inventory
+        item.inventory_quantity = available
         item.generated_quantity = shortage
         item.source_trace = json.dumps(source_trace, sort_keys=True)
         item.warning = " ".join(warnings) or None
