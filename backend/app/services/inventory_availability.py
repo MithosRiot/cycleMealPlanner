@@ -6,6 +6,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.ingredient import Ingredient
 from app.models.inventory import InventoryLot
 from app.models.reference import MeasurementUnit
 from app.models.reservation import InventoryReservation
@@ -71,6 +72,10 @@ def availability_for(
 
 def availability_rows(db: Session) -> list[dict]:
     units = unit_map(db)
+    ingredients = {
+        ingredient.id: ingredient
+        for ingredient in db.scalars(select(Ingredient).where(Ingredient.household_id == HOUSEHOLD_ID))
+    }
     families: dict[tuple[int, str], set[int]] = defaultdict(set)
 
     for lot in db.scalars(select(InventoryLot).where(InventoryLot.household_id == HOUSEHOLD_ID, InventoryLot.quantity > 0)):
@@ -90,7 +95,9 @@ def availability_rows(db: Session) -> list[dict]:
 
     rows = []
     for (ingredient_id, family), unit_ids in sorted(families.items()):
-        target = units[min(unit_ids)]
+        ingredient = ingredients.get(ingredient_id)
+        preferred = units.get(ingredient.preferred_unit_id) if ingredient and ingredient.preferred_unit_id else None
+        target = preferred if preferred is not None and preferred.unit_family == family else units[min(unit_ids)]
         physical, reserved, available, shortage = availability_for(
             db, ingredient_id, family, target, units=units
         )
