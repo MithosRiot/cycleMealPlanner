@@ -111,7 +111,8 @@ def test_other_cycle_reservations_reduce_available_stock_without_double_counting
 
         availability = client.get("/api/inventory-availability")
         assert availability.status_code == 200
-        row = next(item for item in availability.json() if item["ingredient_id"] == ingredient_id and item["unit_family"] == "MASS")
+        family = units["lb"]["unit_family"]
+        row = next(item for item in availability.json() if item["ingredient_id"] == ingredient_id and item["unit_family"] == family)
         assert Decimal(row["physical_quantity"]) == Decimal("1.5")
         assert Decimal(row["reserved_quantity"]) == Decimal("1")
         assert Decimal(row["available_quantity"]) == Decimal("0.5")
