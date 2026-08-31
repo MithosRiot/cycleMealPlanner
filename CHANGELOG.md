@@ -33,7 +33,8 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Recipe ingredient substitutions with ordered alternates, conversion ratios, one preferred default, notes, nested Recipe editing, Recipe detail display, and per-use substitution selection in the serving-scale preview.
 - Named Recipe variants with sparse ingredient quantity/unit/prep/substitution overrides, base-Recipe inheritance, variant-aware serving previews, archive/order support, and override preservation across base Recipe edits.
 - Reusable Recipe outputs and explicit cross-Recipe dependencies with quantity/unit/scaling rules, cycle prevention, archive-safe references, and dependency serving previews.
+- Ingredient-level future reservations generated from planned scaled requirements, stable reconcile/release behavior, and Physical / Reserved / Available / Shortage inventory visibility without changing physical lots.
 
 ### Known limitations
-- Reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
+- Exact-lot reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
 - The development database currently defaults to `./data`; packaged Windows persistence will be moved outside the installation directory.
