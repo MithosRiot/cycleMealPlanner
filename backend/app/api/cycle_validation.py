@@ -16,6 +16,7 @@ from app.models.meal import Meal
 from app.models.meal_cycle import CycleSlot, MealCycle
 from app.models.recipe import Recipe
 from app.models.reference import MeasurementUnit
+from app.services.inventory_availability import availability_for
 from app.services.normalization import normalize_name
 from app.services.units import convert_quantity
 
@@ -152,14 +153,30 @@ def validate_cycle(cycle_id: int, db: Session = Depends(get_db)) -> dict:
         preferred = units.get(ingredient.preferred_unit_id) if ingredient.preferred_unit_id else None
         target = preferred if preferred and preferred.unit_family == family else units[min(unit_id for _, unit_id, *_ in group["rows"])]
         required = sum((convert_quantity(quantity, units[unit_id], target) for quantity, unit_id, *_ in group["rows"]), Decimal("0"))
-        available = Decimal("0")
-        for lot in inventory_by_ingredient.get(ingredient_id, []):
-            lot_unit = units.get(lot.unit_id)
-            if lot_unit is not None and lot_unit.unit_family == family:
-                available += convert_quantity(Decimal(lot.quantity), lot_unit, target)
+        physical, reserved_elsewhere, available, _ = availability_for(
+            db,
+            ingredient_id,
+            family,
+            target,
+            exclude_cycle_id=cycle.id,
+            units=units,
+        )
         shortage = max(required - available, Decimal("0"))
         if shortage > 0:
-            issues.append(_issue("WARNING", "INVENTORY_SHORTAGE", f"{ingredient.name} is short by {shortage} {target.code} for this cycle.", ingredient_id=ingredient_id, unit_family=family, required_quantity=str(required), inventory_quantity=str(available), shortage_quantity=str(shortage), unit_id=target.id, unit_code=target.code))
+            issues.append(_issue(
+                "WARNING",
+                "INVENTORY_SHORTAGE",
+                f"{ingredient.name} is short by {shortage} {target.code} for this cycle.",
+                ingredient_id=ingredient_id,
+                unit_family=family,
+                required_quantity=str(required),
+                physical_quantity=str(physical),
+                reserved_elsewhere_quantity=str(reserved_elsewhere),
+                inventory_quantity=str(available),
+                shortage_quantity=str(shortage),
+                unit_id=target.id,
+                unit_code=target.code,
+            ))
 
     rules = _parse_json(cycle.population_rules)
     for definition in cycle.slot_definitions:
