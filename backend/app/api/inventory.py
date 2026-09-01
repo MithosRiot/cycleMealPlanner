@@ -14,7 +14,9 @@ from app.schemas.inventory import (
     InventoryLotDetail,
     InventoryLotMetadataUpdate,
     InventoryLotRead,
+    InventorySplitRead,
     QuantityAction,
+    SplitAction,
     TransferAction,
 )
 
@@ -181,3 +183,48 @@ def transfer_inventory(lot_id: int, payload: TransferAction, db: Session = Depen
     db.commit()
     db.refresh(lot)
     return lot
+
+
+@router.post("/{lot_id}/split", response_model=InventorySplitRead, status_code=status.HTTP_201_CREATED)
+def split_inventory(lot_id: int, payload: SplitAction, db: Session = Depends(get_db)) -> dict:
+    source = _lot_or_404(db, lot_id)
+    quantity = Decimal(payload.quantity)
+    current = Decimal(source.quantity)
+    if quantity >= current:
+        raise HTTPException(status_code=409, detail="Split quantity must be less than the source lot quantity; use Transfer to move the whole lot")
+
+    target_location = db.get(InventoryLocation, payload.to_location_id)
+    if target_location is None or target_location.household_id != DEFAULT_HOUSEHOLD_ID or not target_location.active:
+        raise HTTPException(status_code=400, detail="Inventory location not found")
+
+    source.quantity = current - quantity
+    child = InventoryLot(
+        household_id=source.household_id,
+        ingredient_id=source.ingredient_id,
+        location_id=payload.to_location_id,
+        quantity=quantity,
+        unit_id=source.unit_id,
+        purchase_date=source.purchase_date,
+        opened_date=source.opened_date,
+        expiration_date=source.expiration_date,
+        frozen_date=source.frozen_date,
+        thawed_date=source.thawed_date,
+        notes=source.notes,
+    )
+    db.add(child)
+    db.flush()
+
+    user_note = payload.note.strip() if payload.note else None
+    source_note = f"Split {quantity} to lot #{child.id}" + (f" — {user_note}" if user_note else "")
+    child_note = f"Split {quantity} from lot #{source.id}" + (f" — {user_note}" if user_note else "")
+    _record(db, source, "TRANSFER", -quantity, source_note, source.location_id, payload.to_location_id)
+    _record(db, child, "TRANSFER", quantity, child_note, source.location_id, payload.to_location_id)
+
+    source_id = source.id
+    child_id = child.id
+    db.commit()
+    db.expire_all()
+    return {
+        "source": _lot_or_404(db, source_id),
+        "child": _lot_or_404(db, child_id),
+    }
