@@ -42,6 +42,12 @@ class TransferAction(BaseModel):
     note: str | None = None
 
 
+class SplitAction(BaseModel):
+    quantity: Decimal = Field(gt=0)
+    to_location_id: int
+    note: str | None = None
+
+
 class InventoryTransactionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -75,3 +81,8 @@ class InventoryLotRead(BaseModel):
 
 class InventoryLotDetail(InventoryLotRead):
     transactions: list[InventoryTransactionRead]
+
+
+class InventorySplitRead(BaseModel):
+    source: InventoryLotDetail
+    child: InventoryLotDetail
