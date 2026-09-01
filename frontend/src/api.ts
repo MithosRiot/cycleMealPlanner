@@ -29,6 +29,7 @@ export type RecipeScaleResponse = { recipe_id: number; base_servings: string; re
 export type InventoryLot = { id: number; household_id: number; ingredient_id: number; location_id: number; quantity: string; unit_id: number; purchase_date: string | null; opened_date: string | null; expiration_date: string | null; frozen_date: string | null; thawed_date: string | null; notes: string | null }
 export type InventoryTransaction = { id: number; lot_id: number; transaction_type: string; quantity_delta: string; unit_id: number; from_location_id: number | null; to_location_id: number | null; note: string | null; created_at: string }
 export type InventoryLotDetail = InventoryLot & { transactions: InventoryTransaction[] }
+export type InventorySplitResult = { source: InventoryLotDetail; child: InventoryLotDetail }
 
 async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } })
@@ -82,4 +83,5 @@ export const addInventory = (id: number, quantity: string, note?: string): Promi
 export const removeInventory = (id: number, quantity: string, note?: string): Promise<InventoryLot> => jsonRequest(`/api/inventory/${id}/remove`, { method: 'POST', body: JSON.stringify({ quantity, note: note || null }) })
 export const correctInventory = (id: number, quantity: string, note?: string): Promise<InventoryLot> => jsonRequest(`/api/inventory/${id}/correct`, { method: 'POST', body: JSON.stringify({ quantity, note: note || null }) })
 export const transferInventory = (id: number, toLocationId: number, note?: string): Promise<InventoryLot> => jsonRequest(`/api/inventory/${id}/transfer`, { method: 'POST', body: JSON.stringify({ to_location_id: toLocationId, note: note || null }) })
+export const splitInventory = (id: number, quantity: string, toLocationId: number, note?: string): Promise<InventorySplitResult> => jsonRequest(`/api/inventory/${id}/split`, { method: 'POST', body: JSON.stringify({ quantity, to_location_id: toLocationId, note: note || null }) })
 export const updateInventoryMetadata = (id: number, input: { purchase_date: string | null; opened_date: string | null; expiration_date: string | null; frozen_date: string | null; thawed_date: string | null; notes: string | null }): Promise<InventoryLot> => jsonRequest(`/api/inventory/${id}`, { method: 'PUT', body: JSON.stringify(input) })
