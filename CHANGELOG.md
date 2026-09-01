@@ -35,6 +35,7 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Reusable Recipe outputs and explicit cross-Recipe dependencies with quantity/unit/scaling rules, cycle prevention, archive-safe references, and dependency serving previews.
 - Ingredient-level future reservations generated from planned scaled requirements, stable reconcile/release behavior, and Physical / Reserved / Available / Shortage inventory visibility without changing physical lots.
 - Centralized Physical / Reserved / Available inventory semantics shared by Inventory, Shopping, and cycle validation, with current-cycle reservation exclusion to prevent double counting and reservation-aware cross-cycle shortages.
+- Expiration-aware lot allocation previews with deterministic expiration/opened/frozen/age/location priority, partial-lot splitting, reservation-aware capacity, cycle use dates, and Meal Plan lot recommendations without mutating Inventory.
 
 ### Known limitations
 - Exact-lot reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
