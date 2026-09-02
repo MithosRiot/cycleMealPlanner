@@ -93,6 +93,13 @@ def availability_rows(db: Session) -> list[dict]:
         if unit is not None:
             families[(reservation.ingredient_id, unit.unit_family)].add(reservation.unit_id)
 
+    for ingredient in ingredients.values():
+        if not ingredient.active or not ingredient.staple_enabled or ingredient.staple_unit_id is None:
+            continue
+        staple_unit = units.get(ingredient.staple_unit_id)
+        if staple_unit is not None:
+            families[(ingredient.id, staple_unit.unit_family)].add(staple_unit.id)
+
     rows = []
     for (ingredient_id, family), unit_ids in sorted(families.items()):
         ingredient = ingredients.get(ingredient_id)
