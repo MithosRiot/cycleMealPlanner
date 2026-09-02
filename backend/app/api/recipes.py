@@ -153,6 +153,8 @@ def _save_recipe(db: Session, recipe: Recipe, payload: RecipeCreate | RecipeUpda
         raise HTTPException(status_code=409, detail="Recipe name already exists")
     tags, meal_types = _validate_recipe_references(db, payload)
     preserved_variants = _snapshot_variant_overrides(recipe) if recipe.id is not None else []
+    preserved_prep_by_title = {item.title: item.task_type for item in recipe.advance_prep} if recipe.id is not None else {}
+    preserved_prep_by_order = {item.sort_order: item.task_type for item in recipe.advance_prep} if recipe.id is not None else {}
 
     recipe.name = payload.name.strip(); recipe.normalized_name = normalized_name
     recipe.description = payload.description.strip() if payload.description else None
@@ -172,7 +174,9 @@ def _save_recipe(db: Session, recipe: Recipe, payload: RecipeCreate | RecipeUpda
     for group in sorted(payload.prep_groups, key=lambda value: value.sort_order):
         model = RecipePrepGroup(name=group.name.strip(), sort_order=group.sort_order); recipe.prep_groups.append(model); db.flush(); group_ids[group.client_key] = model.id
     for item in sorted(payload.advance_prep, key=lambda value: value.sort_order):
-        recipe.advance_prep.append(RecipeAdvancePrep(prep_group_id=group_ids.get(item.prep_group_key) if item.prep_group_key else None, task_type=item.task_type, title=item.title.strip(), lead_time_minutes=item.lead_time_minutes, duration_minutes=item.duration_minutes, instructions=item.instructions.strip() if item.instructions else None, sort_order=item.sort_order))
+        explicit_type = "task_type" in item.model_fields_set
+        task_type = item.task_type if explicit_type else preserved_prep_by_title.get(item.title.strip(), preserved_prep_by_order.get(item.sort_order, "PREP"))
+        recipe.advance_prep.append(RecipeAdvancePrep(prep_group_id=group_ids.get(item.prep_group_key) if item.prep_group_key else None, task_type=task_type, title=item.title.strip(), lead_time_minutes=item.lead_time_minutes, duration_minutes=item.duration_minutes, instructions=item.instructions.strip() if item.instructions else None, sort_order=item.sort_order))
     for item in sorted(payload.equipment, key=lambda value: value.sort_order):
         recipe.equipment.append(RecipeEquipment(equipment_id=item.equipment_id, quantity=item.quantity, notes=item.notes.strip() if item.notes else None, sort_order=item.sort_order))
 
