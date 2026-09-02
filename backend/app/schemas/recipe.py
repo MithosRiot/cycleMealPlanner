@@ -20,6 +20,7 @@ class RecipePrepGroupRead(BaseModel):
 
 
 class RecipeAdvancePrepInput(BaseModel):
+    task_type: str = Field(default="PREP", pattern="^(PREP|THAW|MARINATE|SOAK|PROOF)$")
     title: str = Field(min_length=1, max_length=160)
     lead_time_minutes: int = Field(ge=0)
     duration_minutes: int | None = Field(default=None, ge=0)
@@ -33,6 +34,7 @@ class RecipeAdvancePrepRead(BaseModel):
     id: int
     recipe_id: int
     prep_group_id: int | None
+    task_type: str
     title: str
     lead_time_minutes: int
     duration_minutes: int | None
