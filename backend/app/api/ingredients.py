@@ -29,12 +29,32 @@ def _validate_ingredient_references(db: Session, payload: IngredientCreate | Ing
         category = db.get(ShoppingCategory, payload.shopping_category_id)
         if category is None or category.household_id != DEFAULT_HOUSEHOLD_ID or not category.active:
             raise HTTPException(status_code=400, detail="Shopping category not found")
-    if payload.preferred_unit_id is not None and db.get(MeasurementUnit, payload.preferred_unit_id) is None:
-        raise HTTPException(status_code=400, detail="Measurement unit not found")
+
+    preferred_unit = None
+    if payload.preferred_unit_id is not None:
+        preferred_unit = db.get(MeasurementUnit, payload.preferred_unit_id)
+        if preferred_unit is None:
+            raise HTTPException(status_code=400, detail="Measurement unit not found")
+
     if payload.default_location_id is not None:
         location = db.get(InventoryLocation, payload.default_location_id)
         if location is None or location.household_id != DEFAULT_HOUSEHOLD_ID or not location.active:
             raise HTTPException(status_code=400, detail="Inventory location not found")
+
+    staple_unit = None
+    if payload.staple_unit_id is not None:
+        staple_unit = db.get(MeasurementUnit, payload.staple_unit_id)
+        if staple_unit is None:
+            raise HTTPException(status_code=400, detail="Staple measurement unit not found")
+
+    if payload.staple_enabled and (
+        payload.staple_minimum is None or payload.staple_target is None or staple_unit is None
+    ):
+        raise HTTPException(status_code=422, detail="Staple minimum, target, and unit are required when staple rules are enabled")
+    if payload.staple_minimum is not None and payload.staple_target is not None and payload.staple_target < payload.staple_minimum:
+        raise HTTPException(status_code=422, detail="Staple target must be greater than or equal to staple minimum")
+    if preferred_unit is not None and staple_unit is not None and preferred_unit.unit_family != staple_unit.unit_family:
+        raise HTTPException(status_code=422, detail="Staple unit must use the same measurement family as the preferred unit")
 
 
 def _normalized_aliases(values: list[str], ingredient_name: str) -> list[tuple[str, str]]:
@@ -117,6 +137,10 @@ def _save_ingredient(db: Session, ingredient: Ingredient, payload: IngredientCre
     ingredient.preferred_unit_id = payload.preferred_unit_id
     ingredient.default_location_id = payload.default_location_id
     ingredient.perishable = payload.perishable
+    ingredient.staple_enabled = payload.staple_enabled
+    ingredient.staple_minimum = payload.staple_minimum
+    ingredient.staple_target = payload.staple_target
+    ingredient.staple_unit_id = payload.staple_unit_id
     ingredient.notes = payload.notes.strip() if payload.notes else None
     if isinstance(payload, IngredientUpdate):
         ingredient.active = payload.active
