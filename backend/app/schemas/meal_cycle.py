@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, time
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -8,6 +8,7 @@ from app.schemas.planned_meal import PlannedMealRead
 class MealSlotDefinitionInput(BaseModel):
     label: str = Field(min_length=1, max_length=80)
     sort_order: int = Field(ge=0)
+    serving_time: time | None = None
 
 
 class MealCycleInput(BaseModel):
@@ -16,6 +17,11 @@ class MealCycleInput(BaseModel):
     start_date: date | None = None
     notes: str | None = None
     slot_definitions: list[MealSlotDefinitionInput] = Field(min_length=1)
+
+
+class MealCycleScheduleUpdate(BaseModel):
+    start_date: date | None = None
+    serving_times: dict[int, time | None] = Field(default_factory=dict)
 
 
 class SlotPopulationRule(BaseModel):
@@ -51,6 +57,9 @@ class CycleSlotRead(BaseModel):
     slot_definition_id: int
     day_number: int
     sort_order: int
+    scheduled_date: date | None = None
+    serving_time: time | None = None
+    scheduled_datetime: datetime | None = None
     planned_meal: PlannedMealRead | None = None
 
 
