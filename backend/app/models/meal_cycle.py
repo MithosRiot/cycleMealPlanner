@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, time, timedelta
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, Text, Time, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -47,6 +47,7 @@ class MealSlotDefinition(Base):
     cycle_id: Mapped[int] = mapped_column(ForeignKey("meal_cycles.id", ondelete="CASCADE"), nullable=False)
     label: Mapped[str] = mapped_column(String(80), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    serving_time: Mapped[time | None] = mapped_column(Time(), nullable=True)
 
     cycle: Mapped[MealCycle] = relationship(back_populates="slot_definitions")
     slots: Mapped[list[CycleSlot]] = relationship(back_populates="slot_definition")
@@ -74,6 +75,24 @@ class CycleSlot(Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
+
+    @property
+    def scheduled_date(self) -> date | None:
+        if self.cycle.start_date is None:
+            return None
+        return self.cycle.start_date + timedelta(days=self.day_number - 1)
+
+    @property
+    def serving_time(self) -> time | None:
+        return self.slot_definition.serving_time
+
+    @property
+    def scheduled_datetime(self) -> datetime | None:
+        scheduled_date = self.scheduled_date
+        serving_time = self.serving_time
+        if scheduled_date is None or serving_time is None:
+            return None
+        return datetime.combine(scheduled_date, serving_time)
 
     __table_args__ = (
         UniqueConstraint("cycle_id", "day_number", "slot_definition_id", name="uq_cycle_slots_day_definition"),

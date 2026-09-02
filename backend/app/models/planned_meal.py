@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime, time
 from decimal import Decimal
 
 from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, Numeric, String, Text
@@ -25,6 +26,18 @@ class PlannedMeal(Base):
     snapshot_components: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
 
     cycle_slot = relationship("CycleSlot", back_populates="planned_meal")
+
+    @property
+    def scheduled_date(self) -> date | None:
+        return self.cycle_slot.scheduled_date
+
+    @property
+    def serving_time(self) -> time | None:
+        return self.cycle_slot.serving_time
+
+    @property
+    def scheduled_datetime(self) -> datetime | None:
+        return self.cycle_slot.scheduled_datetime
 
     __table_args__ = (
         CheckConstraint("planned_servings > 0", name="ck_planned_meals_servings_positive"),

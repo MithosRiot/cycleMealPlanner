@@ -1,6 +1,7 @@
 export type MealSlotDefinitionInput = {
   label: string
   sort_order: number
+  serving_time?: string | null
 }
 
 export type MealSlotDefinition = MealSlotDefinitionInput & {
@@ -104,6 +105,9 @@ export type PlannedMeal = {
   snapshot_description: string | null
   snapshot_meal_types: string
   snapshot_components: string
+  scheduled_date: string | null
+  serving_time: string | null
+  scheduled_datetime: string | null
 }
 
 export type CycleSlot = {
@@ -112,6 +116,9 @@ export type CycleSlot = {
   slot_definition_id: number
   day_number: number
   sort_order: number
+  scheduled_date: string | null
+  serving_time: string | null
+  scheduled_datetime: string | null
   planned_meal: PlannedMeal | null
 }
 
@@ -137,6 +144,11 @@ export type MealCycle = {
   slots: CycleSlot[]
 }
 
+export type MealCycleScheduleUpdate = {
+  start_date: string | null
+  serving_times: Record<number, string | null>
+}
+
 async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } })
   if (!response.ok) {
@@ -153,6 +165,7 @@ export const fetchExpirationSuggestions = (id: number): Promise<ExpirationSugges
 export const fetchCycleValidation = (id: number): Promise<CycleValidationResponse> => jsonRequest(`/api/meal-cycles/${id}/validate`)
 export const createMealCycle = (input: MealCycleInput): Promise<MealCycle> => jsonRequest('/api/meal-cycles', { method: 'POST', body: JSON.stringify(input) })
 export const updateMealCycle = (id: number, input: MealCycleInput): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'PUT', body: JSON.stringify(input) })
+export const updateMealCycleSchedule = (id: number, input: MealCycleScheduleUpdate): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/schedule`, { method: 'PUT', body: JSON.stringify(input) })
 export const updatePopulationRules = (id: number, input: PopulationRules): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/population-rules`, { method: 'PUT', body: JSON.stringify(input) })
 export const updateSmartPlanningPreferences = (id: number, input: SmartPlanningPreferences): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/smart-preferences`, { method: 'PUT', body: JSON.stringify(input) })
 export const deleteMealCycle = (id: number): Promise<void> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'DELETE' })

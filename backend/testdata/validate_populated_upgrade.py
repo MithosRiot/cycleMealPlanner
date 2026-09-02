@@ -26,7 +26,10 @@ def main() -> None:
     os.environ["CYCLE_MEAL_PLANNER_DATABASE_URL"] = database_url
     os.environ["CYCLE_MEAL_PLANNER_ENV"] = "migration-upgrade-test"
 
-    # Build exactly the schema a user would have before this feature.
+    # Build exactly the schema a user would have before the staple migration,
+    # then populate both an Ingredient FK relationship and a Meal Cycle slot.
+    # Upgrading to head therefore validates the historical 0020 -> 0021 path
+    # plus the new 0021 -> 0022 scheduling migration on populated SQLite.
     command.upgrade(alembic_config(), "0020_inventory_reservations")
 
     engine = create_engine(database_url)
@@ -37,8 +40,6 @@ def main() -> None:
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
-    # A child row referencing ingredients is enough to reproduce the SQLite
-    # failure caused by batch table recreation under foreign-key enforcement.
     with engine.begin() as connection:
         connection.execute(text("""
             INSERT INTO ingredients
@@ -49,6 +50,23 @@ def main() -> None:
             INSERT INTO ingredient_aliases
             (id, ingredient_id, alias, normalized_alias)
             VALUES (9001, 9001, 'Migration Alias', 'migration alias')
+        """))
+        connection.execute(text("""
+            INSERT INTO meal_cycles
+            (id, household_id, name, normalized_name, duration_days, status, start_date, notes,
+             population_rules, smart_preferences)
+            VALUES (9001, 1, 'Migration Cycle', 'migration cycle', 1, 'DRAFT', '2026-09-01',
+                    'must survive upgrade', '{}', '{}')
+        """))
+        connection.execute(text("""
+            INSERT INTO meal_slot_definitions
+            (id, cycle_id, label, sort_order)
+            VALUES (9001, 9001, 'Dinner', 0)
+        """))
+        connection.execute(text("""
+            INSERT INTO cycle_slots
+            (id, cycle_id, slot_definition_id, day_number, sort_order)
+            VALUES (9001, 9001, 9001, 1, 0)
         """))
 
     command.upgrade(alembic_config(), "head")
@@ -62,18 +80,32 @@ def main() -> None:
         alias_count = connection.execute(
             text("SELECT COUNT(*) FROM ingredient_aliases WHERE ingredient_id=9001")
         ).scalar_one()
+        slot = connection.execute(text("""
+            SELECT label, serving_time
+            FROM meal_slot_definitions WHERE id=9001
+        """)).one()
+        cycle_slot_count = connection.execute(
+            text("SELECT COUNT(*) FROM cycle_slots WHERE id=9001 AND slot_definition_id=9001")
+        ).scalar_one()
+        columns = {
+            item[1] for item in connection.execute(text("PRAGMA table_info(meal_slot_definitions)"))
+        }
 
-    assert version == "0021_staple_stock_rules"
+    assert version == "0022_cycle_scheduling"
     assert row.name == "Migration Test Ingredient"
     assert bool(row.staple_enabled) is False
     assert row.staple_minimum is None
     assert row.staple_target is None
     assert row.staple_unit_id is None
     assert alias_count == 1
+    assert "serving_time" in columns
+    assert slot.label == "Dinner"
+    assert slot.serving_time is None
+    assert cycle_slot_count == 1
 
     engine.dispose()
     DB_PATH.unlink(missing_ok=True)
-    print("Populated SQLite upgrade 0020 -> 0021 succeeded and preserved referenced Ingredient data.")
+    print("Populated SQLite upgrade 0020 -> 0022 succeeded and preserved Ingredient/Cycle data.")
 
 
 if __name__ == "__main__":

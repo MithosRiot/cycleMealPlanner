@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { fetchHealth } from './api'
+import CycleSchedulingPanel from './CycleSchedulingPanel'
 import CycleValidationPage from './CycleValidationPage'
 import IngredientsPage from './IngredientsPage'
 import './InventoryPage.css'
@@ -22,6 +23,10 @@ function PlaceholderPage({ title }: { title: string }) {
   return <section className="page-card"><p className="eyebrow">Cycle Meal Planner</p><h1>{title}</h1><p>This section is ready for its Milestone implementation.</p></section>
 }
 
+function MealPlanPageWithScheduling() {
+  return <><MealPlanWithReservationsPage /><CycleSchedulingPanel /></>
+}
+
 function App() {
   const health = useQuery({ queryKey: ['health'], queryFn: fetchHealth, retry: 1, refetchInterval: 30_000 })
   const backendStatus = health.isPending ? 'Connecting…' : health.isError ? 'Backend unavailable' : 'Backend connected'
@@ -39,7 +44,7 @@ function App() {
       <Route path="/meals/new" element={<MealEditorPage />} />
       <Route path="/meals/:mealId" element={<MealDetailPage />} />
       <Route path="/meals/:mealId/edit" element={<MealEditorPage />} />
-      <Route path="/meal-plan" element={<MealPlanWithReservationsPage />} />
+      <Route path="/meal-plan" element={<MealPlanPageWithScheduling />} />
       <Route path="/meal-plan/validation" element={<CycleValidationPage />} />
       <Route path="/inventory" element={<InventoryWithReservationsPage />} />
       <Route path="/shopping" element={<ShoppingPage />} />
