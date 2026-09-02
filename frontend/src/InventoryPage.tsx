@@ -7,9 +7,11 @@ import {
   fetchIngredients,
   fetchInventory,
   fetchInventoryLocations,
+  fetchInventoryLot,
   fetchMeasurementUnits,
   InventoryLot,
   removeInventory,
+  splitInventory,
   transferInventory,
 } from './api'
 
@@ -40,7 +42,11 @@ export default function InventoryPage() {
     }),
   })
 
-  const refresh = async () => queryClient.invalidateQueries({ queryKey: ['inventory'] })
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['inventory'] })
+    await queryClient.invalidateQueries({ queryKey: ['inventory-availability'] })
+    await queryClient.invalidateQueries({ queryKey: ['allocation-preview'] })
+  }
   const createLot = useMutation({
     mutationFn: createInventoryLot,
     onSuccess: async () => {
@@ -60,6 +66,10 @@ export default function InventoryPage() {
   })
   const move = useMutation({
     mutationFn: ({ lot, target }: { lot: InventoryLot; target: number }) => transferInventory(lot.id, target),
+    onSuccess: refresh,
+  })
+  const split = useMutation({
+    mutationFn: ({ lot, value, target, note }: { lot: InventoryLot; value: string; target: number; note: string }) => splitInventory(lot.id, value, target, note),
     onSuccess: refresh,
   })
 
@@ -96,7 +106,7 @@ export default function InventoryPage() {
     return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))
   }, [lots.data, viewMode, ingredientNames, locationNames])
 
-  const error = createLot.error ?? adjust.error ?? move.error
+  const error = createLot.error ?? adjust.error ?? move.error ?? split.error
 
   return (
     <section className="inventory-page">
@@ -164,9 +174,12 @@ export default function InventoryPage() {
                   ingredientName={ingredientNames.get(lot.ingredient_id) ?? 'Unknown'}
                   locationName={locationNames.get(lot.location_id) ?? 'Unknown'}
                   unitCode={unitCodes.get(lot.unit_id) ?? ''}
+                  unitCodes={unitCodes}
+                  locationNames={locationNames}
                   locations={locations.data ?? []}
                   onAdjust={(kind, value) => adjust.mutate({ lot, kind, value })}
                   onMove={(target) => move.mutate({ lot, target })}
+                  onSplit={(value, target, note) => split.mutate({ lot, value, target, note })}
                 />
               ))}
             </div>
@@ -178,21 +191,30 @@ export default function InventoryPage() {
   )
 }
 
-function InventoryLotRow({ lot, ingredientName, locationName, unitCode, locations, onAdjust, onMove }: {
+function InventoryLotRow({ lot, ingredientName, locationName, unitCode, unitCodes, locationNames, locations, onAdjust, onMove, onSplit }: {
   lot: InventoryLot
   ingredientName: string
   locationName: string
   unitCode: string
+  unitCodes: Map<number, string>
+  locationNames: Map<number, string>
   locations: { id: number; name: string }[]
   onAdjust: (kind: 'add' | 'remove' | 'correct', value: string) => void
   onMove: (target: number) => void
+  onSplit: (value: string, target: number, note: string) => void
 }) {
   const [value, setValue] = useState('')
   const [target, setTarget] = useState(String(lot.location_id))
+  const [splitValue, setSplitValue] = useState('')
+  const [splitTarget, setSplitTarget] = useState(String(lot.location_id))
+  const [splitNote, setSplitNote] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
+  const detail = useQuery({ queryKey: ['inventory-lot', lot.id], queryFn: () => fetchInventoryLot(lot.id), enabled: showHistory })
+
   return (
     <div className="inventory-lot-row">
-      <div>
-        <strong>{ingredientName}</strong>
+      <div className="inventory-lot-summary">
+        <strong>{ingredientName} · Lot #{lot.id}</strong>
         <div className="muted-line">{lot.quantity} {unitCode} · {locationName}{lot.expiration_date ? ` · expires ${lot.expiration_date}` : ''}</div>
         {lot.notes && <div className="muted-line">{lot.notes}</div>}
       </div>
@@ -208,6 +230,31 @@ function InventoryLotRow({ lot, ingredientName, locationName, unitCode, location
         </select>
         <button type="button" className="button-secondary" disabled={Number(target) === lot.location_id} onClick={() => onMove(Number(target))}>Move</button>
       </div>
+      <div className="inventory-split-actions">
+        <input type="number" min="0.000001" max={lot.quantity} step="any" placeholder="Split qty" value={splitValue} onChange={(e) => setSplitValue(e.target.value)} />
+        <select value={splitTarget} onChange={(e) => setSplitTarget(e.target.value)}>
+          {locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select>
+        <input placeholder="Split note (optional)" value={splitNote} onChange={(e) => setSplitNote(e.target.value)} />
+        <button type="button" disabled={!splitValue || Number(splitValue) <= 0 || Number(splitValue) >= Number(lot.quantity)} onClick={() => { onSplit(splitValue, Number(splitTarget), splitNote); setSplitValue(''); setSplitNote('') }}>Split lot</button>
+        <button type="button" className="button-secondary" onClick={() => setShowHistory((current) => !current)}>{showHistory ? 'Hide history' : 'History'}</button>
+      </div>
+      {showHistory && (
+        <div className="inventory-history">
+          {detail.isPending && <p className="muted-line">Loading history…</p>}
+          {detail.error instanceof Error && <div className="error-banner">{detail.error.message}</div>}
+          {detail.data?.transactions.map((tx) => (
+            <div className="inventory-history-row" key={tx.id}>
+              <strong>{tx.transaction_type}</strong>
+              <span>{tx.quantity_delta} {unitCodes.get(tx.unit_id) ?? ''}</span>
+              <span>{tx.from_location_id ? locationNames.get(tx.from_location_id) ?? `Location ${tx.from_location_id}` : '—'} → {tx.to_location_id ? locationNames.get(tx.to_location_id) ?? `Location ${tx.to_location_id}` : '—'}</span>
+              <span>{tx.note ?? '—'}</span>
+              <span>{new Date(tx.created_at).toLocaleString()}</span>
+            </div>
+          ))}
+          {detail.data?.transactions.length === 0 && <p className="muted-line">No transactions.</p>}
+        </div>
+      )}
     </div>
   )
 }
