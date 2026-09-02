@@ -41,9 +41,30 @@ def _normalize_slots(payload: MealCycleInput) -> list[MealSlotDefinitionInput]:
     return normalized
 
 
+def _same_cycle_structure(cycle: MealCycle, slot_inputs: list[MealSlotDefinitionInput], duration_days: int) -> bool:
+    if cycle.duration_days != duration_days or len(cycle.slot_definitions) != len(slot_inputs):
+        return False
+    existing = sorted(cycle.slot_definitions, key=lambda item: item.sort_order)
+    return all(
+        current.sort_order == incoming.sort_order and normalize_name(current.label) == normalize_name(incoming.label)
+        for current, incoming in zip(existing, slot_inputs, strict=True)
+    )
+
+
 def _apply_cycle(db: Session, cycle: MealCycle, payload: MealCycleInput) -> None:
     slot_inputs = _normalize_slots(payload)
+    same_structure = bool(cycle.id) and _same_cycle_structure(cycle, slot_inputs, payload.duration_days)
+
     cycle.name = payload.name.strip(); cycle.normalized_name = normalize_name(payload.name); cycle.duration_days = payload.duration_days; cycle.start_date = payload.start_date; cycle.notes = payload.notes; cycle.status = "DRAFT"
+
+    if same_structure:
+        definitions = sorted(cycle.slot_definitions, key=lambda item: item.sort_order)
+        for definition, slot in zip(definitions, slot_inputs, strict=True):
+            definition.label = slot.label
+            definition.sort_order = slot.sort_order
+            definition.serving_time = slot.serving_time
+        return
+
     cycle.slots.clear(); db.flush(); cycle.slot_definitions.clear(); db.flush()
     definitions = [MealSlotDefinition(label=slot.label, sort_order=slot.sort_order, serving_time=slot.serving_time) for slot in slot_inputs]
     cycle.slot_definitions.extend(definitions); db.flush()
