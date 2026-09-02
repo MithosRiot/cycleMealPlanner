@@ -1,3 +1,5 @@
+export type PrepTaskType = 'PREP' | 'THAW' | 'MARINATE' | 'SOAK' | 'PROOF'
+
 export type PrepScheduleTask = {
   planned_meal_id: number
   cycle_slot_id: number
@@ -6,6 +8,7 @@ export type PrepScheduleTask = {
   recipe_id: number
   recipe_name: string
   advance_prep_id: number
+  task_type: PrepTaskType
   title: string
   instructions: string | null
   prep_group_id: number | null
