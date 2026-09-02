@@ -38,6 +38,7 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Expiration-aware lot allocation previews with deterministic expiration/opened/frozen/age/location priority, partial-lot splitting, reservation-aware capacity, cycle use dates, and Meal Plan lot recommendations without mutating Inventory.
 - Partial Inventory lot splitting with inherited metadata, optional destination location, paired immutable provenance transactions, lot-level history inspection, and unchanged Physical / Reserved / Available totals.
 - Ingredient staple minimum/target stock rules with compatible units, zero-stock low-status visibility, reservation-aware Available thresholds, and deterministic Shopping replenishment that combines meal demand with target stock without double-counting Inventory.
+- Draft-cycle scheduling with non-destructive start-date and per-slot serving-time updates, resolved meal dates/times, and Meal Plan schedule editing for activation and advance-prep workflows.
 
 ### Known limitations
 - Exact-lot reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
