@@ -40,6 +40,7 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Ingredient staple minimum/target stock rules with compatible units, zero-stock low-status visibility, reservation-aware Available thresholds, and deterministic Shopping replenishment that combines meal demand with target stock without double-counting Inventory.
 - Draft-cycle scheduling with non-destructive start-date and per-slot serving-time updates, resolved meal dates/times, and Meal Plan schedule editing for activation and advance-prep workflows.
 - Derived real prep schedules that turn Recipe advance-prep definitions into chronological start/end tasks from placed Meal serving dates/times, including prep-group/instruction provenance and unresolved scheduling visibility without mutating planning or Inventory state.
+- Explicit PREP, THAW, MARINATE, SOAK, and PROOF advance-prep task types with safe legacy migration, Recipe classification controls, typed Meal Plan prep schedules, and representative seeded task data.
 
 ### Known limitations
 - Exact-lot reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
