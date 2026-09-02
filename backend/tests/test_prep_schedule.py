@@ -25,22 +25,8 @@ def test_real_prep_schedule_tracks_serving_schedule_without_mutation() -> None:
                 "tag_ids": [],
                 "prep_groups": [{"client_key": "sauce", "name": "Sauce", "sort_order": 0}],
                 "advance_prep": [
-                    {
-                        "title": "Marinate sauce",
-                        "lead_time_minutes": 1440,
-                        "duration_minutes": 30,
-                        "instructions": "Mix and refrigerate.",
-                        "prep_group_key": "sauce",
-                        "sort_order": 0,
-                    },
-                    {
-                        "title": "Set out ingredients",
-                        "lead_time_minutes": 60,
-                        "duration_minutes": None,
-                        "instructions": None,
-                        "prep_group_key": None,
-                        "sort_order": 1,
-                    },
+                    {"title": "Marinate sauce", "lead_time_minutes": 1440, "duration_minutes": 30, "instructions": "Mix and refrigerate.", "prep_group_key": "sauce", "sort_order": 0},
+                    {"title": "Set out ingredients", "lead_time_minutes": 60, "duration_minutes": None, "instructions": None, "prep_group_key": None, "sort_order": 1},
                 ],
                 "ingredients": [],
             },
@@ -56,15 +42,7 @@ def test_real_prep_schedule_tracks_serving_schedule_without_mutation() -> None:
                 "favorite": False,
                 "meal_types": ["DINNER"],
                 "tag_ids": [],
-                "recipes": [
-                    {
-                        "recipe_id": recipe["id"],
-                        "serving_multiplier": "1",
-                        "default_servings": "4",
-                        "sort_order": 0,
-                        "notes": None,
-                    }
-                ],
+                "recipes": [{"recipe_id": recipe["id"], "serving_multiplier": "1", "default_servings": "4", "sort_order": 0, "notes": None}],
             },
         )
         assert meal_response.status_code == 201
@@ -77,9 +55,7 @@ def test_real_prep_schedule_tracks_serving_schedule_without_mutation() -> None:
                 "duration_days": 2,
                 "start_date": "2026-09-10",
                 "notes": None,
-                "slot_definitions": [
-                    {"label": "Dinner", "sort_order": 0, "serving_time": "18:30:00"}
-                ],
+                "slot_definitions": [{"label": "Dinner", "sort_order": 0, "serving_time": "18:30:00"}],
             },
         )
         assert cycle_response.status_code == 201
@@ -90,7 +66,7 @@ def test_real_prep_schedule_tracks_serving_schedule_without_mutation() -> None:
             f"/api/meal-cycles/{cycle['id']}/slots/{slot['id']}/planned-meal",
             json={"meal_id": meal["id"]},
         )
-        assert placed_response.status_code == 200
+        assert placed_response.status_code == 201
         planned_meal_id = placed_response.json()["id"]
 
         schedule = client.get(f"/api/meal-cycles/{cycle['id']}/prep-schedule")
