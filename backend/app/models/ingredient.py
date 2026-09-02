@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
+from decimal import Decimal
+
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -17,12 +19,24 @@ class Ingredient(Base):
     preferred_unit_id: Mapped[int | None] = mapped_column(ForeignKey("measurement_units.id", ondelete="SET NULL"))
     default_location_id: Mapped[int | None] = mapped_column(ForeignKey("inventory_locations.id", ondelete="SET NULL"))
     perishable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    staple_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    staple_minimum: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
+    staple_target: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
+    staple_unit_id: Mapped[int | None] = mapped_column(ForeignKey("measurement_units.id", ondelete="SET NULL"))
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     notes: Mapped[str | None] = mapped_column(Text)
 
     aliases: Mapped[list[IngredientAlias]] = relationship(back_populates="ingredient", cascade="all, delete-orphan")
 
-    __table_args__ = (UniqueConstraint("household_id", "normalized_name", name="uq_ingredients_household_normalized_name"),)
+    __table_args__ = (
+        UniqueConstraint("household_id", "normalized_name", name="uq_ingredients_household_normalized_name"),
+        CheckConstraint("staple_minimum IS NULL OR staple_minimum >= 0", name="ck_ingredients_staple_minimum_nonnegative"),
+        CheckConstraint("staple_target IS NULL OR staple_target >= 0", name="ck_ingredients_staple_target_nonnegative"),
+        CheckConstraint(
+            "staple_minimum IS NULL OR staple_target IS NULL OR staple_target >= staple_minimum",
+            name="ck_ingredients_staple_target_gte_minimum",
+        ),
+    )
 
 
 class IngredientAlias(Base):

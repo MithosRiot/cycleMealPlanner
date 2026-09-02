@@ -158,6 +158,16 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
                 if ingredient_row.get("manual_review"):
                     manual_review_groups.add(key)
 
+    for ingredient in ingredients.values():
+        if not ingredient.active or not ingredient.staple_enabled or ingredient.staple_unit_id is None:
+            continue
+        staple_unit = units.get(ingredient.staple_unit_id)
+        if staple_unit is None or ingredient.staple_minimum is None or ingredient.staple_target is None:
+            continue
+        key = (ingredient.id, staple_unit.unit_family)
+        families_by_ingredient[ingredient.id].add(staple_unit.unit_family)
+        requirements.setdefault(key, [])
+
     seen_keys: set[tuple[int, str]] = set()
     for key in sorted(requirements):
         seen_keys.add(key)
@@ -167,7 +177,15 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
             raise HTTPException(status_code=409, detail=f"Ingredient {ingredient_id} no longer exists")
         rows = requirements[key]
         preferred = units.get(ingredient.preferred_unit_id) if ingredient.preferred_unit_id else None
-        target_unit = preferred if preferred and preferred.unit_family == family else units[min(row["unit_id"] for row in rows)]
+        staple_unit = units.get(ingredient.staple_unit_id) if ingredient.staple_unit_id else None
+        if preferred and preferred.unit_family == family:
+            target_unit = preferred
+        elif rows:
+            target_unit = units[min(row["unit_id"] for row in rows)]
+        elif staple_unit and staple_unit.unit_family == family:
+            target_unit = staple_unit
+        else:
+            continue
 
         required = Decimal("0")
         source_trace = []
@@ -194,8 +212,29 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
             exclude_cycle_id=cycle.id,
             units=units,
         )
-        shortage = max(required - available, Decimal("0"))
+        meal_shortage = max(required - available, Decimal("0"))
+        generated = meal_shortage
         warnings = []
+
+        if ingredient.staple_enabled and staple_unit is not None and staple_unit.unit_family == family and ingredient.staple_minimum is not None and ingredient.staple_target is not None:
+            staple_minimum = convert_quantity(Decimal(ingredient.staple_minimum), staple_unit, target_unit)
+            staple_target = convert_quantity(Decimal(ingredient.staple_target), staple_unit, target_unit)
+            projected_free = max(available - required, Decimal("0"))
+            if projected_free < staple_minimum:
+                generated = max(required + staple_target - available, Decimal("0"))
+                warnings.append(
+                    f"Staple stock would be {projected_free} {target_unit.code}, below minimum {staple_minimum}; replenish toward target {staple_target}."
+                )
+                source_trace.append(
+                    {
+                        "source": "STAPLE",
+                        "minimum": str(staple_minimum),
+                        "target": str(staple_target),
+                        "projected_free": str(projected_free),
+                        "unit_id": target_unit.id,
+                    }
+                )
+
         if len(families_by_ingredient[ingredient_id]) > 1:
             warnings.append("Ingredient requirements use incompatible unit families and are kept separate.")
         if key in manual_review_groups:
@@ -219,7 +258,7 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
         item.unit_id = target_unit.id
         item.required_quantity = required
         item.inventory_quantity = available
-        item.generated_quantity = shortage
+        item.generated_quantity = generated
         item.source_trace = json.dumps(source_trace, sort_keys=True)
         item.warning = " ".join(warnings) or None
 

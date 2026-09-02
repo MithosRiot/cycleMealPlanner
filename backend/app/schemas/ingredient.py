@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -14,6 +16,10 @@ class IngredientCreate(BaseModel):
     preferred_unit_id: int | None = None
     default_location_id: int | None = None
     perishable: bool = False
+    staple_enabled: bool = False
+    staple_minimum: Decimal | None = Field(default=None, ge=0)
+    staple_target: Decimal | None = Field(default=None, ge=0)
+    staple_unit_id: int | None = None
     notes: str | None = None
     aliases: list[str] = Field(default_factory=list)
 
@@ -32,6 +38,10 @@ class IngredientRead(BaseModel):
     preferred_unit_id: int | None
     default_location_id: int | None
     perishable: bool
+    staple_enabled: bool
+    staple_minimum: Decimal | None
+    staple_target: Decimal | None
+    staple_unit_id: int | None
     active: bool
     notes: str | None
     aliases: list[IngredientAliasRead]
