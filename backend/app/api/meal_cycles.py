@@ -62,7 +62,8 @@ def _apply_cycle(db: Session, cycle: MealCycle, payload: MealCycleInput) -> None
         for definition, slot in zip(definitions, slot_inputs, strict=True):
             definition.label = slot.label
             definition.sort_order = slot.sort_order
-            definition.serving_time = slot.serving_time
+            if slot.serving_time is not None:
+                definition.serving_time = slot.serving_time
         return
 
     cycle.slots.clear(); db.flush(); cycle.slot_definitions.clear(); db.flush()
