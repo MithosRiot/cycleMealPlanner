@@ -62,13 +62,15 @@ function InventoryAvailabilityPanel() {
     return { minimum, target, low: available < minimum }
   }
 
+  function compact(value: number) { return Number(value.toFixed(6)) }
+
   return <section className="settings-card" style={{ marginTop: 20 }}>
     <div className="section-heading"><div><h2>Inventory availability</h2><p className="muted-line">Reservations do not reduce physical lots. Available = Physical − Active reservations. Staple rules compare against Available.</p></div><button type="button" className="button-secondary" disabled={availability.isFetching} onClick={() => availability.refetch()}>Refresh</button></div>
     {availability.error instanceof Error && <div className="error-banner">{availability.error.message}</div>}
     <div className="recipe-ingredient-list">{availability.data?.map((row) => {
       const ingredient = ingredientMap.get(row.ingredient_id)
       const staple = stapleStatus(row)
-      return <div className="ingredient-row" key={`${row.ingredient_id}-${row.unit_family}`}><strong>{ingredient?.name ?? `Ingredient ${row.ingredient_id}`}</strong><div className="ingredient-meta"><span>Physical {row.physical_quantity} {row.unit_code}</span><span>Reserved {row.reserved_quantity} {row.unit_code}</span><span>Available {row.available_quantity} {row.unit_code}</span>{Number(row.shortage_quantity) > 0 && <span className="warning-text">Short {row.shortage_quantity} {row.unit_code}</span>}{staple && <span className={staple.low ? 'warning-text' : ''}>Staple min {staple.minimum:g} · target {staple.target:g} {row.unit_code}{staple.low ? ' · LOW' : ''}</span>}</div></div>
+      return <div className="ingredient-row" key={`${row.ingredient_id}-${row.unit_family}`}><strong>{ingredient?.name ?? `Ingredient ${row.ingredient_id}`}</strong><div className="ingredient-meta"><span>Physical {row.physical_quantity} {row.unit_code}</span><span>Reserved {row.reserved_quantity} {row.unit_code}</span><span>Available {row.available_quantity} {row.unit_code}</span>{Number(row.shortage_quantity) > 0 && <span className="warning-text">Short {row.shortage_quantity} {row.unit_code}</span>}{staple && <span className={staple.low ? 'warning-text' : ''}>Staple min {compact(staple.minimum)} · target {compact(staple.target)} {row.unit_code}{staple.low ? ' · LOW' : ''}</span>}</div></div>
     })}</div>
     {!availability.isPending && availability.data?.length === 0 && <p className="muted-line">No physical Inventory or active reservations yet.</p>}
   </section>
