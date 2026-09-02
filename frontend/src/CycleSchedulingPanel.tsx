@@ -29,6 +29,7 @@ export default function CycleSchedulingPanel() {
       await queryClient.invalidateQueries({ queryKey: ['meal-cycle', updated.id] })
       await queryClient.invalidateQueries({ queryKey: ['meal-cycles'] })
       await queryClient.invalidateQueries({ queryKey: ['expiration-suggestions', updated.id] })
+      await queryClient.invalidateQueries({ queryKey: ['prep-schedule', updated.id] })
     },
   })
 
