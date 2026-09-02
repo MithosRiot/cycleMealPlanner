@@ -71,6 +71,15 @@ def _place_requirement(client: TestClient, cycle: dict, ingredient_id: int, unit
     slot_id = cycle["slots"][0]["id"]
     placed = client.post(f"/api/meal-cycles/{cycle['id']}/slots/{slot_id}/planned-meal", json={"meal_id": meal.json()["id"]})
     assert placed.status_code == 201
+    planning = client.put(
+        f"/api/meal-cycles/{cycle['id']}/slots/{slot_id}/planned-meal/planning",
+        json={
+            "planned_servings": "1",
+            "planned_leftover_servings": "0",
+            "component_serving_overrides": {},
+        },
+    )
+    assert planning.status_code == 200
 
 
 def test_staple_rules_validate_and_replenish_without_double_counting_meal_requirements() -> None:
