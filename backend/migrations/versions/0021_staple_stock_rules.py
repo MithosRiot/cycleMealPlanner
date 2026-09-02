@@ -54,15 +54,24 @@ def upgrade() -> None:
     if "staple_target" not in ingredient_columns:
         op.add_column("ingredients", sa.Column("staple_target", sa.Numeric(14, 6), nullable=True))
     if "staple_unit_id" not in ingredient_columns:
-        op.add_column(
-            "ingredients",
-            sa.Column(
-                "staple_unit_id",
-                sa.Integer(),
-                sa.ForeignKey("measurement_units.id", ondelete="SET NULL"),
-                nullable=True,
-            ),
-        )
+        if sqlite:
+            # Alembic normally emits the FK as a second ALTER TABLE statement,
+            # which SQLite cannot do. SQLite can add the nullable REFERENCES
+            # clause atomically as part of ADD COLUMN.
+            op.execute(
+                "ALTER TABLE ingredients ADD COLUMN staple_unit_id INTEGER "
+                "REFERENCES measurement_units(id) ON DELETE SET NULL"
+            )
+        else:
+            op.add_column(
+                "ingredients",
+                sa.Column(
+                    "staple_unit_id",
+                    sa.Integer(),
+                    sa.ForeignKey("measurement_units.id", ondelete="SET NULL"),
+                    nullable=True,
+                ),
+            )
 
     # SQLite cannot add table-level CHECK constraints without rebuilding the
     # referenced table. API validation remains authoritative there. Databases
