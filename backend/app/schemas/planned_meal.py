@@ -1,3 +1,4 @@
+from datetime import date, datetime, time
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -36,6 +37,9 @@ class PlannedMealRead(BaseModel):
     snapshot_description: str | None
     snapshot_meal_types: str
     snapshot_components: str
+    scheduled_date: date | None = None
+    serving_time: time | None = None
+    scheduled_datetime: datetime | None = None
 
 
 class RandomFillResult(BaseModel):
