@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database.session import get_db
 from app.models.meal_cycle import CycleSlot, MealCycle
-from app.models.recipe import Recipe, RecipeAdvancePrep, RecipePrepGroup
+from app.models.recipe import Recipe
 from app.schemas.prep_schedule import PrepScheduleRead, PrepScheduleTaskRead
 
 router = APIRouter(prefix="/api/meal-cycles", tags=["prep-schedule"])
@@ -69,6 +69,7 @@ def get_prep_schedule(cycle_id: int, db: Session = Depends(get_db)) -> PrepSched
                         recipe_id=recipe.id,
                         recipe_name=recipe.name,
                         advance_prep_id=prep.id,
+                        task_type=prep.task_type,
                         title=prep.title,
                         instructions=prep.instructions,
                         prep_group_id=prep.prep_group_id,
