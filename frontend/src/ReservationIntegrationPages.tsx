@@ -1,12 +1,19 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { fetchCycleAllocationPreview } from './allocationApi'
-import { fetchIngredients } from './api'
+import { fetchIngredients, fetchMeasurementUnits, Ingredient } from './api'
 import InventoryPage from './InventoryPage'
 import MealPlanPage from './MealPlanPage'
 import { fetchMealCycles } from './mealCyclesApi'
 import ReservationPanel from './ReservationPanel'
 import { fetchInventoryAvailability } from './reservationsApi'
+
+type StapleIngredient = Ingredient & {
+  staple_enabled: boolean
+  staple_minimum: string | null
+  staple_target: string | null
+  staple_unit_id: number | null
+}
 
 function CycleReservationPanel() {
   const cycles = useQuery({ queryKey: ['meal-cycles'], queryFn: fetchMealCycles })
@@ -22,11 +29,7 @@ function CycleAllocationPanel() {
   const cycles = useQuery({ queryKey: ['meal-cycles'], queryFn: fetchMealCycles })
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const effectiveId = selectedId ?? cycles.data?.[0]?.id ?? null
-  const preview = useQuery({
-    queryKey: ['cycle-allocation-preview', effectiveId],
-    queryFn: () => fetchCycleAllocationPreview(effectiveId as number),
-    enabled: effectiveId !== null,
-  })
+  const preview = useQuery({ queryKey: ['cycle-allocation-preview', effectiveId], queryFn: () => fetchCycleAllocationPreview(effectiveId as number), enabled: effectiveId !== null })
   return <section className="panel" style={{ marginTop: 20 }}>
     <div className="section-heading"><div><h2>Allocation preview</h2><p className="planning-note">Shows which lots should be used first. This preview does not change Inventory.</p></div><div className="header-actions"><select value={effectiveId ?? ''} onChange={(event) => setSelectedId(event.target.value ? Number(event.target.value) : null)}><option value="">Select cycle</option>{cycles.data?.map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.name}</option>)}</select><button type="button" className="button-secondary" disabled={preview.isFetching || effectiveId === null} onClick={() => preview.refetch()}>Refresh</button></div></div>
     {preview.error instanceof Error && <div className="error-banner">{preview.error.message}</div>}
@@ -41,13 +44,32 @@ function CycleAllocationPanel() {
 }
 
 function InventoryAvailabilityPanel() {
-  const ingredients = useQuery({ queryKey: ['ingredients', 'reservation-availability'], queryFn: () => fetchIngredients() })
+  const ingredients = useQuery({ queryKey: ['ingredients', 'reservation-availability'], queryFn: () => fetchIngredients() as Promise<StapleIngredient[]> })
+  const units = useQuery({ queryKey: ['measurement-units', 'staple-availability'], queryFn: fetchMeasurementUnits })
   const availability = useQuery({ queryKey: ['inventory-availability'], queryFn: fetchInventoryAvailability })
-  const names = useMemo(() => new Map((ingredients.data ?? []).map((item) => [item.id, item.name])), [ingredients.data])
+  const ingredientMap = useMemo(() => new Map((ingredients.data ?? []).map((item) => [item.id, item])), [ingredients.data])
+  const unitMap = useMemo(() => new Map((units.data ?? []).map((item) => [item.id, item])), [units.data])
+
+  function stapleStatus(row: { ingredient_id: number; unit_family: string; unit_id: number; available_quantity: string }) {
+    const ingredient = ingredientMap.get(row.ingredient_id)
+    if (!ingredient?.staple_enabled || ingredient.staple_minimum === null || ingredient.staple_target === null || ingredient.staple_unit_id === null) return null
+    const stapleUnit = unitMap.get(ingredient.staple_unit_id)
+    const rowUnit = unitMap.get(row.unit_id)
+    if (!stapleUnit || !rowUnit || stapleUnit.unit_family !== row.unit_family || rowUnit.unit_family !== row.unit_family) return null
+    const minimum = Number(ingredient.staple_minimum) * Number(stapleUnit.base_multiplier) / Number(rowUnit.base_multiplier)
+    const target = Number(ingredient.staple_target) * Number(stapleUnit.base_multiplier) / Number(rowUnit.base_multiplier)
+    const available = Number(row.available_quantity)
+    return { minimum, target, low: available < minimum }
+  }
+
   return <section className="settings-card" style={{ marginTop: 20 }}>
-    <div className="section-heading"><div><h2>Inventory availability</h2><p className="muted-line">Reservations do not reduce physical lots. Available = Physical − Active reservations.</p></div><button type="button" className="button-secondary" disabled={availability.isFetching} onClick={() => availability.refetch()}>Refresh</button></div>
+    <div className="section-heading"><div><h2>Inventory availability</h2><p className="muted-line">Reservations do not reduce physical lots. Available = Physical − Active reservations. Staple rules compare against Available.</p></div><button type="button" className="button-secondary" disabled={availability.isFetching} onClick={() => availability.refetch()}>Refresh</button></div>
     {availability.error instanceof Error && <div className="error-banner">{availability.error.message}</div>}
-    <div className="recipe-ingredient-list">{availability.data?.map((row) => <div className="ingredient-row" key={`${row.ingredient_id}-${row.unit_family}`}><strong>{names.get(row.ingredient_id) ?? `Ingredient ${row.ingredient_id}`}</strong><div className="ingredient-meta"><span>Physical {row.physical_quantity} {row.unit_code}</span><span>Reserved {row.reserved_quantity} {row.unit_code}</span><span>Available {row.available_quantity} {row.unit_code}</span>{Number(row.shortage_quantity) > 0 && <span className="warning-text">Short {row.shortage_quantity} {row.unit_code}</span>}</div></div>)}</div>
+    <div className="recipe-ingredient-list">{availability.data?.map((row) => {
+      const ingredient = ingredientMap.get(row.ingredient_id)
+      const staple = stapleStatus(row)
+      return <div className="ingredient-row" key={`${row.ingredient_id}-${row.unit_family}`}><strong>{ingredient?.name ?? `Ingredient ${row.ingredient_id}`}</strong><div className="ingredient-meta"><span>Physical {row.physical_quantity} {row.unit_code}</span><span>Reserved {row.reserved_quantity} {row.unit_code}</span><span>Available {row.available_quantity} {row.unit_code}</span>{Number(row.shortage_quantity) > 0 && <span className="warning-text">Short {row.shortage_quantity} {row.unit_code}</span>}{staple && <span className={staple.low ? 'warning-text' : ''}>Staple min {staple.minimum:g} · target {staple.target:g} {row.unit_code}{staple.low ? ' · LOW' : ''}</span>}</div></div>
+    })}</div>
     {!availability.isPending && availability.data?.length === 0 && <p className="muted-line">No physical Inventory or active reservations yet.</p>}
   </section>
 }
