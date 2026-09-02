@@ -7,6 +7,7 @@ import IngredientsPage from './IngredientsPage'
 import './InventoryPage.css'
 import { MealDetailPage, MealEditorPage, MealsPage } from './MealPages'
 import './MealPages.css'
+import PrepSchedulePanel from './PrepSchedulePanel'
 import { RecipeEditorPage, RecipesPage } from './RecipePages'
 import { RecipeDetailWithAdvancedPage, RecipeEditorWithAdvancedPage } from './RecipeOutputPages'
 import { InventoryWithReservationsPage, MealPlanWithReservationsPage } from './ReservationIntegrationPages'
@@ -24,7 +25,7 @@ function PlaceholderPage({ title }: { title: string }) {
 }
 
 function MealPlanPageWithScheduling() {
-  return <><MealPlanWithReservationsPage /><CycleSchedulingPanel /></>
+  return <><MealPlanWithReservationsPage /><CycleSchedulingPanel /><PrepSchedulePanel /></>
 }
 
 function App() {
