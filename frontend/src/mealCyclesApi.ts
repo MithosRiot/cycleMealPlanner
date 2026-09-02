@@ -105,6 +105,9 @@ export type PlannedMeal = {
   snapshot_description: string | null
   snapshot_meal_types: string
   snapshot_components: string
+  scheduled_date: string | null
+  serving_time: string | null
+  scheduled_datetime: string | null
 }
 
 export type CycleSlot = {
