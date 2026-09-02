@@ -26,10 +26,8 @@ def main() -> None:
     os.environ["CYCLE_MEAL_PLANNER_DATABASE_URL"] = database_url
     os.environ["CYCLE_MEAL_PLANNER_ENV"] = "migration-upgrade-test"
 
-    # Build exactly the schema a user would have before the staple migration,
-    # then populate both an Ingredient FK relationship and a Meal Cycle slot.
-    # Upgrading to head therefore validates the historical 0020 -> 0021 path
-    # plus the new 0021 -> 0022 scheduling migration on populated SQLite.
+    # Build exactly the populated schema that existed before the later v0.4/v0.5
+    # migrations. This validates SQLite-safe upgrades through the current head.
     command.upgrade(alembic_config(), "0020_inventory_reservations")
 
     engine = create_engine(database_url)
@@ -50,6 +48,16 @@ def main() -> None:
             INSERT INTO ingredient_aliases
             (id, ingredient_id, alias, normalized_alias)
             VALUES (9001, 9001, 'Migration Alias', 'migration alias')
+        """))
+        connection.execute(text("""
+            INSERT INTO recipes
+            (id, household_id, name, normalized_name, base_servings, serving_unit, favorite, active)
+            VALUES (9001, 1, 'Migration Recipe', 'migration recipe', 4, 'servings', 0, 1)
+        """))
+        connection.execute(text("""
+            INSERT INTO recipe_advance_prep
+            (id, recipe_id, prep_group_id, title, lead_time_minutes, duration_minutes, instructions, sort_order)
+            VALUES (9001, 9001, NULL, 'Legacy prep task', 60, 10, 'must become PREP', 0)
         """))
         connection.execute(text("""
             INSERT INTO meal_cycles
@@ -77,35 +85,31 @@ def main() -> None:
             SELECT name, staple_enabled, staple_minimum, staple_target, staple_unit_id
             FROM ingredients WHERE id=9001
         """)).one()
-        alias_count = connection.execute(
-            text("SELECT COUNT(*) FROM ingredient_aliases WHERE ingredient_id=9001")
-        ).scalar_one()
-        slot = connection.execute(text("""
-            SELECT label, serving_time
-            FROM meal_slot_definitions WHERE id=9001
-        """)).one()
-        cycle_slot_count = connection.execute(
-            text("SELECT COUNT(*) FROM cycle_slots WHERE id=9001 AND slot_definition_id=9001")
-        ).scalar_one()
-        columns = {
-            item[1] for item in connection.execute(text("PRAGMA table_info(meal_slot_definitions)"))
-        }
+        alias_count = connection.execute(text("SELECT COUNT(*) FROM ingredient_aliases WHERE ingredient_id=9001")).scalar_one()
+        slot = connection.execute(text("SELECT label, serving_time FROM meal_slot_definitions WHERE id=9001")).one()
+        cycle_slot_count = connection.execute(text("SELECT COUNT(*) FROM cycle_slots WHERE id=9001 AND slot_definition_id=9001")).scalar_one()
+        prep = connection.execute(text("SELECT title, task_type FROM recipe_advance_prep WHERE id=9001")).one()
+        slot_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_slot_definitions)"))}
+        prep_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(recipe_advance_prep)"))}
 
-    assert version == "0022_cycle_scheduling"
+    assert version == "0023_typed_prep_tasks"
     assert row.name == "Migration Test Ingredient"
     assert bool(row.staple_enabled) is False
     assert row.staple_minimum is None
     assert row.staple_target is None
     assert row.staple_unit_id is None
     assert alias_count == 1
-    assert "serving_time" in columns
+    assert "serving_time" in slot_columns
     assert slot.label == "Dinner"
     assert slot.serving_time is None
     assert cycle_slot_count == 1
+    assert "task_type" in prep_columns
+    assert prep.title == "Legacy prep task"
+    assert prep.task_type == "PREP"
 
     engine.dispose()
     DB_PATH.unlink(missing_ok=True)
-    print("Populated SQLite upgrade 0020 -> 0022 succeeded and preserved Ingredient/Cycle data.")
+    print("Populated SQLite upgrade 0020 -> 0023 succeeded and preserved Ingredient/Cycle/Prep data.")
 
 
 if __name__ == "__main__":
