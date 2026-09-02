@@ -157,10 +157,7 @@ def seed(reset: bool = False) -> Path:
                 },
             )
 
-        # Aliases exercise canonical Ingredient lookup and persistence.
         connection.execute(text("INSERT INTO ingredient_aliases (ingredient_id, alias, normalized_alias) VALUES (10,'Yellow Onion','yellow onion'),(16,'Garlic Clove','garlic clove')"))
-
-        # Reusable equipment for recipe requirements.
         connection.execute(text("""
             INSERT INTO equipment (id, household_id, name, normalized_name, category, notes, active) VALUES
             (1,1,'12-inch Skillet','12-inch skillet','COOKWARE','Seeded skillet',1),
@@ -193,8 +190,6 @@ def seed(reset: bool = False) -> Path:
             )
             connection.execute(text("INSERT INTO recipe_meal_types (recipe_id, meal_type) VALUES (:id, :meal_type)"), {"id": recipe_id, "meal_type": meal_type})
             connection.execute(text("INSERT INTO recipe_tags (recipe_id, tag_id) VALUES (:id, :tag_id)"), {"id": recipe_id, "tag_id": 1 if recipe_id in (2, 4, 5, 7, 9, 12) else 4})
-
-            # Every recipe gets a prep group; several get a second group below.
             connection.execute(text("INSERT INTO recipe_prep_groups (id, recipe_id, name, sort_order) VALUES (:id,:recipe,'Main prep',0)"), {"id": recipe_id, "recipe": recipe_id})
             for sort_order, (ingredient_id, quantity, unit_id) in enumerate(recipe_ingredients):
                 connection.execute(
@@ -228,7 +223,6 @@ def seed(reset: bool = False) -> Path:
                 recipe_ingredient_ids[(recipe_id, ingredient_id)] = recipe_ingredient_id
                 recipe_ingredient_id += 1
 
-        # Advance prep, equipment requirements, and an additional prep group.
         connection.execute(text("INSERT INTO recipe_prep_groups (id, recipe_id, name, sort_order) VALUES (101,1,'Rice prep',1)"))
         connection.execute(text("UPDATE recipe_ingredients SET prep_group_id=101 WHERE id=:id"), {"id": recipe_ingredient_ids[(1, 6)]})
         connection.execute(text("""
@@ -241,15 +235,12 @@ def seed(reset: bool = False) -> Path:
             (1,1,1,1,'Brown chicken',0),(2,1,2,1,'Cook rice',1),(3,3,2,1,'Boil pasta',0),(4,6,3,1,'Bake potatoes',0)
         """))
 
-        # Substitution example: Ground Beef -> Chicken Breast on Beef Tacos.
         beef_taco_beef_id = recipe_ingredient_ids[(2, 2)]
         connection.execute(text("""
             INSERT INTO recipe_ingredient_substitutions
             (id, recipe_ingredient_id, substitute_ingredient_id, ratio, preferred, notes, sort_order)
             VALUES (1,:recipe_ingredient,1,1.000000,0,'Use chicken for a lighter taco variant',0)
         """), {"recipe_ingredient": beef_taco_beef_id})
-
-        # Named recipe variant with sparse overrides.
         connection.execute(text("""
             INSERT INTO recipe_variants (id, recipe_id, name, normalized_name, notes, active, sort_order)
             VALUES (1,2,'Chicken Taco Night','chicken taco night','Seeded variant using saved substitution',1,0)
@@ -260,9 +251,6 @@ def seed(reset: bool = False) -> Path:
              preparation, prep_method, prep_size, prep_state, notes)
             VALUES (1,1,:recipe_ingredient,NULL,NULL,1,NULL,NULL,NULL,NULL,'Use substitution #1')
         """), {"recipe_ingredient": beef_taco_beef_id})
-
-        # Recipe output/dependency example: Chicken and Rice produces cooked chicken;
-        # Chicken Quesadillas depends on it.
         connection.execute(text("""
             INSERT INTO recipe_outputs (id, recipe_id, name, normalized_name, quantity, unit_id, notes, active, sort_order)
             VALUES (1,1,'Cooked Chicken','cooked chicken',1.000000,2,'Prepared component for later meals',1,0)
@@ -330,17 +318,22 @@ def seed(reset: bool = False) -> Path:
             "start_date": today,
             "preferences": json.dumps({"repeat_spacing_days": 2, "favorite_weight": 2, "history_penalty": 0.5}),
         })
-        slot_definitions = [(1, "Breakfast", 0), (2, "Lunch", 1), (3, "Dinner", 2)]
-        for definition_id, label, sort_order in slot_definitions:
-            connection.execute(text("INSERT INTO meal_slot_definitions (id, cycle_id, label, sort_order) VALUES (:id,1,:label,:sort_order)"), {"id": definition_id, "label": label, "sort_order": sort_order})
+        slot_definitions = [
+            (1, "Breakfast", 0, "08:00:00"),
+            (2, "Lunch", 1, "12:30:00"),
+            (3, "Dinner", 2, "18:30:00"),
+        ]
+        for definition_id, label, sort_order, serving_time in slot_definitions:
+            connection.execute(
+                text("INSERT INTO meal_slot_definitions (id, cycle_id, label, sort_order, serving_time) VALUES (:id,1,:label,:sort_order,:serving_time)"),
+                {"id": definition_id, "label": label, "sort_order": sort_order, "serving_time": serving_time},
+            )
         slot_id = 1
         for day_number in range(1, 8):
-            for definition_id, _label, sort_order in slot_definitions:
+            for definition_id, _label, sort_order, _serving_time in slot_definitions:
                 connection.execute(text("INSERT INTO cycle_slots (id, cycle_id, slot_definition_id, day_number, sort_order) VALUES (:id,1,:definition,:day,:sort_order)"), {"id": slot_id, "definition": definition_id, "day": day_number, "sort_order": sort_order})
                 slot_id += 1
 
-        # Seed two planned meals with snapshots/scaled requirements so reservations,
-        # Shopping, validation, and allocation previews have immediate data.
         chicken_scaled = [{
             "meal_recipe_id": 1,
             "recipe_id": 1,
@@ -363,7 +356,6 @@ def seed(reset: bool = False) -> Path:
             "components": json.dumps([{"meal_recipe_id": 1, "recipe_id": 1, "recipe_name": "Chicken and Rice", "serving_multiplier": "1", "default_servings": "4"}]),
         })
 
-        # Reservation rows are ingredient-level and do not change physical lots.
         connection.execute(text("""
             INSERT INTO inventory_reservations
             (id, household_id, cycle_id, planned_meal_id, meal_recipe_id, recipe_id,
@@ -379,7 +371,7 @@ def seed(reset: bool = False) -> Path:
         })
 
     print(f"Reset test database: {TEST_DB}" if reset else f"Created test database: {TEST_DB}")
-    print("Seeded: 16 ingredients, 12 recipes, 12 meals, 4 equipment items, 16 inventory lots, advanced recipe data, reservations, and 1 seven-day cycle")
+    print("Seeded: 16 ingredients, 12 recipes, 12 meals, 4 equipment items, 16 inventory lots, advanced recipe data, reservations, scheduled serving times, and 1 seven-day cycle")
     return TEST_DB
 
 
