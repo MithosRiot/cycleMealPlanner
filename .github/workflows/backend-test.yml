@@ -33,3 +33,6 @@ jobs:
 
       - name: Run tests
         run: pytest -q --cov=app --cov-report=term-missing
+
+      - name: Validate seeded test database
+        run: python testdata/seed_test_db.py --reset
