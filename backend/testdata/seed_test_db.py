@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from datetime import date, timedelta
 from pathlib import Path
@@ -20,11 +21,13 @@ def _clear_seeded_data(engine) -> None:
     """Clear mutable test data without deleting the SQLite file.
 
     Keeping the file in place makes --reset work on Windows even while the
-    development server has the database open.
+    development server has the database open. Tables are deleted in dependency
+    order so every newly-added seeded feature can be reset safely.
     """
     tables = [
         "shopping_list_items",
         "shopping_lists",
+        "inventory_reservations",
         "planned_meals",
         "cycle_slots",
         "meal_slot_definitions",
@@ -33,12 +36,21 @@ def _clear_seeded_data(engine) -> None:
         "meal_meal_types",
         "meal_recipes",
         "meals",
+        "recipe_dependencies",
+        "recipe_outputs",
+        "recipe_variant_ingredient_overrides",
+        "recipe_variants",
+        "recipe_ingredient_substitutions",
+        "recipe_advance_prep",
+        "recipe_equipment",
+        "recipe_ingredients",
+        "recipe_prep_groups",
         "recipe_tags",
         "recipe_meal_types",
-        "recipe_ingredients",
         "recipes",
         "inventory_transactions",
         "inventory_lots",
+        "equipment",
         "ingredient_aliases",
         "ingredients",
         "tags",
@@ -66,23 +78,25 @@ def seed(reset: bool = False) -> Path:
             return TEST_DB
 
     today = date.today()
+    # id, name, shopping category, preferred unit, default location, perishable,
+    # staple enabled, staple minimum, staple target, staple unit
     ingredients = [
-        (1, "Chicken Breast", 2, 2, 3, True),
-        (2, "Ground Beef", 2, 2, 3, True),
-        (3, "Eggs", 3, 14, 2, True),
-        (4, "Milk", 3, 8, 2, True),
-        (5, "Cheddar Cheese", 3, 1, 2, True),
-        (6, "Rice", 6, 8, 1, False),
-        (7, "Pasta", 6, 2, 1, False),
-        (8, "Tomato Sauce", 6, 8, 1, False),
-        (9, "Bell Pepper", 1, 14, 2, True),
-        (10, "Onion", 1, 14, 1, True),
-        (11, "Potatoes", 1, 2, 1, True),
-        (12, "Tortillas", 4, 14, 1, False),
-        (13, "Black Beans", 6, 14, 1, False),
-        (14, "Bread", 4, 14, 1, False),
-        (15, "Butter", 3, 1, 2, True),
-        (16, "Garlic", 1, 14, 1, True),
+        (1, "Chicken Breast", 2, 2, 3, True, False, None, None, None),
+        (2, "Ground Beef", 2, 2, 3, True, False, None, None, None),
+        (3, "Eggs", 3, 14, 2, True, True, 6, 18, 14),
+        (4, "Milk", 3, 8, 2, True, True, 1, 2, 8),
+        (5, "Cheddar Cheese", 3, 1, 2, True, False, None, None, None),
+        (6, "Rice", 6, 8, 1, False, True, 2, 6, 8),
+        (7, "Pasta", 6, 2, 1, False, True, 1, 4, 2),
+        (8, "Tomato Sauce", 6, 8, 1, False, False, None, None, None),
+        (9, "Bell Pepper", 1, 14, 2, True, False, None, None, None),
+        (10, "Onion", 1, 14, 1, True, True, 2, 6, 14),
+        (11, "Potatoes", 1, 2, 1, True, False, None, None, None),
+        (12, "Tortillas", 4, 14, 1, False, True, 8, 24, 14),
+        (13, "Black Beans", 6, 14, 1, False, True, 2, 8, 14),
+        (14, "Bread", 4, 14, 1, False, True, 4, 12, 14),
+        (15, "Butter", 3, 1, 2, True, True, 8, 16, 1),
+        (16, "Garlic", 1, 14, 1, True, True, 4, 12, 14),
     ]
     recipes = [
         (1, "Chicken and Rice", "Chicken with seasoned rice", "DINNER", 25, [(1, 1, 2), (6, 2, 8), (10, 1, 14)]),
@@ -114,41 +128,150 @@ def seed(reset: bool = False) -> Path:
     ]
 
     with engine.begin() as connection:
-        connection.execute(text("UPDATE households SET name='Test Household' WHERE id=1"))
+        connection.execute(text("UPDATE households SET name='Test Household', default_servings=4 WHERE id=1"))
         connection.execute(text("INSERT INTO tags (id, household_id, name, normalized_name, category, active) VALUES (1,1,'Quick','quick','STYLE',1),(2,1,'Family Favorite','family favorite','STYLE',1),(3,1,'Freezer Friendly','freezer friendly','STYLE',1),(4,1,'Weeknight','weeknight','STYLE',1)"))
 
-        for ingredient_id, name, category_id, unit_id, location_id, perishable in ingredients:
+        for ingredient_id, name, category_id, unit_id, location_id, perishable, staple_enabled, staple_minimum, staple_target, staple_unit_id in ingredients:
             connection.execute(
                 text("""
                     INSERT INTO ingredients
-                    (id, household_id, name, normalized_name, shopping_category_id, preferred_unit_id, default_location_id, perishable, active, notes)
-                    VALUES (:id, 1, :name, :normalized, :category, :unit, :location, :perishable, 1, 'Seeded test ingredient')
+                    (id, household_id, name, normalized_name, shopping_category_id, preferred_unit_id,
+                     default_location_id, perishable, staple_enabled, staple_minimum, staple_target,
+                     staple_unit_id, active, notes)
+                    VALUES (:id, 1, :name, :normalized, :category, :unit, :location, :perishable,
+                            :staple_enabled, :staple_minimum, :staple_target, :staple_unit, 1,
+                            'Seeded test ingredient with advanced inventory defaults')
                 """),
-                {"id": ingredient_id, "name": name, "normalized": name.casefold(), "category": category_id, "unit": unit_id, "location": location_id, "perishable": perishable},
+                {
+                    "id": ingredient_id,
+                    "name": name,
+                    "normalized": name.casefold(),
+                    "category": category_id,
+                    "unit": unit_id,
+                    "location": location_id,
+                    "perishable": perishable,
+                    "staple_enabled": staple_enabled,
+                    "staple_minimum": staple_minimum,
+                    "staple_target": staple_target,
+                    "staple_unit": staple_unit_id,
+                },
             )
 
+        # Aliases exercise canonical Ingredient lookup and persistence.
+        connection.execute(text("INSERT INTO ingredient_aliases (ingredient_id, alias, normalized_alias) VALUES (10,'Yellow Onion','yellow onion'),(16,'Garlic Clove','garlic clove')"))
+
+        # Reusable equipment for recipe requirements.
+        connection.execute(text("""
+            INSERT INTO equipment (id, household_id, name, normalized_name, category, notes, active) VALUES
+            (1,1,'12-inch Skillet','12-inch skillet','COOKWARE','Seeded skillet',1),
+            (2,1,'Large Pot','large pot','COOKWARE','For pasta and rice',1),
+            (3,1,'Sheet Pan','sheet pan','BAKEWARE','Seeded sheet pan',1),
+            (4,1,'Blender','blender','APPLIANCE','Seeded blender',1)
+        """))
+
         recipe_ingredient_id = 1
+        recipe_ingredient_ids: dict[tuple[int, int], int] = {}
         for recipe_id, name, description, meal_type, cook_minutes, recipe_ingredients in recipes:
             connection.execute(
                 text("""
                     INSERT INTO recipes
-                    (id, household_id, name, normalized_name, description, base_servings, serving_unit, prep_time_minutes, cook_time_minutes, favorite, active)
-                    VALUES (:id, 1, :name, :normalized, :description, 4, 'servings', 10, :cook, :favorite, 1)
+                    (id, household_id, name, normalized_name, description, base_servings, serving_unit,
+                     yield_quantity, yield_unit_id, prep_time_minutes, cook_time_minutes, notes, favorite, active)
+                    VALUES (:id, 1, :name, :normalized, :description, 4, 'servings',
+                            :yield_quantity, :yield_unit, 10, :cook, 'Seeded recipe notes', :favorite, 1)
                 """),
-                {"id": recipe_id, "name": name, "normalized": name.casefold(), "description": description, "cook": cook_minutes, "favorite": recipe_id in (1, 2, 4)},
+                {
+                    "id": recipe_id,
+                    "name": name,
+                    "normalized": name.casefold(),
+                    "description": description,
+                    "cook": cook_minutes,
+                    "favorite": recipe_id in (1, 2, 4),
+                    "yield_quantity": 4 if recipe_id in (1, 3) else None,
+                    "yield_unit": 14 if recipe_id in (1, 3) else None,
+                },
             )
             connection.execute(text("INSERT INTO recipe_meal_types (recipe_id, meal_type) VALUES (:id, :meal_type)"), {"id": recipe_id, "meal_type": meal_type})
             connection.execute(text("INSERT INTO recipe_tags (recipe_id, tag_id) VALUES (:id, :tag_id)"), {"id": recipe_id, "tag_id": 1 if recipe_id in (2, 4, 5, 7, 9, 12) else 4})
+
+            # Every recipe gets a prep group; several get a second group below.
+            connection.execute(text("INSERT INTO recipe_prep_groups (id, recipe_id, name, sort_order) VALUES (:id,:recipe,'Main prep',0)"), {"id": recipe_id, "recipe": recipe_id})
             for sort_order, (ingredient_id, quantity, unit_id) in enumerate(recipe_ingredients):
                 connection.execute(
                     text("""
                         INSERT INTO recipe_ingredients
-                        (id, recipe_id, ingredient_id, quantity, unit_id, optional, scaling_mode, required_state, sort_order)
-                        VALUES (:id, :recipe, :ingredient, :quantity, :unit, 0, 'LINEAR', 'ANY', :sort_order)
+                        (id, recipe_id, ingredient_id, prep_group_id, quantity, unit_id, display_text,
+                         preparation, prep_method, prep_size, prep_state, optional, scaling_mode,
+                         required_state, sort_order, notes)
+                        VALUES (:id, :recipe, :ingredient, :prep_group, :quantity, :unit, :display_text,
+                                :preparation, :prep_method, :prep_size, :prep_state, 0, :scaling_mode,
+                                :required_state, :sort_order, :notes)
                     """),
-                    {"id": recipe_ingredient_id, "recipe": recipe_id, "ingredient": ingredient_id, "quantity": quantity, "unit": unit_id, "sort_order": sort_order},
+                    {
+                        "id": recipe_ingredient_id,
+                        "recipe": recipe_id,
+                        "ingredient": ingredient_id,
+                        "prep_group": recipe_id,
+                        "quantity": quantity,
+                        "unit": unit_id,
+                        "display_text": f"Seeded ingredient {ingredient_id}",
+                        "preparation": "Prepare as directed",
+                        "prep_method": "CHOP" if ingredient_id in (9, 10, 16) else "MEASURE",
+                        "prep_size": "diced" if ingredient_id in (9, 10) else None,
+                        "prep_state": "fresh" if ingredient_id in (1, 2, 9, 10, 16) else "pantry",
+                        "scaling_mode": "FIXED" if recipe_id == 2 and sort_order == 1 else "LINEAR",
+                        "required_state": "THAWED" if ingredient_id in (1, 2) else "ANY",
+                        "sort_order": sort_order,
+                        "notes": "Seeded structured prep metadata",
+                    },
                 )
+                recipe_ingredient_ids[(recipe_id, ingredient_id)] = recipe_ingredient_id
                 recipe_ingredient_id += 1
+
+        # Advance prep, equipment requirements, and an additional prep group.
+        connection.execute(text("INSERT INTO recipe_prep_groups (id, recipe_id, name, sort_order) VALUES (101,1,'Rice prep',1)"))
+        connection.execute(text("UPDATE recipe_ingredients SET prep_group_id=101 WHERE id=:id"), {"id": recipe_ingredient_ids[(1, 6)]})
+        connection.execute(text("""
+            INSERT INTO recipe_advance_prep (id, recipe_id, prep_group_id, title, lead_time_minutes, duration_minutes, instructions, sort_order) VALUES
+            (1,1,101,'Rinse rice',30,5,'Rinse until water runs mostly clear.',0),
+            (2,2,NULL,'Thaw ground beef',480,5,'Move beef to refrigerator the morning of cooking.',0)
+        """))
+        connection.execute(text("""
+            INSERT INTO recipe_equipment (id, recipe_id, equipment_id, quantity, notes, sort_order) VALUES
+            (1,1,1,1,'Brown chicken',0),(2,1,2,1,'Cook rice',1),(3,3,2,1,'Boil pasta',0),(4,6,3,1,'Bake potatoes',0)
+        """))
+
+        # Substitution example: Ground Beef -> Chicken Breast on Beef Tacos.
+        beef_taco_beef_id = recipe_ingredient_ids[(2, 2)]
+        connection.execute(text("""
+            INSERT INTO recipe_ingredient_substitutions
+            (id, recipe_ingredient_id, substitute_ingredient_id, ratio, preferred, notes, sort_order)
+            VALUES (1,:recipe_ingredient,1,1.000000,0,'Use chicken for a lighter taco variant',0)
+        """), {"recipe_ingredient": beef_taco_beef_id})
+
+        # Named recipe variant with sparse overrides.
+        connection.execute(text("""
+            INSERT INTO recipe_variants (id, recipe_id, name, normalized_name, notes, active, sort_order)
+            VALUES (1,2,'Chicken Taco Night','chicken taco night','Seeded variant using saved substitution',1,0)
+        """))
+        connection.execute(text("""
+            INSERT INTO recipe_variant_ingredient_overrides
+            (id, variant_id, recipe_ingredient_id, quantity, unit_id, substitution_id,
+             preparation, prep_method, prep_size, prep_state, notes)
+            VALUES (1,1,:recipe_ingredient,NULL,NULL,1,NULL,NULL,NULL,NULL,'Use substitution #1')
+        """), {"recipe_ingredient": beef_taco_beef_id})
+
+        # Recipe output/dependency example: Chicken and Rice produces cooked chicken;
+        # Chicken Quesadillas depends on it.
+        connection.execute(text("""
+            INSERT INTO recipe_outputs (id, recipe_id, name, normalized_name, quantity, unit_id, notes, active, sort_order)
+            VALUES (1,1,'Cooked Chicken','cooked chicken',1.000000,2,'Prepared component for later meals',1,0)
+        """))
+        connection.execute(text("""
+            INSERT INTO recipe_dependencies
+            (id, recipe_id, recipe_output_id, quantity, unit_id, scaling_mode, notes, sort_order)
+            VALUES (1,8,1,1.000000,2,'LINEAR','Use cooked chicken output from Chicken and Rice',0)
+        """))
 
         for meal_id, name, description, meal_type, recipe_id in meals:
             connection.execute(
@@ -159,7 +282,7 @@ def seed(reset: bool = False) -> Path:
                 {"id": meal_id, "name": name, "normalized": name.casefold(), "description": description, "favorite": meal_id in (1, 2, 4)},
             )
             connection.execute(text("INSERT INTO meal_meal_types (meal_id, meal_type) VALUES (:id, :meal_type)"), {"id": meal_id, "meal_type": meal_type})
-            connection.execute(text("INSERT INTO meal_recipes (id, meal_id, recipe_id, serving_multiplier, sort_order) VALUES (:id, :meal, :recipe, 1, 0)"), {"id": meal_id, "meal": meal_id, "recipe": recipe_id})
+            connection.execute(text("INSERT INTO meal_recipes (id, meal_id, recipe_id, serving_multiplier, default_servings, sort_order, notes) VALUES (:id, :meal, :recipe, 1, 4, 0, 'Seeded Meal component')"), {"id": meal_id, "meal": meal_id, "recipe": recipe_id})
 
         inventory = [
             (1, 1, 3, 3, 2, 10), (2, 2, 3, 2, 2, 30), (3, 3, 2, 18, 14, 21), (4, 4, 2, 1, 8, 7),
@@ -172,10 +295,23 @@ def seed(reset: bool = False) -> Path:
             connection.execute(
                 text("""
                     INSERT INTO inventory_lots
-                    (id, household_id, ingredient_id, location_id, quantity, unit_id, purchase_date, expiration_date, notes)
-                    VALUES (:id, 1, :ingredient, :location, :quantity, :unit, :purchase, :expiration, 'Seeded test inventory')
+                    (id, household_id, ingredient_id, location_id, quantity, unit_id, purchase_date,
+                     opened_date, expiration_date, frozen_date, thawed_date, notes)
+                    VALUES (:id, 1, :ingredient, :location, :quantity, :unit, :purchase,
+                            :opened, :expiration, :frozen, :thawed, 'Seeded test inventory with lot state')
                 """),
-                {"id": lot_id, "ingredient": ingredient_id, "location": location_id, "quantity": quantity, "unit": unit_id, "purchase": today, "expiration": expiration},
+                {
+                    "id": lot_id,
+                    "ingredient": ingredient_id,
+                    "location": location_id,
+                    "quantity": quantity,
+                    "unit": unit_id,
+                    "purchase": today - timedelta(days=lot_id % 7),
+                    "opened": today - timedelta(days=1) if lot_id in (4, 5, 8, 15) else None,
+                    "expiration": expiration,
+                    "frozen": today - timedelta(days=10) if lot_id in (1, 2) else None,
+                    "thawed": today - timedelta(days=1) if lot_id == 1 else None,
+                },
             )
             connection.execute(
                 text("""
@@ -186,7 +322,14 @@ def seed(reset: bool = False) -> Path:
                 {"lot": lot_id, "quantity": quantity, "unit": unit_id, "location": location_id},
             )
 
-        connection.execute(text("INSERT INTO meal_cycles (id, household_id, name, normalized_name, duration_days, status, notes) VALUES (1,1,'Sample Week','sample week',7,'DRAFT','Seeded cycle for placement testing')"))
+        connection.execute(text("""
+            INSERT INTO meal_cycles
+            (id, household_id, name, normalized_name, duration_days, status, start_date, notes, population_rules, smart_preferences)
+            VALUES (1,1,'Sample Week','sample week',7,'DRAFT',:start_date,'Seeded cycle for placement testing','{}',:preferences)
+        """), {
+            "start_date": today,
+            "preferences": json.dumps({"repeat_spacing_days": 2, "favorite_weight": 2, "history_penalty": 0.5}),
+        })
         slot_definitions = [(1, "Breakfast", 0), (2, "Lunch", 1), (3, "Dinner", 2)]
         for definition_id, label, sort_order in slot_definitions:
             connection.execute(text("INSERT INTO meal_slot_definitions (id, cycle_id, label, sort_order) VALUES (:id,1,:label,:sort_order)"), {"id": definition_id, "label": label, "sort_order": sort_order})
@@ -196,8 +339,47 @@ def seed(reset: bool = False) -> Path:
                 connection.execute(text("INSERT INTO cycle_slots (id, cycle_id, slot_definition_id, day_number, sort_order) VALUES (:id,1,:definition,:day,:sort_order)"), {"id": slot_id, "definition": definition_id, "day": day_number, "sort_order": sort_order})
                 slot_id += 1
 
+        # Seed two planned meals with snapshots/scaled requirements so reservations,
+        # Shopping, validation, and allocation previews have immediate data.
+        chicken_scaled = [{
+            "meal_recipe_id": 1,
+            "recipe_id": 1,
+            "recipe_name": "Chicken and Rice",
+            "servings": "4",
+            "ingredients": [
+                {"recipe_ingredient_id": recipe_ingredient_ids[(1, 1)], "ingredient_id": 1, "quantity": "1", "unit_id": 2, "manual_review": False},
+                {"recipe_ingredient_id": recipe_ingredient_ids[(1, 6)], "ingredient_id": 6, "quantity": "2", "unit_id": 8, "manual_review": False},
+                {"recipe_ingredient_id": recipe_ingredient_ids[(1, 10)], "ingredient_id": 10, "quantity": "1", "unit_id": 14, "manual_review": False},
+            ],
+        }]
+        connection.execute(text("""
+            INSERT INTO planned_meals
+            (id, cycle_slot_id, meal_id, locked, planned_servings, planned_leftover_servings,
+             component_serving_overrides, scaled_components, snapshot_name, snapshot_description,
+             snapshot_meal_types, snapshot_components)
+            VALUES (1,3,1,1,4,1,'{}',:scaled,'Chicken Dinner','Chicken and rice dinner','["DINNER"]',:components)
+        """), {
+            "scaled": json.dumps(chicken_scaled),
+            "components": json.dumps([{"meal_recipe_id": 1, "recipe_id": 1, "recipe_name": "Chicken and Rice", "serving_multiplier": "1", "default_servings": "4"}]),
+        })
+
+        # Reservation rows are ingredient-level and do not change physical lots.
+        connection.execute(text("""
+            INSERT INTO inventory_reservations
+            (id, household_id, cycle_id, planned_meal_id, meal_recipe_id, recipe_id,
+             recipe_ingredient_id, ingredient_id, quantity, unit_id, status)
+            VALUES
+            (1,1,1,1,1,1,:chicken_ri,1,1.000000,2,'ACTIVE'),
+            (2,1,1,1,1,1,:rice_ri,6,2.000000,8,'ACTIVE'),
+            (3,1,1,1,1,1,:onion_ri,10,1.000000,14,'ACTIVE')
+        """), {
+            "chicken_ri": recipe_ingredient_ids[(1, 1)],
+            "rice_ri": recipe_ingredient_ids[(1, 6)],
+            "onion_ri": recipe_ingredient_ids[(1, 10)],
+        })
+
     print(f"Reset test database: {TEST_DB}" if reset else f"Created test database: {TEST_DB}")
-    print("Seeded: 16 ingredients, 12 recipes, 12 meals, 16 inventory lots, 1 seven-day cycle")
+    print("Seeded: 16 ingredients, 12 recipes, 12 meals, 4 equipment items, 16 inventory lots, advanced recipe data, reservations, and 1 seven-day cycle")
     return TEST_DB
 
 
