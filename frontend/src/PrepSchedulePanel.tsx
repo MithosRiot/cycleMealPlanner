@@ -32,7 +32,7 @@ export default function PrepSchedulePanel() {
     {schedule.error instanceof Error && <div className="error-banner">{schedule.error.message}</div>}
     <div className="recipe-ingredient-list">
       {schedule.data?.tasks.map((task) => <div className="recipe-ingredient-editor" key={`${task.planned_meal_id}-${task.advance_prep_id}`}>
-        <strong>{task.title}</strong>
+        <strong>{task.task_type} · {task.title}</strong>
         <div className="ingredient-meta">
           <span>{task.meal_name} · {task.recipe_name}</span>
           {task.prep_group_name && <span>Prep group: {task.prep_group_name}</span>}
