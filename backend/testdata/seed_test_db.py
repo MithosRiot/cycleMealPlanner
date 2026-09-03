@@ -51,14 +51,13 @@ def _seed_gather_examples() -> None:
     from app.database.session import engine
 
     with engine.begin() as connection:
-        reservation = connection.execute(text("""
-            SELECT recipe_ingredient_id
+        reservation_rows = connection.execute(text("""
+            SELECT ingredient_id, recipe_ingredient_id
             FROM inventory_reservations
-            WHERE planned_meal_id=1 AND meal_recipe_id=1 AND ingredient_id=1 AND status='ACTIVE'
-            ORDER BY id
-            LIMIT 1
-        """)).scalar_one_or_none()
-        if reservation is None:
+            WHERE planned_meal_id=1 AND meal_recipe_id=1 AND status='ACTIVE'
+        """)).all()
+        reservations = {int(row.ingredient_id): int(row.recipe_ingredient_id) for row in reservation_rows}
+        if 1 not in reservations:
             return
 
         # A second Chicken Breast lot makes the seeded Gather example explicitly multi-lot.
@@ -78,14 +77,27 @@ def _seed_gather_examples() -> None:
                 SELECT 1 FROM inventory_transactions WHERE lot_id=17 AND note='Seeded Gather test lot'
             )
         """))
-        connection.execute(text("DELETE FROM gather_lot_selections WHERE planned_meal_id=1 AND meal_recipe_id=1 AND recipe_ingredient_id=:ri"), {"ri": reservation})
+
+        connection.execute(text("DELETE FROM gather_lot_selections WHERE planned_meal_id=1 AND meal_recipe_id=1"))
         connection.execute(text("""
             INSERT INTO gather_lot_selections
             (planned_meal_id, meal_recipe_id, recipe_id, recipe_ingredient_id, ingredient_id, lot_id, quantity, unit_id)
             VALUES
-            (1,1,1,:ri,1,1,0.500000,2),
-            (1,1,1,:ri,1,17,0.500000,2)
-        """), {"ri": reservation})
+            (1,1,1,:chicken_ri,1,1,0.500000,2),
+            (1,1,1,:chicken_ri,1,17,0.500000,2)
+        """), {"chicken_ri": reservations[1]})
+        if 6 in reservations:
+            connection.execute(text("""
+                INSERT INTO gather_lot_selections
+                (planned_meal_id, meal_recipe_id, recipe_id, recipe_ingredient_id, ingredient_id, lot_id, quantity, unit_id)
+                VALUES (1,1,1,:ri,6,6,2.000000,8)
+            """), {"ri": reservations[6]})
+        if 10 in reservations:
+            connection.execute(text("""
+                INSERT INTO gather_lot_selections
+                (planned_meal_id, meal_recipe_id, recipe_id, recipe_ingredient_id, ingredient_id, lot_id, quantity, unit_id)
+                VALUES (1,1,1,:ri,10,10,1.000000,14)
+            """), {"ri": reservations[10]})
 
 
 def seed(reset: bool = False):
