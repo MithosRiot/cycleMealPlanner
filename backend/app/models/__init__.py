@@ -5,7 +5,7 @@ from app.models.inventory import InventoryLot, InventoryTransaction
 from app.models.meal import Meal, MealMealType, MealRecipe, meal_tags
 from app.models.meal_cycle import CycleSlot, MealCycle, MealSlotDefinition
 from app.models.planned_meal import PlannedMeal
-from app.models.recipe import Recipe, RecipeAdvancePrep, RecipeEquipment, RecipeIngredient, RecipeIngredientSubstitution, RecipeMealType, RecipePrepGroup, RecipeVariant, RecipeVariantIngredientOverride, recipe_tags
+from app.models.recipe import Recipe, RecipeAdvancePrep, RecipeCookingStep, RecipeEquipment, RecipeIngredient, RecipeIngredientSubstitution, RecipeMealType, RecipePrepGroup, RecipeVariant, RecipeVariantIngredientOverride, recipe_tags
 from app.models.recipe_output import RecipeDependency, RecipeOutput
 from app.models.reference import Household, InventoryLocation, MeasurementUnit, ShoppingCategory
 from app.models.reservation import InventoryReservation
@@ -13,7 +13,7 @@ from app.models.shopping import ShoppingList, ShoppingListItem
 
 __all__ = [
     "Household", "InventoryLocation", "MeasurementUnit", "ShoppingCategory", "Equipment",
-    "Ingredient", "IngredientAlias", "Tag", "Recipe", "RecipePrepGroup", "RecipeAdvancePrep",
+    "Ingredient", "IngredientAlias", "Tag", "Recipe", "RecipePrepGroup", "RecipeAdvancePrep", "RecipeCookingStep",
     "RecipeEquipment", "RecipeIngredient", "RecipeIngredientSubstitution", "RecipeVariant",
     "RecipeVariantIngredientOverride", "RecipeOutput", "RecipeDependency", "RecipeMealType", "recipe_tags",
     "InventoryLot", "InventoryTransaction", "InventoryReservation", "GatherLotSelection", "Meal", "MealRecipe", "MealMealType", "meal_tags", "MealCycle",
