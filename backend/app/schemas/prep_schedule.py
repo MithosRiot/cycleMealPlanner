@@ -21,10 +21,15 @@ class PrepScheduleTaskRead(BaseModel):
     serving_datetime: datetime | None
     start_datetime: datetime | None
     end_datetime: datetime | None
+    reminder_enabled: bool
+    reminder_offset_minutes: int | None
+    reminder_at: datetime | None
+    reminder_status: str
     unresolved_reason: str | None
 
 
 class PrepScheduleRead(BaseModel):
     meal_cycle_id: int
     meal_cycle_name: str
+    generated_at: datetime
     tasks: list[PrepScheduleTaskRead]
