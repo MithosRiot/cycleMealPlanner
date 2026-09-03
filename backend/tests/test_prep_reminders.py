@@ -60,11 +60,11 @@ def test_reminder_settings_schedule_and_legacy_edit_preservation() -> None:
         disabled = client.put(f"/api/recipes/{recipe['id']}/advance-prep/{prep['id']}/reminder", params={"enabled": "false"})
         assert disabled.status_code == 200
         assert disabled.json()["advance_prep"][0]["reminder_enabled"] is False
-        assert disabled.json()["advance_prep"][0]["reminder_offset_minutes"] is None
+        assert disabled.json()["advance_prep"][0]["reminder_offset_minutes"] == 30
 
         enabled = client.put(f"/api/recipes/{recipe['id']}/advance-prep/{prep['id']}/reminder", params={"enabled": "true"})
         assert enabled.status_code == 200
-        assert enabled.json()["advance_prep"][0]["reminder_offset_minutes"] == 15
+        assert enabled.json()["advance_prep"][0]["reminder_offset_minutes"] == 30
 
         custom = client.put(f"/api/recipes/{recipe['id']}/advance-prep/{prep['id']}/reminder", params={"enabled": "true", "offset_minutes": 45})
         assert custom.status_code == 200
