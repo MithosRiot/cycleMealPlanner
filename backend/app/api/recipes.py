@@ -20,6 +20,7 @@ from app.services.units import UnitConversionError, convert_quantity
 
 router = APIRouter(prefix="/api/recipes", tags=["recipes"])
 DEFAULT_HOUSEHOLD_ID = 1
+VALID_PREP_TASK_TYPES = {"PREP", "THAW", "MARINATE", "SOAK", "PROOF"}
 
 
 def _recipe_statement():
@@ -152,6 +153,8 @@ def _save_recipe(db: Session, recipe: Recipe, payload: RecipeCreate | RecipeUpda
         raise HTTPException(status_code=409, detail="Recipe name already exists")
     tags, meal_types = _validate_recipe_references(db, payload)
     preserved_variants = _snapshot_variant_overrides(recipe) if recipe.id is not None else []
+    preserved_prep_by_title = {item.title: item.task_type for item in recipe.advance_prep} if recipe.id is not None else {}
+    preserved_prep_by_order = {item.sort_order: item.task_type for item in recipe.advance_prep} if recipe.id is not None else {}
 
     recipe.name = payload.name.strip(); recipe.normalized_name = normalized_name
     recipe.description = payload.description.strip() if payload.description else None
@@ -171,7 +174,9 @@ def _save_recipe(db: Session, recipe: Recipe, payload: RecipeCreate | RecipeUpda
     for group in sorted(payload.prep_groups, key=lambda value: value.sort_order):
         model = RecipePrepGroup(name=group.name.strip(), sort_order=group.sort_order); recipe.prep_groups.append(model); db.flush(); group_ids[group.client_key] = model.id
     for item in sorted(payload.advance_prep, key=lambda value: value.sort_order):
-        recipe.advance_prep.append(RecipeAdvancePrep(prep_group_id=group_ids.get(item.prep_group_key) if item.prep_group_key else None, title=item.title.strip(), lead_time_minutes=item.lead_time_minutes, duration_minutes=item.duration_minutes, instructions=item.instructions.strip() if item.instructions else None, sort_order=item.sort_order))
+        explicit_type = "task_type" in item.model_fields_set
+        task_type = item.task_type if explicit_type else preserved_prep_by_title.get(item.title.strip(), preserved_prep_by_order.get(item.sort_order, "PREP"))
+        recipe.advance_prep.append(RecipeAdvancePrep(prep_group_id=group_ids.get(item.prep_group_key) if item.prep_group_key else None, task_type=task_type, title=item.title.strip(), lead_time_minutes=item.lead_time_minutes, duration_minutes=item.duration_minutes, instructions=item.instructions.strip() if item.instructions else None, sort_order=item.sort_order))
     for item in sorted(payload.equipment, key=lambda value: value.sort_order):
         recipe.equipment.append(RecipeEquipment(equipment_id=item.equipment_id, quantity=item.quantity, notes=item.notes.strip() if item.notes else None, sort_order=item.sort_order))
 
@@ -223,6 +228,19 @@ def create_recipe(payload: RecipeCreate, db: Session = Depends(get_db)) -> dict:
 
 @router.put("/{recipe_id}", response_model=RecipeRead)
 def update_recipe(recipe_id: int, payload: RecipeUpdate, db: Session = Depends(get_db)) -> dict: return _recipe_payload(_save_recipe(db, _recipe_or_404(db, recipe_id), payload))
+
+@router.put("/{recipe_id}/advance-prep/{prep_id}/type", response_model=RecipeRead)
+def update_advance_prep_type(recipe_id: int, prep_id: int, task_type: str = Query(...), db: Session = Depends(get_db)) -> dict:
+    normalized = task_type.strip().upper()
+    if normalized not in VALID_PREP_TASK_TYPES:
+        raise HTTPException(status_code=422, detail="task_type must be PREP, THAW, MARINATE, SOAK, or PROOF")
+    recipe = _recipe_or_404(db, recipe_id)
+    prep = next((item for item in recipe.advance_prep if item.id == prep_id), None)
+    if prep is None:
+        raise HTTPException(status_code=404, detail="Advance prep task not found")
+    prep.task_type = normalized
+    db.commit()
+    return _recipe_payload(_recipe_or_404(db, recipe_id))
 
 @router.delete("/{recipe_id}", status_code=status.HTTP_204_NO_CONTENT)
 def archive_recipe(recipe_id: int, db: Session = Depends(get_db)) -> None:

@@ -11,6 +11,7 @@ class PrepScheduleTaskRead(BaseModel):
     recipe_id: int
     recipe_name: str
     advance_prep_id: int
+    task_type: str
     title: str
     instructions: str | None
     prep_group_id: int | None

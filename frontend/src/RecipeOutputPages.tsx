@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { fetchRecipe } from './api'
 import { RecipeDetailWithVariantsPage, RecipeEditorWithVariantsPage } from './RecipeVariantPages'
 import RecipeOutputsPanel from './RecipeOutputsPanel'
+import TypedAdvancePrepPanel from './TypedAdvancePrepPanel'
 
 function OutputsPanel() {
   const { recipeId } = useParams()
@@ -13,9 +14,9 @@ function OutputsPanel() {
 }
 
 export function RecipeEditorWithAdvancedPage() {
-  return <><RecipeEditorWithVariantsPage /><OutputsPanel /></>
+  return <><RecipeEditorWithVariantsPage /><TypedAdvancePrepPanel /><OutputsPanel /></>
 }
 
 export function RecipeDetailWithAdvancedPage() {
-  return <><RecipeDetailWithVariantsPage /><OutputsPanel /></>
+  return <><RecipeDetailWithVariantsPage /><TypedAdvancePrepPanel /><OutputsPanel /></>
 }
