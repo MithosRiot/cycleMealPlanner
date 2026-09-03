@@ -1,4 +1,5 @@
 from app.models.equipment import Equipment
+from app.models.gather import GatherLotSelection
 from app.models.ingredient import Ingredient, IngredientAlias, Tag
 from app.models.inventory import InventoryLot, InventoryTransaction
 from app.models.meal import Meal, MealMealType, MealRecipe, meal_tags
@@ -15,6 +16,6 @@ __all__ = [
     "Ingredient", "IngredientAlias", "Tag", "Recipe", "RecipePrepGroup", "RecipeAdvancePrep",
     "RecipeEquipment", "RecipeIngredient", "RecipeIngredientSubstitution", "RecipeVariant",
     "RecipeVariantIngredientOverride", "RecipeOutput", "RecipeDependency", "RecipeMealType", "recipe_tags",
-    "InventoryLot", "InventoryTransaction", "InventoryReservation", "Meal", "MealRecipe", "MealMealType", "meal_tags", "MealCycle",
+    "InventoryLot", "InventoryTransaction", "InventoryReservation", "GatherLotSelection", "Meal", "MealRecipe", "MealMealType", "meal_tags", "MealCycle",
     "MealSlotDefinition", "CycleSlot", "PlannedMeal", "ShoppingList", "ShoppingListItem",
 ]
