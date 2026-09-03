@@ -51,8 +51,9 @@ def main() -> None:
         prep = connection.execute(text("SELECT title, task_type, reminder_enabled, reminder_offset_minutes FROM recipe_advance_prep WHERE id=9001")).one()
         slot_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_slot_definitions)"))}
         prep_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(recipe_advance_prep)"))}
+        gather_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(gather_lot_selections)"))}
 
-    assert version == "0024_prep_reminders"
+    assert version == "0025_gather_lot_selections"
     assert row.name == "Migration Test Ingredient"
     assert bool(row.staple_enabled) is False
     assert row.staple_minimum is None and row.staple_target is None and row.staple_unit_id is None
@@ -62,9 +63,10 @@ def main() -> None:
     assert {"task_type", "reminder_enabled", "reminder_offset_minutes"}.issubset(prep_columns)
     assert prep.title == "Legacy prep task" and prep.task_type == "PREP"
     assert bool(prep.reminder_enabled) is False and prep.reminder_offset_minutes is None
+    assert {"planned_meal_id", "meal_recipe_id", "recipe_ingredient_id", "lot_id", "quantity", "unit_id"}.issubset(gather_columns)
 
     engine.dispose(); DB_PATH.unlink(missing_ok=True)
-    print("Populated SQLite upgrade 0020 -> 0024 succeeded and preserved Ingredient/Cycle/Prep data.")
+    print("Populated SQLite upgrade 0020 -> 0025 succeeded and preserved Ingredient/Cycle/Prep data while adding Gather selections.")
 
 
 if __name__ == "__main__":
