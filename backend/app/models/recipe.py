@@ -76,6 +76,8 @@ class RecipeAdvancePrep(Base):
     lead_time_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     duration_minutes: Mapped[int | None] = mapped_column(Integer)
     instructions: Mapped[str | None] = mapped_column(Text)
+    reminder_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    reminder_offset_minutes: Mapped[int | None] = mapped_column(Integer)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     recipe: Mapped[Recipe] = relationship(back_populates="advance_prep")
@@ -84,6 +86,8 @@ class RecipeAdvancePrep(Base):
         CheckConstraint("task_type IN ('PREP','THAW','MARINATE','SOAK','PROOF')", name="ck_recipe_advance_prep_task_type"),
         CheckConstraint("lead_time_minutes >= 0", name="ck_recipe_advance_prep_lead_nonnegative"),
         CheckConstraint("duration_minutes IS NULL OR duration_minutes >= 0", name="ck_recipe_advance_prep_duration_nonnegative"),
+        CheckConstraint("reminder_offset_minutes IS NULL OR reminder_offset_minutes >= 0", name="ck_recipe_advance_prep_reminder_offset_nonnegative"),
+        CheckConstraint("reminder_enabled = 0 OR reminder_offset_minutes IS NOT NULL", name="ck_recipe_advance_prep_reminder_enabled_has_offset"),
         CheckConstraint("sort_order >= 0", name="ck_recipe_advance_prep_sort_order_nonnegative"),
     )
 
