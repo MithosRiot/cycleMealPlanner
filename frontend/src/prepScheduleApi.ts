@@ -1,4 +1,5 @@
 export type PrepTaskType = 'PREP' | 'THAW' | 'MARINATE' | 'SOAK' | 'PROOF'
+export type PrepReminderStatus = 'DISABLED' | 'UNSCHEDULED' | 'UPCOMING' | 'DUE' | 'OVERDUE'
 
 export type PrepScheduleTask = {
   planned_meal_id: number
@@ -18,12 +19,17 @@ export type PrepScheduleTask = {
   serving_datetime: string | null
   start_datetime: string | null
   end_datetime: string | null
+  reminder_enabled: boolean
+  reminder_offset_minutes: number | null
+  reminder_at: string | null
+  reminder_status: PrepReminderStatus
   unresolved_reason: string | null
 }
 
 export type PrepSchedule = {
   meal_cycle_id: number
   meal_cycle_name: string
+  generated_at: string
   tasks: PrepScheduleTask[]
 }
 
