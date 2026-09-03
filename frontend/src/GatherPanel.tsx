@@ -7,6 +7,13 @@ function lotLabel(lot: { lot_id: number; location_name: string | null; expiratio
   return `Lot #${lot.lot_id}${lot.location_name ? ` · ${lot.location_name}` : ''}${lot.expiration_date ? ` · exp ${lot.expiration_date}` : ''}`
 }
 
+function formatQuantity(value: string | number): string {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return String(value)
+  if (Object.is(numeric, -0) || numeric === 0) return '0'
+  return numeric.toLocaleString(undefined, { useGrouping: false, maximumFractionDigits: 6 })
+}
+
 function RequirementCard({ cycleId, requirement, disabled, onDone }: { cycleId: number; requirement: GatherRequirement; disabled: boolean; onDone: () => Promise<void> }) {
   const [lotId, setLotId] = useState<number | null>(requirement.candidates[0]?.lot_id ?? null)
   const candidate = requirement.candidates.find((item) => item.lot_id === lotId)
@@ -24,18 +31,18 @@ function RequirementCard({ cycleId, requirement, disabled, onDone }: { cycleId: 
   return <div className="recipe-ingredient-editor">
     <strong>Day {requirement.day_number} · {requirement.slot_label} · {requirement.meal_name}</strong>
     <div className="ingredient-meta">
-      <span>{requirement.ingredient_name}: need {requirement.required_quantity} {requirement.unit_code}</span>
-      <span>Selected {requirement.selected_quantity} {requirement.unit_code} · remaining {requirement.shortage_quantity} {requirement.unit_code}</span>
+      <span>{requirement.ingredient_name}: need {formatQuantity(requirement.required_quantity)} {requirement.unit_code}</span>
+      <span>Selected {formatQuantity(requirement.selected_quantity)} {requirement.unit_code} · remaining {formatQuantity(requirement.shortage_quantity)} {requirement.unit_code}</span>
     </div>
-    {requirement.selections.length > 0 && <div className="ingredient-meta">{requirement.selections.map((selection) => <span key={selection.lot_id}>{lotLabel(selection)} · {selection.quantity} {selection.unit_code}</span>)}</div>}
-    {requirement.suggestions.length > 0 && <p className="planning-note">Suggested: {requirement.suggestions.map((lot) => `${lotLabel(lot)} (${lot.quantity} ${lot.unit_code})`).join(' + ')}</p>}
+    {requirement.selections.length > 0 && <div className="ingredient-meta">{requirement.selections.map((selection) => <span key={selection.lot_id}>{lotLabel(selection)} · {formatQuantity(selection.quantity)} {selection.unit_code}</span>)}</div>}
+    {requirement.suggestions.length > 0 && <p className="planning-note">Suggested: {requirement.suggestions.map((lot) => `${lotLabel(lot)} (${formatQuantity(lot.quantity)} ${lot.unit_code})`).join(' + ')}</p>}
     <div className="planning-grid">
       <label>Override lot<select value={lotId ?? ''} onChange={(event) => {
         const nextId = event.target.value ? Number(event.target.value) : null
         setLotId(nextId)
         const next = requirement.candidates.find((item) => item.lot_id === nextId)
         setQuantity(next?.available_quantity ?? '')
-      }}><option value="">Choose lot</option>{requirement.candidates.map((lot) => <option key={lot.lot_id} value={lot.lot_id}>{lotLabel(lot)} · available {lot.available_quantity} {lot.unit_code}</option>)}</select></label>
+      }}><option value="">Choose lot</option>{requirement.candidates.map((lot) => <option key={lot.lot_id} value={lot.lot_id}>{lotLabel(lot)} · available {formatQuantity(lot.available_quantity)} {lot.unit_code}</option>)}</select></label>
       <label>Quantity in lot unit<input type="number" min="0.000001" step="0.000001" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
     </div>
     {(replace.error ?? clear.error) instanceof Error && <div className="error-banner">{(replace.error ?? clear.error as Error).message}</div>}
