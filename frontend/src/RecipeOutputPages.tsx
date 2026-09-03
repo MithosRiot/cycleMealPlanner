@@ -4,6 +4,7 @@ import { fetchRecipe } from './api'
 import { RecipeDetailWithVariantsPage, RecipeEditorWithVariantsPage } from './RecipeVariantPages'
 import RecipeOutputsPanel from './RecipeOutputsPanel'
 import TypedAdvancePrepPanel from './TypedAdvancePrepPanel'
+import PrepReminderPanel from './PrepReminderPanel'
 
 function OutputsPanel() {
   const { recipeId } = useParams()
@@ -14,9 +15,9 @@ function OutputsPanel() {
 }
 
 export function RecipeEditorWithAdvancedPage() {
-  return <><RecipeEditorWithVariantsPage /><TypedAdvancePrepPanel /><OutputsPanel /></>
+  return <><RecipeEditorWithVariantsPage /><TypedAdvancePrepPanel /><PrepReminderPanel /><OutputsPanel /></>
 }
 
 export function RecipeDetailWithAdvancedPage() {
-  return <><RecipeDetailWithVariantsPage /><TypedAdvancePrepPanel /><OutputsPanel /></>
+  return <><RecipeDetailWithVariantsPage /><TypedAdvancePrepPanel /><PrepReminderPanel /><OutputsPanel /></>
 }
