@@ -17,21 +17,17 @@ def _seed_typed_prep_examples() -> None:
     from app.database.session import engine
 
     with engine.begin() as connection:
-        # Existing seeded examples now exercise both the default/general type
-        # and a time-sensitive inventory-adjacent type.
-        connection.execute(text("UPDATE recipe_advance_prep SET task_type='PREP' WHERE id=1"))
-        connection.execute(text("UPDATE recipe_advance_prep SET task_type='THAW' WHERE id=2"))
-
-        # Add a representative MARINATE task to the seeded Chicken and Rice
-        # recipe so Meal Plan -> Prep schedule displays multiple typed tasks.
+        connection.execute(text("UPDATE recipe_advance_prep SET task_type='PREP', reminder_enabled=1, reminder_offset_minutes=15 WHERE id=1"))
+        connection.execute(text("UPDATE recipe_advance_prep SET task_type='THAW', reminder_enabled=1, reminder_offset_minutes=60 WHERE id=2"))
         connection.execute(text("""
             INSERT OR IGNORE INTO recipe_advance_prep
             (id, recipe_id, prep_group_id, task_type, title, lead_time_minutes,
-             duration_minutes, instructions, sort_order)
+             duration_minutes, instructions, reminder_enabled, reminder_offset_minutes, sort_order)
             VALUES
             (3, 1, 1, 'MARINATE', 'Marinate chicken', 120, 10,
-             'Season chicken and refrigerate until cooking.', 1)
+             'Season chicken and refrigerate until cooking.', 0, NULL, 1)
         """))
+        connection.execute(text("UPDATE recipe_advance_prep SET reminder_enabled=0, reminder_offset_minutes=NULL WHERE id=3"))
 
 
 def seed(reset: bool = False):
