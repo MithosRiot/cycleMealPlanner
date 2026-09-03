@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sqlite3
 
 from sqlalchemy import text
 
@@ -11,6 +12,22 @@ except ModuleNotFoundError:  # Direct execution from backend/testdata.
 
 TEST_DB = _base.TEST_DB
 configure_database = _base.configure_database
+
+
+def _has_existing_seed_data() -> bool:
+    """Match the base seeder's non-reset behavior without mutating an existing DB."""
+    if not TEST_DB.exists():
+        return False
+    try:
+        with sqlite3.connect(TEST_DB) as connection:
+            table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ingredients'"
+            ).fetchone()
+            if table is None:
+                return False
+            return connection.execute("SELECT COUNT(*) FROM ingredients").fetchone()[0] > 0
+    except sqlite3.DatabaseError:
+        return False
 
 
 def _seed_typed_prep_examples() -> None:
@@ -34,6 +51,16 @@ def _seed_gather_examples() -> None:
     from app.database.session import engine
 
     with engine.begin() as connection:
+        reservation = connection.execute(text("""
+            SELECT recipe_ingredient_id
+            FROM inventory_reservations
+            WHERE planned_meal_id=1 AND meal_recipe_id=1 AND ingredient_id=1 AND status='ACTIVE'
+            ORDER BY id
+            LIMIT 1
+        """)).scalar_one_or_none()
+        if reservation is None:
+            return
+
         # A second Chicken Breast lot makes the seeded Gather example explicitly multi-lot.
         connection.execute(text("""
             INSERT OR IGNORE INTO inventory_lots
@@ -46,23 +73,26 @@ def _seed_gather_examples() -> None:
             INSERT INTO inventory_transactions
             (household_id, lot_id, transaction_type, quantity_delta, unit_id, to_location_id, note)
             SELECT 1,17,'PURCHASE',1.000000,2,3,'Seeded Gather test lot'
-            WHERE NOT EXISTS (
+            WHERE EXISTS (SELECT 1 FROM inventory_lots WHERE id=17)
+              AND NOT EXISTS (
                 SELECT 1 FROM inventory_transactions WHERE lot_id=17 AND note='Seeded Gather test lot'
             )
         """))
-        recipe_ingredient_id = connection.execute(text("SELECT recipe_ingredient_id FROM inventory_reservations WHERE id=1")).scalar_one()
-        connection.execute(text("DELETE FROM gather_lot_selections WHERE planned_meal_id=1 AND meal_recipe_id=1 AND recipe_ingredient_id=:ri"), {"ri": recipe_ingredient_id})
+        connection.execute(text("DELETE FROM gather_lot_selections WHERE planned_meal_id=1 AND meal_recipe_id=1 AND recipe_ingredient_id=:ri"), {"ri": reservation})
         connection.execute(text("""
             INSERT INTO gather_lot_selections
             (planned_meal_id, meal_recipe_id, recipe_id, recipe_ingredient_id, ingredient_id, lot_id, quantity, unit_id)
             VALUES
             (1,1,1,:ri,1,1,0.500000,2),
             (1,1,1,:ri,1,17,0.500000,2)
-        """), {"ri": recipe_ingredient_id})
+        """), {"ri": reservation})
 
 
 def seed(reset: bool = False):
+    had_existing_data = not reset and _has_existing_seed_data()
     path = _base.seed(reset=reset)
+    if had_existing_data:
+        return path
     _seed_typed_prep_examples()
     _seed_gather_examples()
     return path
