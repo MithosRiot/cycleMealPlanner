@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchMealCycles } from './mealCyclesApi'
+import { fetchMealCycle, fetchMealCycles } from './mealCyclesApi'
 import { applyGatherSuggestions, clearGatherRequirement, fetchGather, fetchGatherByLocation, replaceGatherWithLot, type GatherRequirement } from './gatherApi'
 
 function lotLabel(lot: { lot_id: number; location_name: string | null; expiration_date: string | null }) {
@@ -55,8 +55,10 @@ export default function GatherPanel() {
   const cycles = useQuery({ queryKey: ['meal-cycles'], queryFn: fetchMealCycles })
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const effectiveId = selectedId ?? cycles.data?.[0]?.id ?? null
-  const gather = useQuery({ queryKey: ['gather', effectiveId], queryFn: () => fetchGather(effectiveId as number), enabled: effectiveId !== null })
-  const byLocation = useQuery({ queryKey: ['gather-by-location', effectiveId], queryFn: () => fetchGatherByLocation(effectiveId as number), enabled: effectiveId !== null })
+  const cycle = useQuery({ queryKey: ['meal-cycle', effectiveId], queryFn: () => fetchMealCycle(effectiveId as number), enabled: effectiveId !== null })
+  const cycleVersion = cycle.dataUpdatedAt
+  const gather = useQuery({ queryKey: ['gather', effectiveId, cycleVersion], queryFn: () => fetchGather(effectiveId as number), enabled: effectiveId !== null })
+  const byLocation = useQuery({ queryKey: ['gather-by-location', effectiveId, cycleVersion], queryFn: () => fetchGatherByLocation(effectiveId as number), enabled: effectiveId !== null })
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ['gather', effectiveId] })
     await queryClient.invalidateQueries({ queryKey: ['gather-by-location', effectiveId] })
