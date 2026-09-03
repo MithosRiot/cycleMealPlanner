@@ -1,5 +1,5 @@
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -14,8 +14,21 @@ router = APIRouter(prefix="/api/meal-cycles", tags=["prep-schedule"])
 HOUSEHOLD_ID = 1
 
 
+def _reminder_status(enabled: bool, reminder_at: datetime | None, start_at: datetime | None, now: datetime) -> str:
+    if not enabled:
+        return "DISABLED"
+    if reminder_at is None or start_at is None:
+        return "UNSCHEDULED"
+    if now < reminder_at:
+        return "UPCOMING"
+    if now < start_at:
+        return "DUE"
+    return "OVERDUE"
+
+
 @router.get("/{cycle_id}/prep-schedule", response_model=PrepScheduleRead)
 def get_prep_schedule(cycle_id: int, db: Session = Depends(get_db)) -> PrepScheduleRead:
+    generated_at = datetime.now()
     cycle = db.scalar(
         select(MealCycle)
         .where(MealCycle.id == cycle_id, MealCycle.household_id == HOUSEHOLD_ID)
@@ -60,6 +73,11 @@ def get_prep_schedule(cycle_id: int, db: Session = Depends(get_db)) -> PrepSched
             for prep in sorted(recipe.advance_prep, key=lambda item: item.sort_order):
                 start_datetime = serving_datetime - timedelta(minutes=prep.lead_time_minutes) if serving_datetime else None
                 end_datetime = start_datetime + timedelta(minutes=prep.duration_minutes) if start_datetime and prep.duration_minutes is not None else start_datetime
+                reminder_at = (
+                    start_datetime - timedelta(minutes=prep.reminder_offset_minutes or 0)
+                    if prep.reminder_enabled and start_datetime is not None and prep.reminder_offset_minutes is not None
+                    else None
+                )
                 tasks.append(
                     PrepScheduleTaskRead(
                         planned_meal_id=placement.id,
@@ -79,9 +97,13 @@ def get_prep_schedule(cycle_id: int, db: Session = Depends(get_db)) -> PrepSched
                         serving_datetime=serving_datetime,
                         start_datetime=start_datetime,
                         end_datetime=end_datetime,
+                        reminder_enabled=prep.reminder_enabled,
+                        reminder_offset_minutes=prep.reminder_offset_minutes,
+                        reminder_at=reminder_at,
+                        reminder_status=_reminder_status(prep.reminder_enabled, reminder_at, start_datetime, generated_at),
                         unresolved_reason=unresolved_reason,
                     )
                 )
 
     tasks.sort(key=lambda item: (item.start_datetime is None, item.start_datetime or item.serving_datetime, item.meal_name, item.recipe_name, item.title))
-    return PrepScheduleRead(meal_cycle_id=cycle.id, meal_cycle_name=cycle.name, tasks=tasks)
+    return PrepScheduleRead(meal_cycle_id=cycle.id, meal_cycle_name=cycle.name, generated_at=generated_at, tasks=tasks)
