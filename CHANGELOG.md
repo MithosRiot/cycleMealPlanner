@@ -43,6 +43,7 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Explicit PREP, THAW, MARINATE, SOAK, and PROOF advance-prep task types with safe legacy migration, Recipe classification controls, typed Meal Plan prep schedules, and representative seeded task data.
 - Optional local prep reminders with configurable offsets, derived reminder times/statuses, Recipe reminder controls, Meal Plan visibility, safe legacy defaults, and representative seeded enabled/disabled reminders.
 - Persisted exact-lot Gather selections with deterministic allocation suggestions, multi-lot requirements, compatible-lot overrides, reservation/expiration/capacity validation, automatic placement cleanup, and read-only Inventory semantics.
+- Location-grouped Gather pick lists with hierarchical location paths, repeated-lot quantity consolidation, source traceability, and explicit incomplete-requirement visibility without Inventory mutation.
 
 ### Known limitations
 - Exact-lot reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.

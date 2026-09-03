@@ -36,6 +36,67 @@ export type GatherRequirement = {
 
 export type GatherCycle = { meal_cycle_id: number; meal_cycle_name: string; requirements: GatherRequirement[] }
 
+export type GatherPickSource = {
+  planned_meal_id: number
+  meal_name: string
+  day_number: number
+  slot_label: string
+  meal_recipe_id: number
+  recipe_id: number
+  recipe_ingredient_id: number
+  ingredient_id: number
+  ingredient_name: string
+  quantity: string
+  unit_id: number
+  unit_code: string
+}
+
+export type GatherLocationPick = {
+  lot_id: number
+  ingredient_id: number
+  ingredient_name: string
+  quantity: string
+  unit_id: number
+  unit_code: string
+  expiration_date: string | null
+  opened_date: string | null
+  frozen_date: string | null
+  thawed_date: string | null
+  sources: GatherPickSource[]
+}
+
+export type GatherLocationGroup = {
+  location_id: number
+  location_name: string
+  location_path: string
+  picks: GatherLocationPick[]
+}
+
+export type GatherIncompleteRequirement = {
+  planned_meal_id: number
+  meal_name: string
+  day_number: number
+  slot_label: string
+  meal_recipe_id: number
+  recipe_id: number
+  recipe_ingredient_id: number
+  ingredient_id: number
+  ingredient_name: string
+  required_quantity: string
+  selected_quantity: string
+  remaining_quantity: string
+  unit_id: number
+  unit_code: string
+}
+
+export type GatherByLocation = {
+  meal_cycle_id: number
+  meal_cycle_name: string
+  complete: boolean
+  locations: GatherLocationGroup[]
+  incomplete_requirements: GatherIncompleteRequirement[]
+}
+
 async function checked<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: string } | null
@@ -46,6 +107,10 @@ async function checked<T>(response: Response): Promise<T> {
 
 export function fetchGather(cycleId: number): Promise<GatherCycle> {
   return fetch(`/api/meal-cycles/${cycleId}/gather`).then(checked<GatherCycle>)
+}
+
+export function fetchGatherByLocation(cycleId: number): Promise<GatherByLocation> {
+  return fetch(`/api/meal-cycles/${cycleId}/gather/by-location`).then(checked<GatherByLocation>)
 }
 
 export function applyGatherSuggestions(cycleId: number): Promise<GatherCycle> {
