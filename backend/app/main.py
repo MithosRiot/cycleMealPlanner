@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 
 from app.api.allocation import router as allocation_router
+from app.api.combined_prep import router as combined_prep_router
 from app.api.cycle_validation import router as cycle_validation_router
 from app.api.equipment import router as equipment_router
 from app.api.expiration_planning import router as expiration_planning_router
@@ -59,6 +60,7 @@ app.include_router(meals_router)
 app.include_router(meal_cycles_router)
 app.include_router(planned_meals_router)
 app.include_router(prep_schedule_router)
+app.include_router(combined_prep_router)
 app.include_router(expiration_planning_router)
 app.include_router(cycle_validation_router)
 app.include_router(shopping_router)
