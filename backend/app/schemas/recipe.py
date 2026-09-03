@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.ingredient import TagRead
 
@@ -25,8 +25,16 @@ class RecipeAdvancePrepInput(BaseModel):
     lead_time_minutes: int = Field(ge=0)
     duration_minutes: int | None = Field(default=None, ge=0)
     instructions: str | None = None
+    reminder_enabled: bool = False
+    reminder_offset_minutes: int | None = Field(default=None, ge=0)
     prep_group_key: str | None = Field(default=None, max_length=80)
     sort_order: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def validate_reminder(self):
+        if self.reminder_enabled and self.reminder_offset_minutes is None:
+            self.reminder_offset_minutes = 15
+        return self
 
 
 class RecipeAdvancePrepRead(BaseModel):
@@ -39,6 +47,8 @@ class RecipeAdvancePrepRead(BaseModel):
     lead_time_minutes: int
     duration_minutes: int | None
     instructions: str | None
+    reminder_enabled: bool
+    reminder_offset_minutes: int | None
     sort_order: int
 
 
