@@ -11,7 +11,7 @@ from app.database.session import get_db
 from app.models.ingredient import Ingredient
 from app.models.meal_cycle import CycleSlot, MealCycle
 from app.models.planned_meal import PlannedMeal
-from app.models.recipe import Recipe, RecipeCookingStep, RecipePrepGroup
+from app.models.recipe import Recipe, RecipeCookingStep
 from app.models.reference import MeasurementUnit
 from app.schemas.cooking import CookingStepInput, CookingStepRead, CycleCookingModeResponse
 
@@ -95,7 +95,11 @@ def cycle_cooking_mode(cycle_id: int, db: Session = Depends(get_db)) -> dict:
     recipes = list(db.scalars(
         select(Recipe)
         .where(Recipe.id.in_(recipe_ids))
-        .options(selectinload(Recipe.cooking_steps), selectinload(Recipe.prep_groups))
+        .options(
+            selectinload(Recipe.cooking_steps),
+            selectinload(Recipe.prep_groups),
+            selectinload(Recipe.ingredients),
+        )
     ).unique()) if recipe_ids else []
     recipe_map = {recipe.id: recipe for recipe in recipes}
 
@@ -125,11 +129,18 @@ def cycle_cooking_mode(cycle_id: int, db: Session = Depends(get_db)) -> dict:
                 no_steps.append(recipe_name)
                 continue
             group_names = {group.id: group.name for group in recipe.prep_groups}
-            component_ingredients = component.get("ingredients", [])
+            ingredient_rows = {item.id: item for item in recipe.ingredients}
+            component_ingredients: list[dict] = []
+            for scaled in component.get("ingredients", []):
+                recipe_ingredient = ingredient_rows.get(int(scaled.get("recipe_ingredient_id") or 0))
+                component_ingredients.append({
+                    "scaled": scaled,
+                    "recipe_ingredient": recipe_ingredient,
+                })
             for step in recipe.cooking_steps:
-                visible_ingredients = component_ingredients
+                visible = component_ingredients
                 if step.prep_group_id is not None:
-                    visible_ingredients = [row for row in component_ingredients if row.get("prep_group_id") == step.prep_group_id]
+                    visible = [row for row in component_ingredients if row["recipe_ingredient"] is not None and row["recipe_ingredient"].prep_group_id == step.prep_group_id]
                 flat_steps.append({
                     "step_id": step.id,
                     "component_index": component_index,
@@ -141,16 +152,16 @@ def cycle_cooking_mode(cycle_id: int, db: Session = Depends(get_db)) -> dict:
                     "prep_group_id": step.prep_group_id,
                     "prep_group_name": group_names.get(step.prep_group_id) if step.prep_group_id is not None else None,
                     "ingredients": [{
-                        "ingredient_id": int(row["ingredient_id"]),
-                        "ingredient_name": ingredient_names.get(int(row["ingredient_id"]), f"Ingredient {row['ingredient_id']}"),
-                        "quantity": Decimal(str(row["quantity"])),
-                        "unit_id": int(row["unit_id"]),
-                        "unit_code": unit_codes.get(int(row["unit_id"]), str(row["unit_id"])),
-                        "preparation": row.get("preparation"),
-                        "prep_method": row.get("prep_method"),
-                        "prep_size": row.get("prep_size"),
-                        "prep_state": row.get("prep_state"),
-                    } for row in visible_ingredients],
+                        "ingredient_id": int(row["scaled"]["ingredient_id"]),
+                        "ingredient_name": ingredient_names.get(int(row["scaled"]["ingredient_id"]), f"Ingredient {row['scaled']['ingredient_id']}"),
+                        "quantity": Decimal(str(row["scaled"]["quantity"])),
+                        "unit_id": int(row["scaled"]["unit_id"]),
+                        "unit_code": unit_codes.get(int(row["scaled"]["unit_id"]), str(row["scaled"]["unit_id"])),
+                        "preparation": row["recipe_ingredient"].preparation if row["recipe_ingredient"] else None,
+                        "prep_method": row["recipe_ingredient"].prep_method if row["recipe_ingredient"] else None,
+                        "prep_size": row["recipe_ingredient"].prep_size if row["recipe_ingredient"] else None,
+                        "prep_state": row["recipe_ingredient"].prep_state if row["recipe_ingredient"] else None,
+                    } for row in visible],
                 })
         total = len(flat_steps)
         for index, row in enumerate(flat_steps):
