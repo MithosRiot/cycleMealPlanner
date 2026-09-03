@@ -6,6 +6,9 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
+TEST_MEAL_TYPE = "COMBINED_PREP_TEST"
+
+
 def _recipe_payload(name: str, ingredient_id: int, unit_id: int, quantity: str, method: str, size: str, task_title: str) -> dict:
     return {
         "name": name,
@@ -18,7 +21,7 @@ def _recipe_payload(name: str, ingredient_id: int, unit_id: int, quantity: str, 
         "cook_time_minutes": 20,
         "notes": None,
         "favorite": False,
-        "meal_types": ["DINNER"],
+        "meal_types": [TEST_MEAL_TYPE],
         "tag_ids": [],
         "prep_groups": [{"client_key": "main", "name": "Main prep", "sort_order": 0}],
         "advance_prep": [{
@@ -60,7 +63,7 @@ def test_combines_matching_component_prep_and_keeps_incompatible_prep_separate()
 
         meal = client.post("/api/meals", json={
             "name": f"Combined Prep Meal {suffix}", "description": None, "favorite": False,
-            "meal_types": ["DINNER"], "tag_ids": [],
+            "meal_types": [TEST_MEAL_TYPE], "tag_ids": [],
             "recipes": [
                 {"recipe_id": first["id"], "serving_multiplier": "1", "default_servings": "4", "sort_order": 0, "notes": None},
                 {"recipe_id": second["id"], "serving_multiplier": "1", "default_servings": "4", "sort_order": 1, "notes": None},
@@ -69,7 +72,7 @@ def test_combines_matching_component_prep_and_keeps_incompatible_prep_separate()
         }).json()
         cycle = client.post("/api/meal-cycles", json={
             "name": f"Combined Prep Cycle {suffix}", "duration_days": 1, "start_date": "2026-09-05", "notes": None,
-            "slot_definitions": [{"label": "Dinner", "sort_order": 0, "serving_time": "18:00:00"}],
+            "slot_definitions": [{"label": TEST_MEAL_TYPE, "sort_order": 0, "serving_time": "18:00:00"}],
         }).json()
         slot_id = cycle["slots"][0]["id"]
         placed = client.post(f"/api/meal-cycles/{cycle['id']}/slots/{slot_id}/planned-meal", json={"meal_id": meal["id"]})
