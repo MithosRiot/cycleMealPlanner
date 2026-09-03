@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { fetchHealth } from './api'
+import CombinedPrepPanel from './CombinedPrepPanel'
 import CycleSchedulingPanel from './CycleSchedulingPanel'
 import CycleValidationPage from './CycleValidationPage'
 import GatherPanel from './GatherPanel'
@@ -26,7 +27,7 @@ function PlaceholderPage({ title }: { title: string }) {
 }
 
 function MealPlanPageWithScheduling() {
-  return <><MealPlanWithReservationsPage /><CycleSchedulingPanel /><PrepSchedulePanel /><GatherPanel /></>
+  return <><MealPlanWithReservationsPage /><CycleSchedulingPanel /><PrepSchedulePanel /><CombinedPrepPanel /><GatherPanel /></>
 }
 
 function App() {
