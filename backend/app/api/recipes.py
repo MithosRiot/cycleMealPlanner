@@ -44,25 +44,37 @@ def _recipe_or_404(db: Session, recipe_id: int) -> Recipe:
 
 def _recipe_payload(recipe: Recipe) -> dict:
     return {
-        "id": recipe.id, "household_id": recipe.household_id, "name": recipe.name,
-        "description": recipe.description, "base_servings": recipe.base_servings,
-        "serving_unit": recipe.serving_unit, "yield_quantity": recipe.yield_quantity,
-        "yield_unit_id": recipe.yield_unit_id, "prep_time_minutes": recipe.prep_time_minutes,
-        "cook_time_minutes": recipe.cook_time_minutes, "notes": recipe.notes,
-        "favorite": recipe.favorite, "active": recipe.active,
-        "meal_types": [item.meal_type for item in recipe.meal_types], "tags": recipe.tags,
-        "prep_groups": recipe.prep_groups, "advance_prep": recipe.advance_prep,
-        "equipment": recipe.equipment, "ingredients": recipe.ingredients,
+        "id": recipe.id,
+        "household_id": recipe.household_id,
+        "name": recipe.name,
+        "description": recipe.description,
+        "base_servings": recipe.base_servings,
+        "serving_unit": recipe.serving_unit,
+        "yield_quantity": recipe.yield_quantity,
+        "yield_unit_id": recipe.yield_unit_id,
+        "prep_time_minutes": recipe.prep_time_minutes,
+        "cook_time_minutes": recipe.cook_time_minutes,
+        "notes": recipe.notes,
+        "favorite": recipe.favorite,
+        "active": recipe.active,
+        "meal_types": [item.meal_type for item in recipe.meal_types],
+        "tags": recipe.tags,
+        "prep_groups": recipe.prep_groups,
+        "advance_prep": recipe.advance_prep,
+        "equipment": recipe.equipment,
+        "ingredients": recipe.ingredients,
     }
 
 
 def _validate_recipe_references(db: Session, payload: RecipeCreate | RecipeUpdate) -> tuple[list[Tag], list[str]]:
     if payload.yield_unit_id is not None and db.get(MeasurementUnit, payload.yield_unit_id) is None:
         raise HTTPException(status_code=400, detail="Yield measurement unit not found")
+
     group_keys = [group.client_key.strip() for group in payload.prep_groups]
     if len(set(group_keys)) != len(group_keys):
         raise HTTPException(status_code=422, detail="Prep group keys must be unique")
     known_group_keys = set(group_keys)
+
     for item in payload.ingredients:
         ingredient = db.get(Ingredient, item.ingredient_id)
         if ingredient is None or ingredient.household_id != DEFAULT_HOUSEHOLD_ID:
@@ -82,9 +94,11 @@ def _validate_recipe_references(db: Session, payload: RecipeCreate | RecipeUpdat
             substitutes = list(db.scalars(select(Ingredient).where(Ingredient.id.in_(substitute_ids), Ingredient.household_id == DEFAULT_HOUSEHOLD_ID, Ingredient.active.is_(True))))
             if len(substitutes) != len(substitute_ids):
                 raise HTTPException(status_code=400, detail="One or more substitute ingredients were not found or are archived")
+
     for item in payload.advance_prep:
         if item.prep_group_key and item.prep_group_key not in known_group_keys:
             raise HTTPException(status_code=422, detail=f"Unknown prep group key {item.prep_group_key}")
+
     equipment_ids = [item.equipment_id for item in payload.equipment]
     if len(set(equipment_ids)) != len(equipment_ids):
         raise HTTPException(status_code=422, detail="A Recipe cannot list the same Equipment more than once")
@@ -92,7 +106,9 @@ def _validate_recipe_references(db: Session, payload: RecipeCreate | RecipeUpdat
         available = list(db.scalars(select(Equipment).where(Equipment.id.in_(equipment_ids), Equipment.household_id == DEFAULT_HOUSEHOLD_ID, Equipment.active.is_(True))))
         if len(available) != len(equipment_ids):
             raise HTTPException(status_code=400, detail="One or more Equipment items were not found or are archived")
-    unique_tag_ids = list(dict.fromkeys(payload.tag_ids)); tags: list[Tag] = []
+
+    unique_tag_ids = list(dict.fromkeys(payload.tag_ids))
+    tags: list[Tag] = []
     if unique_tag_ids:
         tags = list(db.scalars(select(Tag).where(Tag.id.in_(unique_tag_ids), Tag.household_id == DEFAULT_HOUSEHOLD_ID, Tag.active.is_(True))))
         if len(tags) != len(unique_tag_ids):
@@ -102,14 +118,26 @@ def _validate_recipe_references(db: Session, payload: RecipeCreate | RecipeUpdat
 
 
 def _snapshot_variant_overrides(recipe: Recipe) -> list[tuple[RecipeVariant, list[dict]]]:
-    ingredient_by_id = {item.id: item for item in recipe.ingredients}; result: list[tuple[RecipeVariant, list[dict]]] = []
+    ingredient_by_id = {item.id: item for item in recipe.ingredients}
+    result: list[tuple[RecipeVariant, list[dict]]] = []
     for variant in recipe.variants:
         rows = []
         for override in variant.overrides:
             old_item = ingredient_by_id.get(override.recipe_ingredient_id)
-            if old_item is None: continue
+            if old_item is None:
+                continue
             selected_sub = next((sub for sub in old_item.substitutions if sub.id == override.substitution_id), None)
-            rows.append({"canonical_ingredient_id": old_item.ingredient_id, "quantity": override.quantity, "unit_id": override.unit_id, "substitute_ingredient_id": selected_sub.substitute_ingredient_id if selected_sub else None, "preparation": override.preparation, "prep_method": override.prep_method, "prep_size": override.prep_size, "prep_state": override.prep_state, "notes": override.notes})
+            rows.append({
+                "canonical_ingredient_id": old_item.ingredient_id,
+                "quantity": override.quantity,
+                "unit_id": override.unit_id,
+                "substitute_ingredient_id": selected_sub.substitute_ingredient_id if selected_sub else None,
+                "preparation": override.preparation,
+                "prep_method": override.prep_method,
+                "prep_size": override.prep_size,
+                "prep_state": override.prep_state,
+                "notes": override.notes,
+            })
         result.append((variant, rows))
     return result
 
@@ -148,7 +176,7 @@ def _save_recipe(db: Session, recipe: Recipe, payload: RecipeCreate | RecipeUpda
         reminder_enabled, reminder_offset = (item.reminder_enabled, item.reminder_offset_minutes) if explicit_reminder else preserved_reminder_title.get(item.title.strip(), preserved_reminder_order.get(item.sort_order, (False, None)))
         if reminder_enabled and reminder_offset is None: reminder_offset = 15
         recipe.advance_prep.append(RecipeAdvancePrep(prep_group_id=group_ids.get(item.prep_group_key) if item.prep_group_key else None, task_type=task_type, title=item.title.strip(), lead_time_minutes=item.lead_time_minutes, duration_minutes=item.duration_minutes, instructions=item.instructions.strip() if item.instructions else None, reminder_enabled=reminder_enabled, reminder_offset_minutes=reminder_offset, sort_order=item.sort_order))
-    for item in sorted(payload.equipment, key=lambda value: value.sort_order): recipe.equipment.append(RecipeEquipment(equipment_id=item.equipment_id, quantity=item.quantity, notes=item.notes.strip() if item.notes else None, sort_order=item.sort_order))
+    for item in sorted(payload.equipment, key=lambda value: value.sort_order): recipe.advance_prep.append(RecipeEquipment(equipment_id=item.equipment_id, quantity=item.quantity, notes=item.notes.strip() if item.notes else None, sort_order=item.sort_order))
 
     new_by_canonical: dict[int, RecipeIngredient] = {}
     for item in sorted(payload.ingredients, key=lambda value: value.sort_order):
@@ -206,7 +234,10 @@ def update_advance_prep_reminder(recipe_id: int, prep_id: int, enabled: bool = Q
     recipe = _recipe_or_404(db, recipe_id); prep = next((item for item in recipe.advance_prep if item.id == prep_id), None)
     if prep is None: raise HTTPException(status_code=404, detail="Advance prep task not found")
     prep.reminder_enabled = enabled
-    prep.reminder_offset_minutes = (15 if offset_minutes is None else offset_minutes) if enabled else None
+    if enabled:
+        prep.reminder_offset_minutes = offset_minutes if offset_minutes is not None else (prep.reminder_offset_minutes if prep.reminder_offset_minutes is not None else 15)
+    elif offset_minutes is not None:
+        prep.reminder_offset_minutes = offset_minutes
     db.commit(); return _recipe_payload(_recipe_or_404(db, recipe_id))
 
 @router.delete("/{recipe_id}", status_code=status.HTTP_204_NO_CONTENT)
