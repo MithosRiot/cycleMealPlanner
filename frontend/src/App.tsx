@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { fetchHealth } from './api'
 import CycleSchedulingPanel from './CycleSchedulingPanel'
 import CycleValidationPage from './CycleValidationPage'
+import GatherPanel from './GatherPanel'
 import IngredientsPage from './IngredientsPage'
 import './InventoryPage.css'
 import { MealDetailPage, MealEditorPage, MealsPage } from './MealPages'
@@ -25,7 +26,7 @@ function PlaceholderPage({ title }: { title: string }) {
 }
 
 function MealPlanPageWithScheduling() {
-  return <><MealPlanWithReservationsPage /><CycleSchedulingPanel /><PrepSchedulePanel /></>
+  return <><MealPlanWithReservationsPage /><CycleSchedulingPanel /><PrepSchedulePanel /><GatherPanel /></>
 }
 
 function App() {
