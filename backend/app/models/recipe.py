@@ -37,6 +37,7 @@ class Recipe(Base):
 
     prep_groups: Mapped[list[RecipePrepGroup]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipePrepGroup.sort_order")
     advance_prep: Mapped[list[RecipeAdvancePrep]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeAdvancePrep.sort_order")
+    cooking_steps: Mapped[list[RecipeCookingStep]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeCookingStep.sort_order")
     equipment: Mapped[list[RecipeEquipment]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeEquipment.sort_order")
     ingredients: Mapped[list[RecipeIngredient]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeIngredient.sort_order")
     variants: Mapped[list[RecipeVariant]] = relationship(back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeVariant.sort_order")
@@ -90,6 +91,21 @@ class RecipeAdvancePrep(Base):
         CheckConstraint("reminder_enabled = 0 OR reminder_offset_minutes IS NOT NULL", name="ck_recipe_advance_prep_reminder_enabled_has_offset"),
         CheckConstraint("sort_order >= 0", name="ck_recipe_advance_prep_sort_order_nonnegative"),
     )
+
+
+class RecipeCookingStep(Base):
+    __tablename__ = "recipe_cooking_steps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
+    prep_group_id: Mapped[int | None] = mapped_column(ForeignKey("recipe_prep_groups.id", ondelete="SET NULL"))
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    instructions: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    recipe: Mapped[Recipe] = relationship(back_populates="cooking_steps")
+
+    __table_args__ = (CheckConstraint("sort_order >= 0", name="ck_recipe_cooking_steps_sort_order_nonnegative"),)
 
 
 class RecipeEquipment(Base):
