@@ -20,7 +20,7 @@ export default function PrepSchedulePanel() {
 
   return <section className="panel" style={{ marginTop: 20 }}>
     <div className="section-heading">
-      <div><h2>Prep schedule</h2><p className="planning-note">Advance-prep tasks are calculated from each placed Meal's serving date/time.</p></div>
+      <div><h2>Prep schedule</h2><p className="planning-note">Advance-prep tasks and optional local reminders are calculated from each placed Meal's serving date/time.</p></div>
       <div className="header-actions">
         <select value={effectiveId ?? ''} onChange={(event) => setSelectedId(event.target.value ? Number(event.target.value) : null)}>
           <option value="">Select cycle</option>
@@ -39,6 +39,9 @@ export default function PrepSchedulePanel() {
           <span>Start: {formatDateTime(task.start_datetime)}</span>
           {task.duration_minutes !== null && <span>End: {formatDateTime(task.end_datetime)} · {task.duration_minutes} min</span>}
           <span>Serve: {formatDateTime(task.serving_datetime)} · lead {task.lead_time_minutes} min</span>
+          {task.reminder_enabled
+            ? <span className={task.reminder_status === 'OVERDUE' || task.reminder_status === 'DUE' ? 'warning-text' : undefined}>Reminder: {formatDateTime(task.reminder_at)} · {task.reminder_status}{task.reminder_offset_minutes !== null ? ` · ${task.reminder_offset_minutes} min before prep` : ''}</span>
+            : <span>Reminder: off</span>}
           {task.unresolved_reason && <span className="warning-text">{task.unresolved_reason}</span>}
         </div>
         {task.instructions && <p className="planning-note">{task.instructions}</p>}
