@@ -27,6 +27,26 @@ def _check_map(bind, table_name: str) -> dict[str, dict]:
     }
 
 
+def _recover_stale_batch_table(bind, table_name: str) -> None:
+    """Recover an Alembic SQLite batch table left by interrupted DDL.
+
+    Alembic batch mode creates ``_alembic_tmp_<table>`` before copying and
+    replacing the original table. SQLite DDL is non-transactional, so an
+    interrupted migration can leave that temporary table behind. If the real
+    table still exists, the temporary table is incomplete/redundant and is
+    safe to drop. If only the temporary table exists, restore it as the real
+    table so the migration can continue without discarding copied data.
+    """
+    temp_name = f"_alembic_tmp_{table_name}"
+    tables = set(sa.inspect(bind).get_table_names())
+    if temp_name not in tables:
+        return
+    if table_name in tables:
+        bind.execute(sa.text(f'DROP TABLE "{temp_name}"'))
+    else:
+        bind.execute(sa.text(f'ALTER TABLE "{temp_name}" RENAME TO "{table_name}"'))
+
+
 def upgrade() -> None:
     """Apply 0032 safely even after an interrupted SQLite DDL migration.
 
@@ -36,6 +56,11 @@ def upgrade() -> None:
     inspects the live schema/data before applying the corresponding change.
     """
     bind = op.get_bind()
+
+    # Clean up/restore known Alembic batch artifacts before inspecting schema.
+    # These are the two tables altered with batch mode by this migration.
+    _recover_stale_batch_table(bind, "inventory_lots")
+    _recover_stale_batch_table(bind, "inventory_transactions")
 
     completion_columns = _column_map(bind, "meal_completions")
     if "actual_servings_produced" not in completion_columns:
@@ -65,6 +90,7 @@ def upgrade() -> None:
     needs_source_identity_check = "ck_inventory_lots_source_identity" not in lot_checks
 
     if any((ingredient_needs_nullable, source_needs_required, source_needs_default, needs_source_type_check, needs_source_identity_check)):
+        _recover_stale_batch_table(bind, "inventory_lots")
         with op.batch_alter_table("inventory_lots") as batch:
             if ingredient_needs_nullable:
                 batch.alter_column("ingredient_id", existing_type=sa.Integer(), nullable=True)
@@ -90,6 +116,7 @@ def upgrade() -> None:
     transaction_type_check = transaction_checks.get("ck_inventory_transactions_type")
     transaction_sql = str(transaction_type_check.get("sqltext", "")) if transaction_type_check else ""
     if "PRODUCTION" not in transaction_sql:
+        _recover_stale_batch_table(bind, "inventory_transactions")
         with op.batch_alter_table("inventory_transactions") as batch:
             if transaction_type_check is not None:
                 batch.drop_constraint("ck_inventory_transactions_type", type_="check")
