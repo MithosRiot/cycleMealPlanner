@@ -113,6 +113,14 @@ def _seed_cooking_steps() -> None:
             (3,1,NULL,'Finish and serve','Combine components, taste, and serve.',2),
             (4,2,2,'Brown beef','Brown the ground beef and break it into crumbles.',0)
         """))
+        connection.execute(text("""
+            INSERT INTO recipe_cooking_timers
+            (id, cooking_step_id, label, duration_seconds, notes, sort_order)
+            VALUES
+            (1,1,'Chicken cook',600,'Check doneness before serving.',0),
+            (2,2,'Rice simmer',900,'Keep covered while simmering.',0),
+            (3,2,'Rice rest',300,'Rest off heat before fluffing.',1)
+        """))
 
 
 def seed(reset: bool = False):
