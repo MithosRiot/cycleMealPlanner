@@ -51,6 +51,7 @@ def _load_completion(db: Session, planned_meal_id: int) -> MealCompletion | None
         select(MealCompletion)
         .where(MealCompletion.planned_meal_id == planned_meal_id)
         .options(selectinload(MealCompletion.usages))
+        .execution_options(populate_existing=True)
     )
 
 
