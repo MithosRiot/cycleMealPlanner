@@ -51,7 +51,8 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Multi-component Cooking Mode coordination with explicit step dependencies, stage-based ready-work ordering, parallel-capable groups, cycle rejection, deterministic interleaving across Recipe components, and preserved timer/equipment/temperature context.
 - Persistent Meal completion drafts with planned-versus-actual ingredient usage, last-minute Ingredient substitution, safe same-family unit validation, plan-staleness detection/refresh, and a Meal Plan reconciliation UI that does not mutate Inventory before finalization.
 - Atomic Meal completion finalization with actual-Ingredient lot allocation, valid Gather-selection preference, deterministic fallback allocation, Decimal-safe cross-unit consumption, immutable CONSUME transactions, lot-level audit history, structured shortage rollback, finalized locking, and idempotent retry behavior.
+- Post-finalization production reconciliation with actual servings produced/eaten, deterministic leftover quantities including zero-leftover completion, durable leftover Inventory lots, actual RecipeOutput scaling and review/override, `PRODUCTION` transaction provenance, immutable historical output snapshots, and idempotent production commit behavior.
 
 ### Known limitations
-- Leftover creation/coverage, reservation release, expiration-aware alerts, and advanced reconciliation corrections are planned for later milestones.
+- Future leftover placement/coverage, reservation release, expiration-aware alerts, and advanced reconciliation corrections are planned for later milestones.
 - The development database currently defaults to `./data`; packaged Windows persistence will be moved outside the installation directory.
