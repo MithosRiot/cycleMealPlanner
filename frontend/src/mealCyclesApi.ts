@@ -96,6 +96,12 @@ export type PlannedMeal = {
   id: number
   cycle_slot_id: number
   meal_id: number
+  source_type: 'SAVED_MEAL' | 'LEFTOVER' | 'RECIPE_OUTPUT'
+  source_origin_planned_meal_id: number | null
+  source_record_id: number | null
+  source_recipe_output_id: number | null
+  source_quantity: string | null
+  source_unit_id: number | null
   locked: boolean
   planned_servings: string
   planned_leftover_servings: string
@@ -108,6 +114,23 @@ export type PlannedMeal = {
   scheduled_date: string | null
   serving_time: string | null
   scheduled_datetime: string | null
+}
+
+export type ProducedSourceOption = {
+  source_type: 'LEFTOVER' | 'RECIPE_OUTPUT'
+  source_origin_planned_meal_id: number
+  source_record_id: number | null
+  source_recipe_output_id: number | null
+  source_name: string
+  source_meal_id: number
+  unit_id: number
+  unit_code: string
+  planned_quantity: string
+  physical_quantity: string
+  reserved_quantity: string
+  available_quantity: string
+  lot_id: number | null
+  expiration_date: string | null
 }
 
 export type CycleSlot = {
@@ -163,6 +186,7 @@ export const fetchMealCycles = (): Promise<MealCycle[]> => jsonRequest('/api/mea
 export const fetchMealCycle = (id: number): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}`)
 export const fetchExpirationSuggestions = (id: number): Promise<ExpirationSuggestionsResponse> => jsonRequest(`/api/meal-cycles/${id}/expiration-suggestions`)
 export const fetchCycleValidation = (id: number): Promise<CycleValidationResponse> => jsonRequest(`/api/meal-cycles/${id}/validate`)
+export const fetchProducedSourceOptions = (): Promise<ProducedSourceOption[]> => jsonRequest('/api/produced-source-options')
 export const createMealCycle = (input: MealCycleInput): Promise<MealCycle> => jsonRequest('/api/meal-cycles', { method: 'POST', body: JSON.stringify(input) })
 export const updateMealCycle = (id: number, input: MealCycleInput): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'PUT', body: JSON.stringify(input) })
 export const updateMealCycleSchedule = (id: number, input: MealCycleScheduleUpdate): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/schedule`, { method: 'PUT', body: JSON.stringify(input) })
@@ -170,6 +194,7 @@ export const updatePopulationRules = (id: number, input: PopulationRules): Promi
 export const updateSmartPlanningPreferences = (id: number, input: SmartPlanningPreferences): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/smart-preferences`, { method: 'PUT', body: JSON.stringify(input) })
 export const deleteMealCycle = (id: number): Promise<void> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'DELETE' })
 export const assignPlannedMeal = (cycleId: number, slotId: number, mealId: number): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal`, { method: 'POST', body: JSON.stringify({ meal_id: mealId }) })
+export const assignProducedSource = (cycleId: number, slotId: number, source: ProducedSourceOption, quantity: string): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-source`, { method: 'POST', body: JSON.stringify({ source_type: source.source_type, source_origin_planned_meal_id: source.source_origin_planned_meal_id, source_record_id: source.source_record_id, source_recipe_output_id: source.source_recipe_output_id, quantity, unit_id: source.unit_id }) })
 export const updatePlannedMealPlanning = (cycleId: number, slotId: number, input: { planned_servings: string; planned_leftover_servings: string; component_serving_overrides: Record<number, string> }): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal/planning`, { method: 'PUT', body: JSON.stringify(input) })
 export const removePlannedMeal = (cycleId: number, slotId: number): Promise<void> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal`, { method: 'DELETE' })
 export const setPlannedMealLock = (cycleId: number, slotId: number, locked: boolean): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal/lock`, { method: 'PUT', body: JSON.stringify({ locked }) })
