@@ -135,6 +135,20 @@ def _seed_cooking_steps() -> None:
             (1,1,'Internal',165,'F','Verify chicken reaches a safe internal temperature.',0),
             (2,2,'Simmer',212,'F','Bring liquid to a boil before reducing to a simmer.',0)
         """))
+        connection.execute(text("""
+            INSERT INTO recipe_cooking_coordination
+            (cooking_step_id, stage, parallel_capable)
+            VALUES
+            (1,0,1),
+            (2,1,1),
+            (3,3,0),
+            (4,0,1)
+        """))
+        connection.execute(text("""
+            INSERT INTO recipe_cooking_dependencies
+            (cooking_step_id, depends_on_step_id)
+            VALUES (3,2)
+        """))
 
 
 def seed(reset: bool = False):
