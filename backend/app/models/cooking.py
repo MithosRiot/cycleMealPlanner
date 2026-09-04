@@ -34,6 +34,6 @@ class PlannedCookingTimer(Base):
 
     __table_args__ = (
         UniqueConstraint("planned_meal_id", "cooking_timer_id", name="uq_planned_cooking_timers_meal_timer"),
-        CheckConstraint("status IN ('READY','RUNNING','PAUSED','COMPLETED')", name="ck_planned_cooking_timers_status"),
+        CheckConstraint("status IN ('READY','RUNNING','PAUSED','COMPLETED','DISMISSED')", name="ck_planned_cooking_timers_status"),
         CheckConstraint("remaining_seconds >= 0", name="ck_planned_cooking_timers_remaining_nonnegative"),
     )
