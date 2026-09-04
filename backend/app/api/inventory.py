@@ -97,6 +97,9 @@ def create_inventory_lot(payload: InventoryLotCreate, db: Session = Depends(get_
     lot = InventoryLot(
         household_id=DEFAULT_HOUSEHOLD_ID,
         ingredient_id=payload.ingredient_id,
+        source_type="INGREDIENT",
+        source_id=None,
+        source_name=None,
         location_id=payload.location_id,
         quantity=payload.quantity,
         unit_id=payload.unit_id,
@@ -201,6 +204,9 @@ def split_inventory(lot_id: int, payload: SplitAction, db: Session = Depends(get
     child = InventoryLot(
         household_id=source.household_id,
         ingredient_id=source.ingredient_id,
+        source_type=source.source_type,
+        source_id=source.source_id,
+        source_name=source.source_name,
         location_id=payload.to_location_id,
         quantity=quantity,
         unit_id=source.unit_id,
@@ -215,8 +221,8 @@ def split_inventory(lot_id: int, payload: SplitAction, db: Session = Depends(get
     db.flush()
 
     user_note = payload.note.strip() if payload.note else None
-    source_note = f"Split {quantity} to lot #{child.id}" + (f" — {user_note}" if user_note else "")
-    child_note = f"Split {quantity} from lot #{source.id}" + (f" — {user_note}" if user_note else "")
+    source_note = f"Split {quantity} to lot {child.id}" + (f" — {user_note}" if user_note else "")
+    child_note = f"Split {quantity} from lot {source.id}" + (f" — {user_note}" if user_note else "")
     _record(db, source, "TRANSFER", -quantity, source_note, source.location_id, payload.to_location_id)
     _record(db, child, "TRANSFER", quantity, child_note, source.location_id, payload.to_location_id)
 
