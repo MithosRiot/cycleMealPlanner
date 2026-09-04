@@ -5,6 +5,7 @@ import { RecipeDetailWithVariantsPage, RecipeEditorWithVariantsPage } from './Re
 import RecipeOutputsPanel from './RecipeOutputsPanel'
 import TypedAdvancePrepPanel from './TypedAdvancePrepPanel'
 import PrepReminderPanel from './PrepReminderPanel'
+import RecipeCookingStepsPanel from './RecipeCookingStepsPanel'
 
 function OutputsPanel() {
   const { recipeId } = useParams()
@@ -15,9 +16,9 @@ function OutputsPanel() {
 }
 
 export function RecipeEditorWithAdvancedPage() {
-  return <><RecipeEditorWithVariantsPage /><TypedAdvancePrepPanel /><PrepReminderPanel /><OutputsPanel /></>
+  return <><RecipeEditorWithVariantsPage /><TypedAdvancePrepPanel /><PrepReminderPanel /><RecipeCookingStepsPanel /><OutputsPanel /></>
 }
 
 export function RecipeDetailWithAdvancedPage() {
-  return <><RecipeDetailWithVariantsPage /><TypedAdvancePrepPanel /><PrepReminderPanel /><OutputsPanel /></>
+  return <><RecipeDetailWithVariantsPage /><TypedAdvancePrepPanel /><PrepReminderPanel /><RecipeCookingStepsPanel /><OutputsPanel /></>
 }

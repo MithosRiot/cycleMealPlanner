@@ -60,7 +60,6 @@ def _seed_gather_examples() -> None:
         if 1 not in reservations:
             return
 
-        # A second Chicken Breast lot makes the seeded Gather example explicitly multi-lot.
         connection.execute(text("""
             INSERT OR IGNORE INTO inventory_lots
             (id, household_id, ingredient_id, location_id, quantity, unit_id, purchase_date,
@@ -100,6 +99,22 @@ def _seed_gather_examples() -> None:
             """), {"ri": reservations[10]})
 
 
+def _seed_cooking_steps() -> None:
+    from app.database.session import engine
+
+    with engine.begin() as connection:
+        connection.execute(text("DELETE FROM recipe_cooking_steps WHERE recipe_id IN (1,2)"))
+        connection.execute(text("""
+            INSERT INTO recipe_cooking_steps
+            (id, recipe_id, prep_group_id, title, instructions, sort_order)
+            VALUES
+            (1,1,1,'Cook chicken','Cook the chicken until browned and cooked through.',0),
+            (2,1,101,'Cook rice','Add rice and cook until tender.',1),
+            (3,1,NULL,'Finish and serve','Combine components, taste, and serve.',2),
+            (4,2,2,'Brown beef','Brown the ground beef and break it into crumbles.',0)
+        """))
+
+
 def seed(reset: bool = False):
     had_existing_data = not reset and _has_existing_seed_data()
     path = _base.seed(reset=reset)
@@ -107,6 +122,7 @@ def seed(reset: bool = False):
         return path
     _seed_typed_prep_examples()
     _seed_gather_examples()
+    _seed_cooking_steps()
     return path
 
 
