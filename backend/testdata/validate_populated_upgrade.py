@@ -53,8 +53,10 @@ def main() -> None:
         prep_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(recipe_advance_prep)"))}
         gather_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(gather_lot_selections)"))}
         cooking_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(recipe_cooking_steps)"))}
+        timer_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(recipe_cooking_timers)"))}
+        runtime_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(planned_cooking_timers)"))}
 
-    assert version == "0026_recipe_cooking_steps"
+    assert version == "0027_cooking_timers"
     assert row.name == "Migration Test Ingredient"
     assert bool(row.staple_enabled) is False
     assert row.staple_minimum is None and row.staple_target is None and row.staple_unit_id is None
@@ -66,9 +68,11 @@ def main() -> None:
     assert bool(prep.reminder_enabled) is False and prep.reminder_offset_minutes is None
     assert {"planned_meal_id", "meal_recipe_id", "recipe_ingredient_id", "lot_id", "quantity", "unit_id"}.issubset(gather_columns)
     assert {"recipe_id", "prep_group_id", "title", "instructions", "sort_order"}.issubset(cooking_columns)
+    assert {"cooking_step_id", "label", "duration_seconds", "notes", "sort_order"}.issubset(timer_columns)
+    assert {"planned_meal_id", "cooking_timer_id", "status", "remaining_seconds", "ends_at_epoch"}.issubset(runtime_columns)
 
     engine.dispose(); DB_PATH.unlink(missing_ok=True)
-    print("Populated SQLite upgrade 0020 -> 0026 succeeded and preserved existing data while adding Gather selections and Recipe cooking steps.")
+    print("Populated SQLite upgrade 0020 -> 0027 succeeded and preserved existing data while adding cooking timer definitions and runtime state.")
 
 
 if __name__ == "__main__":
