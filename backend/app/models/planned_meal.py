@@ -17,6 +17,7 @@ class PlannedMeal(Base):
     meal_id: Mapped[int] = mapped_column(ForeignKey("meals.id", ondelete="RESTRICT"), nullable=False)
     source_type: Mapped[str] = mapped_column(String(30), nullable=False, default="SAVED_MEAL")
     source_origin_planned_meal_id: Mapped[int | None] = mapped_column(Integer)
+    source_record_id: Mapped[int | None] = mapped_column(Integer)
     source_recipe_output_id: Mapped[int | None] = mapped_column(Integer)
     source_quantity: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
     source_unit_id: Mapped[int | None] = mapped_column(ForeignKey("measurement_units.id", ondelete="RESTRICT"))
