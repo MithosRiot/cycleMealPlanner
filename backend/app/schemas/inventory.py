@@ -67,7 +67,10 @@ class InventoryLotRead(BaseModel):
 
     id: int
     household_id: int
-    ingredient_id: int
+    ingredient_id: int | None
+    source_type: str
+    source_id: int | None
+    source_name: str | None
     location_id: int
     quantity: Decimal
     unit_id: int
