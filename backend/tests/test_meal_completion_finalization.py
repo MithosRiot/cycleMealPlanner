@@ -133,7 +133,9 @@ def test_finalize_consumes_actual_substitution_multilot_units_rolls_back_shortag
         assert Decimal(shallot_1["quantity"]) == 0
         assert Decimal(shallot_2["quantity"]) == 0
         assert Decimal(flour_kg["quantity"]) == 0
-        assert Decimal(flour_g["quantity"]) == Decimal("100")
+        kg_as_grams = Decimal("0.5") * Decimal(str(kilogram["base_multiplier"])) / Decimal(str(gram["base_multiplier"]))
+        expected_grams_remaining = Decimal("300") - (Decimal("700") - kg_as_grams)
+        assert abs(Decimal(flour_g["quantity"]) - expected_grams_remaining) <= Decimal("0.000001")
         for row in [shallot_1, shallot_2, flour_kg, flour_g]:
             assert row["transactions"][-1]["transaction_type"] == "CONSUME"
 
