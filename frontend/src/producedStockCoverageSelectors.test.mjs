@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { emitProductionInventoryChanged, onProductionInventoryChanged } from './productionEvents.ts'
 import { producedSourcePlacements } from './producedStockCoverageSelectors.ts'
 
 const savedMeal = {
@@ -46,3 +47,11 @@ const result = producedSourcePlacements(slots)
 assert.equal(result.length, 1)
 assert.equal(result[0].id, 3)
 assert.equal(result[0].planned_meal.snapshot_name, 'Leftover: Chicken Dinner')
+
+let refreshEvents = 0
+const unsubscribe = onProductionInventoryChanged(() => { refreshEvents += 1 })
+emitProductionInventoryChanged()
+assert.equal(refreshEvents, 1)
+unsubscribe()
+emitProductionInventoryChanged()
+assert.equal(refreshEvents, 1)
