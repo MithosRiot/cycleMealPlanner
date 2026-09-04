@@ -30,16 +30,49 @@ def _has_existing_seed_data() -> bool:
         return False
 
 
-def _clear_production_coverage_before_reset() -> None:
+def _clear_extended_seed_data_before_reset() -> None:
+    """Clear newer child/history tables before the base seed reset.
+
+    The base seed reset predates Gather, Cooking Mode, completion history,
+    leftovers/RecipeOutputs, and produced-stock coverage. A populated test DB
+    therefore has child rows that must be removed before the base reset can
+    delete planned_meals, Inventory lots/transactions, Recipes, and related
+    parents. Keep foreign-key enforcement ON here so CI validates the deletion
+    order instead of masking it.
+    """
     if not TEST_DB.exists():
         return
+
+    tables = [
+        "production_coverage_reservations",
+        "meal_completion_allocations",
+        "meal_completion_outputs",
+        "leftovers",
+        "meal_completion_usage",
+        "meal_completions",
+        "planned_cooking_timers",
+        "gather_lot_selections",
+        "recipe_cooking_dependencies",
+        "recipe_cooking_temperatures",
+        "recipe_cooking_step_equipment",
+        "recipe_cooking_timers",
+        "recipe_cooking_coordination",
+        "recipe_cooking_steps",
+    ]
+
     with sqlite3.connect(TEST_DB) as connection:
-        exists = connection.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='production_coverage_reservations'"
-        ).fetchone()
-        if exists is not None:
-            connection.execute("DELETE FROM production_coverage_reservations")
-            connection.commit()
+        connection.execute("PRAGMA foreign_keys=ON")
+        existing = {
+            row[0]
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        for table in tables:
+            if table in existing:
+                connection.execute(f'DELETE FROM "{table}"')
+        violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise RuntimeError(f"Seed reset pre-clear left foreign key violations: {violations}")
+        connection.commit()
 
 
 def _seed_typed_prep_examples() -> None:
@@ -236,7 +269,7 @@ def _seed_leftover_coverage_example() -> None:
 def seed(reset: bool = False):
     had_existing_data = not reset and _has_existing_seed_data()
     if reset:
-        _clear_production_coverage_before_reset()
+        _clear_extended_seed_data_before_reset()
     path = _base.seed(reset=reset)
     if had_existing_data:
         return path
