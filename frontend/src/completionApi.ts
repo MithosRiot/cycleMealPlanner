@@ -1,3 +1,5 @@
+import { emitProductionInventoryChanged } from './productionEvents'
+
 export type CompletionSubstitutionSuggestion = {
   ingredient_id: number
   ingredient_name: string
@@ -211,4 +213,9 @@ export const refreshCompletion = (plannedMealId: number): Promise<MealCompletion
 export const finalizeCompletion = (plannedMealId: number): Promise<CompletionFinalizeResponse> => request(`/api/planned-meals/${plannedMealId}/completion/finalize`, { method: 'POST' })
 export const fetchProductionPreview = (plannedMealId: number, produced?: string): Promise<CompletionProductionPreview> => request(`/api/planned-meals/${plannedMealId}/completion/production-preview${produced !== undefined ? `?actual_servings_produced=${encodeURIComponent(produced)}` : ''}`)
 export const fetchCompletionProduction = (plannedMealId: number): Promise<CompletionProduction> => request(`/api/planned-meals/${plannedMealId}/completion/production`)
-export const commitCompletionProduction = (plannedMealId: number, input: CompletionProductionCommitInput): Promise<CompletionProduction> => request(`/api/planned-meals/${plannedMealId}/completion/production`, { method: 'POST', body: JSON.stringify(input) })
+
+export async function commitCompletionProduction(plannedMealId: number, input: CompletionProductionCommitInput): Promise<CompletionProduction> {
+  const production = await request<CompletionProduction>(`/api/planned-meals/${plannedMealId}/completion/production`, { method: 'POST', body: JSON.stringify(input) })
+  emitProductionInventoryChanged()
+  return production
+}

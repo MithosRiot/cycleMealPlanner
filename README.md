@@ -4,7 +4,7 @@ A self-hosted/web-based meal planning application for recipes, reusable meals, f
 
 ## Project status
 
-Active development is in v0.8 Completion + Leftovers. v0.7 Cooking Mode is complete. v0.8 now includes draft reconciliation of planned-versus-actual ingredient usage, atomic Meal finalization that deducts physical Inventory, and post-finalization production reconciliation for actual servings, durable leftovers, and reusable Recipe output lots with provenance. Reservation release and future leftover coverage remain the next v0.8 work.
+Active development is in v0.8 Completion + Leftovers. v0.7 Cooking Mode is complete. v0.8 now includes draft reconciliation of planned-versus-actual ingredient usage, atomic Meal finalization and Inventory deduction, post-finalization production reconciliation for actual servings and Recipe outputs, automatic release of completed Meal ingredient reservations, and exact-source future coverage for leftovers or Recipe-output stock with Physical / Reserved / Available quantities and deterministic shortage warnings.
 
 ## Stack
 

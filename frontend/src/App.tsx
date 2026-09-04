@@ -12,6 +12,7 @@ import MealCompletionPanel from './MealCompletionPanel'
 import { MealDetailPage, MealEditorPage, MealsPage } from './MealPages'
 import './MealPages.css'
 import PrepSchedulePanel from './PrepSchedulePanel'
+import ProducedStockCoveragePanel from './ProducedStockCoveragePanel'
 import { RecipeEditorPage, RecipesPage } from './RecipePages'
 import { RecipeDetailWithAdvancedPage, RecipeEditorWithAdvancedPage } from './RecipeOutputPages'
 import { InventoryWithReservationsPage, MealPlanWithReservationsPage } from './ReservationIntegrationPages'
@@ -29,7 +30,7 @@ function PlaceholderPage({ title }: { title: string }) {
 }
 
 function MealPlanPageWithScheduling() {
-  return <><MealPlanWithReservationsPage /><CycleSchedulingPanel /><PrepSchedulePanel /><CombinedPrepPanel /><GatherPanel /><CookingModePanel /><MealCompletionPanel /></>
+  return <><MealPlanWithReservationsPage /><CycleSchedulingPanel /><PrepSchedulePanel /><CombinedPrepPanel /><GatherPanel /><CookingModePanel /><MealCompletionPanel /><ProducedStockCoveragePanel /></>
 }
 
 function App() {

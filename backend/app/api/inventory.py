@@ -19,6 +19,7 @@ from app.schemas.inventory import (
     SplitAction,
     TransferAction,
 )
+from app.services.production_coverage import reserved_for_lot
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
 DEFAULT_HOUSEHOLD_ID = 1
@@ -44,6 +45,21 @@ def _validate_refs(db: Session, ingredient_id: int, location_id: int, unit_id: i
         raise HTTPException(status_code=400, detail="Inventory location not found")
     if db.get(MeasurementUnit, unit_id) is None:
         raise HTTPException(status_code=400, detail="Measurement unit not found")
+
+
+def _reserved_produced_quantity(db: Session, lot: InventoryLot) -> Decimal:
+    if lot.source_type not in {"LEFTOVER", "RECIPE_OUTPUT"}:
+        return Decimal("0")
+    return reserved_for_lot(db, lot.id)
+
+
+def _ensure_produced_reservation_capacity(db: Session, lot: InventoryLot, target_quantity: Decimal) -> None:
+    reserved = _reserved_produced_quantity(db, lot)
+    if target_quantity < reserved:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot reduce produced stock below its reserved future coverage ({reserved})",
+        )
 
 
 def _record(
@@ -149,7 +165,9 @@ def remove_inventory(lot_id: int, payload: QuantityAction, db: Session = Depends
     current = Decimal(lot.quantity)
     if quantity > current:
         raise HTTPException(status_code=409, detail="Inventory quantity cannot become negative")
-    lot.quantity = current - quantity
+    target = current - quantity
+    _ensure_produced_reservation_capacity(db, lot, target)
+    lot.quantity = target
     _record(db, lot, "MANUAL_REMOVE", -quantity, payload.note)
     db.commit()
     db.refresh(lot)
@@ -160,6 +178,7 @@ def remove_inventory(lot_id: int, payload: QuantityAction, db: Session = Depends
 def correct_inventory(lot_id: int, payload: CorrectionAction, db: Session = Depends(get_db)) -> InventoryLot:
     lot = _lot_or_404(db, lot_id)
     target = Decimal(payload.quantity)
+    _ensure_produced_reservation_capacity(db, lot, target)
     delta = target - Decimal(lot.quantity)
     lot.quantity = target
     _record(db, lot, "CORRECTION", delta, payload.note)
@@ -191,6 +210,8 @@ def split_inventory(lot_id: int, payload: SplitAction, db: Session = Depends(get
     current = Decimal(source.quantity)
     if quantity >= current:
         raise HTTPException(status_code=409, detail="Split quantity must be less than the source lot quantity; use Transfer to move the whole lot")
+    if _reserved_produced_quantity(db, source) > 0:
+        raise HTTPException(status_code=409, detail="Reserved produced stock cannot be split until its future coverage is released")
 
     target_location = db.get(InventoryLocation, payload.to_location_id)
     if target_location is None or target_location.household_id != DEFAULT_HOUSEHOLD_ID or not target_location.active:

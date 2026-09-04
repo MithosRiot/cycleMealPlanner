@@ -18,14 +18,11 @@ configure_database = _base.configure_database
 
 
 def _has_existing_seed_data() -> bool:
-    """Match the base seeder's non-reset behavior without mutating an existing DB."""
     if not TEST_DB.exists():
         return False
     try:
         with sqlite3.connect(TEST_DB) as connection:
-            table = connection.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ingredients'"
-            ).fetchone()
+            table = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ingredients'").fetchone()
             if table is None:
                 return False
             return connection.execute("SELECT COUNT(*) FROM ingredients").fetchone()[0] > 0
@@ -33,9 +30,53 @@ def _has_existing_seed_data() -> bool:
         return False
 
 
+def _clear_extended_seed_data_before_reset() -> None:
+    """Clear newer child/history tables before the base seed reset.
+
+    The base seed reset predates Gather, Cooking Mode, completion history,
+    leftovers/RecipeOutputs, and produced-stock coverage. A populated test DB
+    therefore has child rows that must be removed before the base reset can
+    delete planned_meals, Inventory lots/transactions, Recipes, and related
+    parents. Keep foreign-key enforcement ON here so CI validates the deletion
+    order instead of masking it.
+    """
+    if not TEST_DB.exists():
+        return
+
+    tables = [
+        "production_coverage_reservations",
+        "meal_completion_allocations",
+        "meal_completion_outputs",
+        "leftovers",
+        "meal_completion_usage",
+        "meal_completions",
+        "planned_cooking_timers",
+        "gather_lot_selections",
+        "recipe_cooking_dependencies",
+        "recipe_cooking_temperatures",
+        "recipe_cooking_step_equipment",
+        "recipe_cooking_timers",
+        "recipe_cooking_coordination",
+        "recipe_cooking_steps",
+    ]
+
+    with sqlite3.connect(TEST_DB) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        existing = {
+            row[0]
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        for table in tables:
+            if table in existing:
+                connection.execute(f'DELETE FROM "{table}"')
+        violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise RuntimeError(f"Seed reset pre-clear left foreign key violations: {violations}")
+        connection.commit()
+
+
 def _seed_typed_prep_examples() -> None:
     from app.database.session import engine
-
     with engine.begin() as connection:
         connection.execute(text("UPDATE recipe_advance_prep SET task_type='PREP', reminder_enabled=1, reminder_offset_minutes=15 WHERE id=1"))
         connection.execute(text("UPDATE recipe_advance_prep SET task_type='THAW', reminder_enabled=1, reminder_offset_minutes=60 WHERE id=2"))
@@ -52,7 +93,6 @@ def _seed_typed_prep_examples() -> None:
 
 def _seed_gather_examples() -> None:
     from app.database.session import engine
-
     with engine.begin() as connection:
         reservation_rows = connection.execute(text("""
             SELECT ingredient_id, recipe_ingredient_id
@@ -62,7 +102,6 @@ def _seed_gather_examples() -> None:
         reservations = {int(row.ingredient_id): int(row.recipe_ingredient_id) for row in reservation_rows}
         if 1 not in reservations:
             return
-
         connection.execute(text("""
             INSERT OR IGNORE INTO inventory_lots
             (id, household_id, ingredient_id, location_id, quantity, unit_id, purchase_date,
@@ -75,11 +114,8 @@ def _seed_gather_examples() -> None:
             (household_id, lot_id, transaction_type, quantity_delta, unit_id, to_location_id, note)
             SELECT 1,17,'PURCHASE',1.000000,2,3,'Seeded Gather test lot'
             WHERE EXISTS (SELECT 1 FROM inventory_lots WHERE id=17)
-              AND NOT EXISTS (
-                SELECT 1 FROM inventory_transactions WHERE lot_id=17 AND note='Seeded Gather test lot'
-            )
+              AND NOT EXISTS (SELECT 1 FROM inventory_transactions WHERE lot_id=17 AND note='Seeded Gather test lot')
         """))
-
         connection.execute(text("DELETE FROM gather_lot_selections WHERE planned_meal_id=1 AND meal_recipe_id=1"))
         connection.execute(text("""
             INSERT INTO gather_lot_selections
@@ -104,7 +140,6 @@ def _seed_gather_examples() -> None:
 
 def _seed_cooking_steps() -> None:
     from app.database.session import engine
-
     with engine.begin() as connection:
         connection.execute(text("DELETE FROM recipe_cooking_steps WHERE recipe_id IN (1,2)"))
         connection.execute(text("""
@@ -127,9 +162,7 @@ def _seed_cooking_steps() -> None:
         connection.execute(text("""
             INSERT INTO recipe_cooking_step_equipment
             (id, cooking_step_id, recipe_equipment_id, sort_order)
-            VALUES
-            (1,1,1,0),
-            (2,2,2,0)
+            VALUES (1,1,1,0),(2,2,2,0)
         """))
         connection.execute(text("""
             INSERT INTO recipe_cooking_temperatures
@@ -139,24 +172,14 @@ def _seed_cooking_steps() -> None:
             (2,2,'Simmer',212,'F','Bring liquid to a boil before reducing to a simmer.',0)
         """))
         connection.execute(text("""
-            INSERT INTO recipe_cooking_coordination
-            (cooking_step_id, stage, parallel_capable)
-            VALUES
-            (1,0,1),
-            (2,1,1),
-            (3,3,0),
-            (4,0,1)
+            INSERT INTO recipe_cooking_coordination (cooking_step_id, stage, parallel_capable)
+            VALUES (1,0,1),(2,1,1),(3,3,0),(4,0,1)
         """))
-        connection.execute(text("""
-            INSERT INTO recipe_cooking_dependencies
-            (cooking_step_id, depends_on_step_id)
-            VALUES (3,2)
-        """))
+        connection.execute(text("INSERT INTO recipe_cooking_dependencies (cooking_step_id, depends_on_step_id) VALUES (3,2)"))
 
 
 def _seed_completion_draft() -> None:
     from app.database.session import engine
-
     with engine.begin() as connection:
         planned = connection.execute(text("""
             SELECT id, snapshot_name, planned_servings, planned_leftover_servings,
@@ -180,12 +203,9 @@ def _seed_completion_draft() -> None:
              snapshot_scaled_components, created_at, updated_at)
             VALUES (1,1,'DRAFT',:fingerprint,:name,:servings,:leftovers,:components,:now,:now)
         """), {
-            "fingerprint": fingerprint,
-            "name": planned["snapshot_name"],
-            "servings": planned["planned_servings"],
-            "leftovers": planned["planned_leftover_servings"],
-            "components": planned["scaled_components"],
-            "now": datetime.utcnow(),
+            "fingerprint": fingerprint, "name": planned["snapshot_name"],
+            "servings": planned["planned_servings"], "leftovers": planned["planned_leftover_servings"],
+            "components": planned["scaled_components"], "now": datetime.utcnow(),
         })
         usage_id = 1
         for component_index, component in enumerate(json.loads(planned["scaled_components"] or "[]")):
@@ -199,8 +219,7 @@ def _seed_completion_draft() -> None:
                 ingredient_name = connection.execute(text("SELECT name FROM ingredients WHERE id=:id"), {"id": ingredient_id}).scalar_one()
                 unit_code = connection.execute(text("SELECT code FROM measurement_units WHERE id=:id"), {"id": unit_id}).scalar_one()
                 prep = connection.execute(text("""
-                    SELECT preparation, prep_method, prep_size, prep_state
-                    FROM recipe_ingredients WHERE id=:id
+                    SELECT preparation, prep_method, prep_size, prep_state FROM recipe_ingredients WHERE id=:id
                 """), {"id": recipe_ingredient_id}).mappings().first()
                 connection.execute(text("""
                     INSERT INTO meal_completion_usage
@@ -214,16 +233,10 @@ def _seed_completion_draft() -> None:
                      :ingredient_id,:ingredient_name,:quantity,:unit_id,:unit_code,
                      :preparation,:prep_method,:prep_size,:prep_state,NULL)
                 """), {
-                    "id": usage_id,
-                    "component_key": component_key,
-                    "recipe_id": recipe_id,
-                    "recipe_name": recipe_name,
-                    "recipe_ingredient_id": recipe_ingredient_id,
-                    "ingredient_id": ingredient_id,
-                    "ingredient_name": ingredient_name,
-                    "quantity": scaled["quantity"],
-                    "unit_id": unit_id,
-                    "unit_code": unit_code,
+                    "id": usage_id, "component_key": component_key, "recipe_id": recipe_id,
+                    "recipe_name": recipe_name, "recipe_ingredient_id": recipe_ingredient_id,
+                    "ingredient_id": ingredient_id, "ingredient_name": ingredient_name,
+                    "quantity": scaled["quantity"], "unit_id": unit_id, "unit_code": unit_code,
                     "preparation": prep["preparation"] if prep else None,
                     "prep_method": prep["prep_method"] if prep else None,
                     "prep_size": prep["prep_size"] if prep else None,
@@ -232,8 +245,31 @@ def _seed_completion_draft() -> None:
                 usage_id += 1
 
 
+def _seed_leftover_coverage_example() -> None:
+    from app.database.session import SessionLocal, engine
+    from app.services.production_coverage import reconcile_production_coverage
+
+    with engine.begin() as connection:
+        connection.execute(text("DELETE FROM planned_meals WHERE id=2"))
+        connection.execute(text("""
+            INSERT INTO planned_meals
+            (id, cycle_slot_id, meal_id, source_type, source_origin_planned_meal_id,
+             source_record_id, source_recipe_output_id, source_quantity, source_unit_id,
+             locked, planned_servings, planned_leftover_servings, component_serving_overrides,
+             scaled_components, snapshot_name, snapshot_description, snapshot_meal_types, snapshot_components)
+            VALUES
+            (2,6,1,'LEFTOVER',1,NULL,NULL,2.000000,16,0,2,0,'{}','[]',
+             'Leftover: Chicken Dinner','Seeded future use of Chicken Dinner leftovers','["DINNER"]','[]')
+        """))
+    with SessionLocal() as db:
+        reconcile_production_coverage(db)
+        db.commit()
+
+
 def seed(reset: bool = False):
     had_existing_data = not reset and _has_existing_seed_data()
+    if reset:
+        _clear_extended_seed_data_before_reset()
     path = _base.seed(reset=reset)
     if had_existing_data:
         return path
@@ -241,6 +277,7 @@ def seed(reset: bool = False):
     _seed_gather_examples()
     _seed_cooking_steps()
     _seed_completion_draft()
+    _seed_leftover_coverage_example()
     return path
 
 
