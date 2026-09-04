@@ -14,7 +14,10 @@ class InventoryLot(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     household_id: Mapped[int] = mapped_column(ForeignKey("households.id", ondelete="CASCADE"), nullable=False)
-    ingredient_id: Mapped[int] = mapped_column(ForeignKey("ingredients.id", ondelete="RESTRICT"), nullable=False)
+    ingredient_id: Mapped[int | None] = mapped_column(ForeignKey("ingredients.id", ondelete="RESTRICT"))
+    source_type: Mapped[str] = mapped_column(String(30), nullable=False, default="INGREDIENT")
+    source_id: Mapped[int | None] = mapped_column(Integer)
+    source_name: Mapped[str | None] = mapped_column(String(160))
     location_id: Mapped[int] = mapped_column(ForeignKey("inventory_locations.id", ondelete="RESTRICT"), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(14, 6), nullable=False)
     unit_id: Mapped[int] = mapped_column(ForeignKey("measurement_units.id", ondelete="RESTRICT"), nullable=False)
@@ -30,7 +33,14 @@ class InventoryLot(Base):
         order_by="InventoryTransaction.id",
     )
 
-    __table_args__ = (CheckConstraint("quantity >= 0", name="ck_inventory_lots_quantity_nonnegative"),)
+    __table_args__ = (
+        CheckConstraint("quantity >= 0", name="ck_inventory_lots_quantity_nonnegative"),
+        CheckConstraint("source_type IN ('INGREDIENT','LEFTOVER','RECIPE_OUTPUT')", name="ck_inventory_lots_source_type"),
+        CheckConstraint(
+            "(source_type='INGREDIENT' AND ingredient_id IS NOT NULL) OR (source_type!='INGREDIENT' AND source_id IS NOT NULL)",
+            name="ck_inventory_lots_source_identity",
+        ),
+    )
 
 
 class InventoryTransaction(Base):
@@ -51,7 +61,7 @@ class InventoryTransaction(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "transaction_type IN ('PURCHASE','CONSUME','TRANSFER','MANUAL_ADD','MANUAL_REMOVE','CORRECTION')",
+            "transaction_type IN ('PURCHASE','CONSUME','TRANSFER','MANUAL_ADD','MANUAL_REMOVE','CORRECTION','PRODUCTION')",
             name="ck_inventory_transactions_type",
         ),
     )
