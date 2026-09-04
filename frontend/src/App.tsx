@@ -8,6 +8,7 @@ import CycleValidationPage from './CycleValidationPage'
 import GatherPanel from './GatherPanel'
 import IngredientsPage from './IngredientsPage'
 import './InventoryPage.css'
+import MealCompletionPanel from './MealCompletionPanel'
 import { MealDetailPage, MealEditorPage, MealsPage } from './MealPages'
 import './MealPages.css'
 import PrepSchedulePanel from './PrepSchedulePanel'
@@ -28,7 +29,7 @@ function PlaceholderPage({ title }: { title: string }) {
 }
 
 function MealPlanPageWithScheduling() {
-  return <><MealPlanWithReservationsPage /><CycleSchedulingPanel /><PrepSchedulePanel /><CombinedPrepPanel /><GatherPanel /><CookingModePanel /></>
+  return <><MealPlanWithReservationsPage /><CycleSchedulingPanel /><PrepSchedulePanel /><CombinedPrepPanel /><GatherPanel /><CookingModePanel /><MealCompletionPanel /></>
 }
 
 function App() {
