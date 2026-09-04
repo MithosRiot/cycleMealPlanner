@@ -301,6 +301,17 @@ def _finalization_plan(db: Session, planned: PlannedMeal, completion: MealComple
     return allocations, shortages
 
 
+def _serializable_shortages(shortages: list[dict]) -> list[dict]:
+    return [
+        {
+            **row,
+            "requested_quantity": str(row["requested_quantity"]),
+            "shortage_quantity": str(row["shortage_quantity"]),
+        }
+        for row in shortages
+    ]
+
+
 @router.post("/{planned_meal_id}/completion", response_model=MealCompletionRead)
 def start_completion(planned_meal_id: int, db: Session = Depends(get_db)) -> dict:
     planned = _planned_or_404(db, planned_meal_id)
@@ -414,7 +425,10 @@ def finalize_completion(planned_meal_id: int, db: Session = Depends(get_db)) -> 
     allocation_plan, shortages = _finalization_plan(db, planned, completion)
     if shortages:
         db.rollback()
-        raise HTTPException(status_code=409, detail={"message": "Insufficient Inventory to finalize Meal completion", "shortages": shortages})
+        raise HTTPException(status_code=409, detail={
+            "message": "Insufficient Inventory to finalize Meal completion",
+            "shortages": _serializable_shortages(shortages),
+        })
 
     try:
         for item in allocation_plan:
