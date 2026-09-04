@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
@@ -52,6 +52,29 @@ class RecipeCookingTemperature(Base):
     __table_args__ = (
         CheckConstraint("unit IN ('F','C')", name="ck_recipe_cooking_temperatures_unit"),
         CheckConstraint("sort_order >= 0", name="ck_recipe_cooking_temperatures_sort_order_nonnegative"),
+    )
+
+
+class RecipeCookingCoordination(Base):
+    __tablename__ = "recipe_cooking_coordination"
+
+    cooking_step_id: Mapped[int] = mapped_column(ForeignKey("recipe_cooking_steps.id", ondelete="CASCADE"), primary_key=True)
+    stage: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    parallel_capable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    __table_args__ = (CheckConstraint("stage >= 0", name="ck_recipe_cooking_coordination_stage_nonnegative"),)
+
+
+class RecipeCookingDependency(Base):
+    __tablename__ = "recipe_cooking_dependencies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cooking_step_id: Mapped[int] = mapped_column(ForeignKey("recipe_cooking_steps.id", ondelete="CASCADE"), nullable=False)
+    depends_on_step_id: Mapped[int] = mapped_column(ForeignKey("recipe_cooking_steps.id", ondelete="CASCADE"), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("cooking_step_id", "depends_on_step_id", name="uq_recipe_cooking_dependency"),
+        CheckConstraint("cooking_step_id <> depends_on_step_id", name="ck_recipe_cooking_dependency_not_self"),
     )
 
 

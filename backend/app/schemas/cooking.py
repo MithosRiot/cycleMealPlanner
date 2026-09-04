@@ -26,6 +26,9 @@ class CookingStepInput(BaseModel):
     timers: list[CookingTimerInput] = Field(default_factory=list)
     recipe_equipment_ids: list[int] = Field(default_factory=list)
     temperatures: list[CookingTemperatureInput] = Field(default_factory=list)
+    coordination_stage: int = Field(default=0, ge=0)
+    parallel_capable: bool = False
+    depends_on_step_orders: list[int] = Field(default_factory=list)
 
 
 class CookingTimerRead(BaseModel):
@@ -67,6 +70,9 @@ class CookingStepRead(BaseModel):
     timers: list[CookingTimerRead]
     equipment: list[CookingEquipmentContext]
     temperatures: list[CookingTemperatureRead]
+    coordination_stage: int
+    parallel_capable: bool
+    depends_on_step_orders: list[int]
 
 
 class CookingIngredientContext(BaseModel):
@@ -108,6 +114,9 @@ class CookingModeStep(BaseModel):
     timers: list[CookingTimerRuntime]
     equipment: list[CookingEquipmentContext]
     temperatures: list[CookingTemperatureRead]
+    coordination_stage: int
+    parallel_capable: bool
+    parallel_group: int | None
 
 
 class CookingModeMeal(BaseModel):
@@ -119,6 +128,7 @@ class CookingModeMeal(BaseModel):
     planned_leftover_servings: Decimal
     steps: list[CookingModeStep]
     components_without_steps: list[str]
+    coordinated: bool
 
 
 class CycleCookingModeResponse(BaseModel):

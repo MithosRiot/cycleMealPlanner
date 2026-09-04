@@ -63,7 +63,7 @@ export default function CookingModePanel() {
 
   return <section className="panel" style={{ marginTop: 20 }}>
     <div className="section-heading">
-      <div><h2>Cooking Mode</h2><p className="planning-note">Focused step-by-step execution with equipment, temperature guidance, and persistent timers.</p></div>
+      <div><h2>Cooking Mode</h2><p className="planning-note">Focused step-by-step execution with equipment, temperatures, timers, and multi-component coordination.</p></div>
       <div className="header-actions">
         <select value={effectiveCycleId ?? ''} onChange={(event) => { setSelectedCycleId(event.target.value ? Number(event.target.value) : null); setPlannedMealId(null) }}><option value="">Select cycle</option>{cycles.data?.map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.name}</option>)}</select>
         <select value={selectedMeal?.planned_meal_id ?? ''} onChange={(event) => setPlannedMealId(event.target.value ? Number(event.target.value) : null)}><option value="">Select planned Meal</option>{cooking.data?.meals.map((meal) => <option key={meal.planned_meal_id} value={meal.planned_meal_id}>Day {meal.day_number} · {meal.slot_label} · {meal.meal_name}</option>)}</select>
@@ -73,9 +73,10 @@ export default function CookingModePanel() {
     {timerMutation.error instanceof Error && <div className="error-banner">{timerMutation.error.message}</div>}
     {selectedMeal && <>
       <div className="ingredient-meta"><span>{selectedMeal.meal_name}</span><span>{quantity(selectedMeal.planned_servings)} eating + {quantity(selectedMeal.planned_leftover_servings)} leftover servings</span></div>
+      {selectedMeal.coordinated && <p className="planning-note">Coordinated multi-component execution plan is active.</p>}
       {selectedMeal.components_without_steps.length > 0 && <p className="planning-note">No cooking steps: {selectedMeal.components_without_steps.join(', ')}</p>}
       {step ? <div className="recipe-ingredient-editor" style={{ marginTop: 12 }}>
-        <div className="section-heading"><div><p className="eyebrow">Step {step.step_number} of {step.total_steps}</p><h3>{step.title}</h3><p className="planning-note">{step.recipe_name}{step.prep_group_name ? ` · ${step.prep_group_name}` : ''}</p></div></div>
+        <div className="section-heading"><div><p className="eyebrow">Step {step.step_number} of {step.total_steps}</p><h3>{step.title}</h3><p className="planning-note">{step.recipe_name}{step.prep_group_name ? ` · ${step.prep_group_name}` : ''}</p>{step.parallel_group !== null && <p className="planning-note">Parallel group {step.parallel_group}: this step can run alongside the other step(s) in this group.</p>}</div></div>
         {step.instructions && <p>{step.instructions}</p>}
 
         {(step.equipment.length > 0 || step.temperatures.length > 0) && <div className="recipe-ingredient-list" style={{ marginBottom: 12 }}>
