@@ -134,21 +134,26 @@ def reconcile_production_coverage(db: Session) -> list[ProductionCoverageReserva
         if valid_lot and planned.scheduled_date is not None and lot.expiration_date is not None and lot.expiration_date < planned.scheduled_date:
             valid_lot = False
 
-        existing = next((row for row in by_planned.get(planned.id, []) if row.status == "ACTIVE"), None)
-        identity_matches = bool(existing and (
-            existing.source_type == planned.source_type
-            and existing.source_origin_planned_meal_id == planned.source_origin_planned_meal_id
-            and existing.source_recipe_output_id == planned.source_recipe_output_id
-            and existing.unit_id == planned.source_unit_id
-            and Decimal(existing.requested_quantity) == requested
-            and existing.cycle_slot_id == planned.cycle_slot_id
-        ))
-        if existing is not None and not identity_matches:
-            existing.status = "RELEASED"
-            existing.release_reason = "REPLACED"
-            existing.released_at = now
-            existing.updated_at = now
-            existing = None
+        candidates = [row for row in by_planned.get(planned.id, []) if row.status == "ACTIVE"]
+
+        def identity_matches(row: ProductionCoverageReservation) -> bool:
+            return (
+                row.source_type == planned.source_type
+                and row.source_origin_planned_meal_id == planned.source_origin_planned_meal_id
+                and row.source_recipe_output_id == planned.source_recipe_output_id
+                and row.unit_id == planned.source_unit_id
+                and Decimal(row.requested_quantity) == requested
+                and row.cycle_slot_id == planned.cycle_slot_id
+            )
+
+        existing = next((row for row in candidates if identity_matches(row)), None)
+        for candidate in candidates:
+            if candidate is existing:
+                continue
+            candidate.status = "RELEASED"
+            candidate.release_reason = "DUPLICATE" if identity_matches(candidate) else "REPLACED"
+            candidate.released_at = now
+            candidate.updated_at = now
 
         if valid_lot:
             remaining = remaining_by_lot.setdefault(lot.id, Decimal(lot.quantity))
