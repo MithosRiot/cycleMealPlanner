@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
-def _setup_source(client: TestClient, suffix: str) -> tuple[dict, dict, int, int]:
+def _setup_source(client: TestClient, suffix: str) -> tuple[dict, dict, int, int, dict]:
     units = {item["code"]: item for item in client.get("/api/reference/units").json()}
     each = units["each"]
     refrigerator = next(item for item in client.get("/api/reference/inventory-locations").json() if item["name"] == "Refrigerator")
@@ -51,7 +51,7 @@ def _setup_source(client: TestClient, suffix: str) -> tuple[dict, dict, int, int
     assert updated.status_code == 200
     regenerated = client.post(f"/api/meal-cycles/{cycle['id']}/reservations/regenerate")
     assert regenerated.status_code == 200
-    return source, cycle, slots[1]["id"], refrigerator["id"]
+    return source, cycle, slots[1]["id"], refrigerator["id"], recipe
 
 
 def _finalize_source(client: TestClient, source_id: int) -> None:
@@ -78,7 +78,7 @@ def _commit_leftovers(client: TestClient, source_id: int, refrigerator_id: int, 
 def test_finalization_releases_ingredient_reservations_and_shortage_reconciles() -> None:
     suffix = uuid4().hex[:8]
     with TestClient(app) as client:
-        source, cycle, future_slot_id, refrigerator_id = _setup_source(client, suffix)
+        source, cycle, future_slot_id, refrigerator_id, _recipe = _setup_source(client, suffix)
         before = client.get(f"/api/meal-cycles/{cycle['id']}/reservations").json()
         source_rows = [row for row in before["reservations"] if row["planned_meal_id"] == source["id"]]
         assert source_rows and all(row["status"] == "ACTIVE" for row in source_rows)
@@ -131,7 +131,7 @@ def test_finalization_releases_ingredient_reservations_and_shortage_reconciles()
 def test_excess_leftovers_remain_available_and_removal_releases_only_coverage() -> None:
     suffix = uuid4().hex[:8]
     with TestClient(app) as client:
-        source, cycle, future_slot_id, refrigerator_id = _setup_source(client, suffix)
+        source, cycle, future_slot_id, refrigerator_id, _recipe = _setup_source(client, suffix)
         _finalize_source(client, source["id"])
         option = next(row for row in client.get("/api/produced-source-options").json() if row["source_type"] == "LEFTOVER" and row["source_origin_planned_meal_id"] == source["id"])
         future = client.post(f"/api/meal-cycles/{cycle['id']}/slots/{future_slot_id}/planned-source", json={
@@ -159,3 +159,98 @@ def test_excess_leftovers_remain_available_and_removal_releases_only_coverage() 
         availability = next(row for row in client.get("/api/production-inventory-availability").json() if row["lot_id"] == lot_id)
         assert Decimal(availability["reserved_quantity"]) == Decimal("0")
         assert Decimal(availability["available_quantity"]) == Decimal("3")
+
+
+def test_recipe_output_coverage_reserves_only_exact_produced_output_lot() -> None:
+    suffix = uuid4().hex[:8]
+    with TestClient(app) as client:
+        source, cycle, future_slot_id, refrigerator_id, recipe = _setup_source(client, suffix)
+        units = {item["code"]: item for item in client.get("/api/reference/units").json()}
+        ounce = units["oz"]
+        output = client.post(f"/api/recipes/{recipe['id']}/outputs", json={
+            "name": f"Coverage Output {suffix}",
+            "quantity": "2",
+            "unit_id": ounce["id"],
+            "notes": "Produced coverage regression output",
+            "active": True,
+            "sort_order": 0,
+        })
+        assert output.status_code == 201
+        output_body = output.json()
+
+        _finalize_source(client, source["id"])
+        preview = client.get(f"/api/planned-meals/{source['id']}/completion/production-preview?actual_servings_produced=6")
+        assert preview.status_code == 200
+        output_preview = next(row for row in preview.json()["outputs"] if row["recipe_output_id"] == output_body["id"])
+
+        committed = client.post(f"/api/planned-meals/{source['id']}/completion/production", json={
+            "actual_servings_produced": "6",
+            "actual_servings_eaten": "4",
+            "leftover_location_id": refrigerator_id,
+            "leftover_expiration_date": "2026-09-10",
+            "leftover_notes": "Recipe output coverage test",
+            "outputs": [{
+                "recipe_output_id": output_body["id"],
+                "component_key": output_preview["component_key"],
+                "actual_quantity": "2.5",
+                "location_id": refrigerator_id,
+                "expiration_date": "2026-09-09",
+                "notes": "Exact produced output lot",
+            }],
+        })
+        assert committed.status_code == 200
+        produced_output = committed.json()["outputs"][0]
+        output_lot_id = produced_output["inventory_lot_id"]
+        assert output_lot_id is not None
+
+        option = next(
+            row for row in client.get("/api/produced-source-options").json()
+            if row["source_type"] == "RECIPE_OUTPUT"
+            and row["source_origin_planned_meal_id"] == source["id"]
+            and row["source_recipe_output_id"] == output_body["id"]
+        )
+        assert option["lot_id"] == output_lot_id
+        assert Decimal(option["physical_quantity"]) == Decimal("2.5")
+        assert Decimal(option["reserved_quantity"]) == Decimal("0")
+        assert Decimal(option["available_quantity"]) == Decimal("2.5")
+
+        placed = client.post(f"/api/meal-cycles/{cycle['id']}/slots/{future_slot_id}/planned-source", json={
+            "source_type": "RECIPE_OUTPUT",
+            "source_origin_planned_meal_id": source["id"],
+            "source_record_id": option["source_record_id"],
+            "source_recipe_output_id": output_body["id"],
+            "quantity": "2",
+            "unit_id": option["unit_id"],
+        })
+        assert placed.status_code == 201
+        future = placed.json()
+
+        coverage = client.get(f"/api/meal-cycles/{cycle['id']}/production-coverage").json()
+        active = [
+            row for row in coverage["reservations"]
+            if row["planned_meal_id"] == future["id"] and row["status"] == "ACTIVE"
+        ]
+        assert len(active) == 1
+        row = active[0]
+        assert row["source_type"] == "RECIPE_OUTPUT"
+        assert row["source_record_id"] == produced_output["id"]
+        assert row["source_recipe_output_id"] == output_body["id"]
+        assert row["lot_id"] == output_lot_id
+        assert Decimal(row["reserved_quantity"]) == Decimal("2")
+        assert Decimal(row["shortage_quantity"]) == Decimal("0")
+
+        availability = next(
+            row for row in client.get("/api/production-inventory-availability").json()
+            if row["lot_id"] == output_lot_id
+        )
+        assert Decimal(availability["physical_quantity"]) == Decimal("2.5")
+        assert Decimal(availability["reserved_quantity"]) == Decimal("2")
+        assert Decimal(availability["available_quantity"]) == Decimal("0.5")
+
+        validation = client.get(f"/api/meal-cycles/{cycle['id']}/validate").json()
+        shortages = [
+            item for item in validation["issues"]
+            if item["code"] == "RECIPE_OUTPUT_COVERAGE_SHORTAGE"
+            and item["context"].get("planned_meal_id") == future["id"]
+        ]
+        assert shortages == []
