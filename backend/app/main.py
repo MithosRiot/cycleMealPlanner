@@ -6,6 +6,7 @@ from sqlalchemy import text
 
 from app.api.allocation import router as allocation_router
 from app.api.combined_prep import router as combined_prep_router
+from app.api.completion import router as completion_router
 from app.api.cooking import router as cooking_router
 from app.api.cycle_validation import router as cycle_validation_router
 from app.api.equipment import router as equipment_router
@@ -53,6 +54,7 @@ app.include_router(recipes_router)
 app.include_router(recipe_outputs_router)
 app.include_router(recipe_variants_router)
 app.include_router(cooking_router)
+app.include_router(completion_router)
 app.include_router(inventory_router)
 app.include_router(reservations_router)
 app.include_router(allocation_router)
