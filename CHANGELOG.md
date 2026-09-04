@@ -49,7 +49,8 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Multiple persistent Cooking Mode timers with ordered Recipe step timer definitions, concurrent countdowns, pause/resume/reset/dismiss controls, per-PlannedMeal runtime isolation, and reload-safe absolute end-time tracking.
 - Step-specific Cooking Mode equipment references and structured Fahrenheit/Celsius temperature cues, preserving Recipe equipment quantity/notes and component context without changing serving or timer behavior.
 - Multi-component Cooking Mode coordination with explicit step dependencies, stage-based ready-work ordering, parallel-capable groups, cycle rejection, deterministic interleaving across Recipe components, and preserved timer/equipment/temperature context.
+- Persistent Meal completion drafts with planned-versus-actual ingredient usage, last-minute Ingredient substitution, safe same-family unit validation, plan-staleness detection/refresh, and a Meal Plan reconciliation UI that does not mutate Inventory before finalization.
 
 ### Known limitations
-- Exact-lot reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
+- Inventory deduction, finalized completion history, leftover creation/coverage, expiration-aware alerts, and advanced reconciliation corrections are planned for later milestones.
 - The development database currently defaults to `./data`; packaged Windows persistence will be moved outside the installation directory.
