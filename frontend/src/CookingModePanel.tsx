@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchMealCycles } from './mealCyclesApi'
 import { fetchCycleCookingMode } from './cookingApi'
@@ -14,6 +14,7 @@ export default function CookingModePanel() {
   const [selectedCycleId, setSelectedCycleId] = useState<number | null>(null)
   const effectiveCycleId = selectedCycleId ?? cycles.data?.[0]?.id ?? null
   const cooking = useQuery({ queryKey: ['cycle-cooking-mode', effectiveCycleId], queryFn: () => fetchCycleCookingMode(effectiveCycleId as number), enabled: effectiveCycleId !== null })
+  const lastCycleDataUpdatedAt = useRef(cycles.dataUpdatedAt)
   const [plannedMealId, setPlannedMealId] = useState<number | null>(null)
   const [stepIndex, setStepIndex] = useState(0)
 
@@ -21,6 +22,13 @@ export default function CookingModePanel() {
     const meals = cooking.data?.meals ?? []
     return meals.find((meal) => meal.planned_meal_id === plannedMealId) ?? meals[0] ?? null
   }, [cooking.data, plannedMealId])
+
+  useEffect(() => {
+    if (cycles.dataUpdatedAt === 0 || cycles.dataUpdatedAt === lastCycleDataUpdatedAt.current) return
+    const previousUpdatedAt = lastCycleDataUpdatedAt.current
+    lastCycleDataUpdatedAt.current = cycles.dataUpdatedAt
+    if (previousUpdatedAt !== 0 && effectiveCycleId !== null) void cooking.refetch()
+  }, [cycles.dataUpdatedAt, effectiveCycleId, cooking.refetch])
 
   useEffect(() => { setStepIndex(0) }, [selectedMeal?.planned_meal_id])
   const step = selectedMeal?.steps[stepIndex] ?? null
