@@ -49,6 +49,8 @@ def _setup_source(client: TestClient, suffix: str) -> tuple[dict, dict, int, int
         "planned_servings": "4", "planned_leftover_servings": "2", "component_serving_overrides": {},
     })
     assert updated.status_code == 200
+    regenerated = client.post(f"/api/meal-cycles/{cycle['id']}/reservations/regenerate")
+    assert regenerated.status_code == 200
     return source, cycle, slots[1]["id"], refrigerator["id"]
 
 
@@ -123,7 +125,7 @@ def test_finalization_releases_ingredient_reservations_and_shortage_reconciles()
         shortages = [item for item in validation["issues"] if item["code"] == "LEFTOVER_COVERAGE_SHORTAGE"]
         assert len(shortages) == 1
         assert shortages[0]["context"]["planned_meal_id"] == future["id"]
-        assert shortages[0]["context"]["shortage_quantity"] == "1.000000"
+        assert Decimal(shortages[0]["context"]["shortage_quantity"]) == Decimal("1")
 
 
 def test_excess_leftovers_remain_available_and_removal_releases_only_coverage() -> None:
