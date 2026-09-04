@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CompletionUsageUpdate(BaseModel):
@@ -133,6 +133,8 @@ class CompletionProductionCommitInput(BaseModel):
 
 
 class LeftoverRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     completion_id: int
     planned_meal_id: int
@@ -152,6 +154,8 @@ class LeftoverRead(BaseModel):
 
 
 class CompletionOutputRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     completion_id: int
     component_key: int
