@@ -30,6 +30,18 @@ def _has_existing_seed_data() -> bool:
         return False
 
 
+def _clear_production_coverage_before_reset() -> None:
+    if not TEST_DB.exists():
+        return
+    with sqlite3.connect(TEST_DB) as connection:
+        exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='production_coverage_reservations'"
+        ).fetchone()
+        if exists is not None:
+            connection.execute("DELETE FROM production_coverage_reservations")
+            connection.commit()
+
+
 def _seed_typed_prep_examples() -> None:
     from app.database.session import engine
     with engine.begin() as connection:
@@ -223,6 +235,8 @@ def _seed_leftover_coverage_example() -> None:
 
 def seed(reset: bool = False):
     had_existing_data = not reset and _has_existing_seed_data()
+    if reset:
+        _clear_production_coverage_before_reset()
     path = _base.seed(reset=reset)
     if had_existing_data:
         return path
