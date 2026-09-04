@@ -10,12 +10,22 @@ class CookingTimerInput(BaseModel):
     sort_order: int = Field(default=0, ge=0)
 
 
+class CookingTemperatureInput(BaseModel):
+    label: str = Field(default="temperature", min_length=1, max_length=80)
+    value: Decimal
+    unit: str = Field(pattern="^(F|C)$")
+    notes: str | None = None
+    sort_order: int = Field(default=0, ge=0)
+
+
 class CookingStepInput(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     instructions: str | None = None
     prep_group_id: int | None = None
     sort_order: int = Field(default=0, ge=0)
-    timers: list[CookingTimerInput] = []
+    timers: list[CookingTimerInput] = Field(default_factory=list)
+    recipe_equipment_ids: list[int] = Field(default_factory=list)
+    temperatures: list[CookingTemperatureInput] = Field(default_factory=list)
 
 
 class CookingTimerRead(BaseModel):
@@ -23,6 +33,25 @@ class CookingTimerRead(BaseModel):
     cooking_step_id: int
     label: str
     duration_seconds: int
+    notes: str | None
+    sort_order: int
+
+
+class CookingEquipmentContext(BaseModel):
+    recipe_equipment_id: int
+    equipment_id: int
+    equipment_name: str
+    quantity: int
+    notes: str | None
+    sort_order: int
+
+
+class CookingTemperatureRead(BaseModel):
+    id: int
+    cooking_step_id: int
+    label: str
+    value: Decimal
+    unit: str
     notes: str | None
     sort_order: int
 
@@ -36,6 +65,8 @@ class CookingStepRead(BaseModel):
     instructions: str | None
     sort_order: int
     timers: list[CookingTimerRead]
+    equipment: list[CookingEquipmentContext]
+    temperatures: list[CookingTemperatureRead]
 
 
 class CookingIngredientContext(BaseModel):
@@ -75,6 +106,8 @@ class CookingModeStep(BaseModel):
     total_steps: int
     ingredients: list[CookingIngredientContext]
     timers: list[CookingTimerRuntime]
+    equipment: list[CookingEquipmentContext]
+    temperatures: list[CookingTemperatureRead]
 
 
 class CookingModeMeal(BaseModel):
