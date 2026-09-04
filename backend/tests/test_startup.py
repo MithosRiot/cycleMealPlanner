@@ -13,7 +13,7 @@ def test_health_endpoint_and_migrations() -> None:
 
     with engine.connect() as connection:
         migration_version = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-        assert migration_version == "0031_meal_completion_finalization"
+        assert migration_version == "0032_completion_leftovers_outputs"
 
 
 def test_sqlite_foreign_keys_and_wal_are_enabled() -> None:
