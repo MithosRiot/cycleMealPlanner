@@ -186,8 +186,26 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export const startCompletion = (plannedMealId: number): Promise<MealCompletion> => request(`/api/planned-meals/${plannedMealId}/completion`, { method: 'POST' })
-export const fetchCompletion = (plannedMealId: number): Promise<MealCompletion> => request(`/api/planned-meals/${plannedMealId}/completion`)
+async function completionWithProductionState(plannedMealId: number, completion: MealCompletion): Promise<MealCompletion> {
+  if (completion.status !== 'FINALIZED') return completion
+  try {
+    const production = await request<CompletionProduction>(`/api/planned-meals/${plannedMealId}/completion/production`)
+    return production.completion
+  } catch {
+    return completion
+  }
+}
+
+export async function startCompletion(plannedMealId: number): Promise<MealCompletion> {
+  const completion = await request<MealCompletion>(`/api/planned-meals/${plannedMealId}/completion`, { method: 'POST' })
+  return completionWithProductionState(plannedMealId, completion)
+}
+
+export async function fetchCompletion(plannedMealId: number): Promise<MealCompletion> {
+  const completion = await request<MealCompletion>(`/api/planned-meals/${plannedMealId}/completion`)
+  return completionWithProductionState(plannedMealId, completion)
+}
+
 export const saveCompletion = (plannedMealId: number, usages: CompletionUsageUpdate[]): Promise<MealCompletion> => request(`/api/planned-meals/${plannedMealId}/completion`, { method: 'PUT', body: JSON.stringify({ usages }) })
 export const refreshCompletion = (plannedMealId: number): Promise<MealCompletion> => request(`/api/planned-meals/${plannedMealId}/completion/refresh`, { method: 'POST' })
 export const finalizeCompletion = (plannedMealId: number): Promise<CompletionFinalizeResponse> => request(`/api/planned-meals/${plannedMealId}/completion/finalize`, { method: 'POST' })
