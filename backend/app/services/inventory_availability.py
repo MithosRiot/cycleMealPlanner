@@ -35,6 +35,7 @@ def availability_for(
     lots = db.scalars(
         select(InventoryLot).where(
             InventoryLot.household_id == HOUSEHOLD_ID,
+            InventoryLot.source_type == "INGREDIENT",
             InventoryLot.ingredient_id == ingredient_id,
             InventoryLot.quantity > 0,
         )
@@ -78,9 +79,14 @@ def availability_rows(db: Session) -> list[dict]:
     }
     families: dict[tuple[int, str], set[int]] = defaultdict(set)
 
-    for lot in db.scalars(select(InventoryLot).where(InventoryLot.household_id == HOUSEHOLD_ID, InventoryLot.quantity > 0)):
+    for lot in db.scalars(select(InventoryLot).where(
+        InventoryLot.household_id == HOUSEHOLD_ID,
+        InventoryLot.source_type == "INGREDIENT",
+        InventoryLot.ingredient_id.is_not(None),
+        InventoryLot.quantity > 0,
+    )):
         unit = units.get(lot.unit_id)
-        if unit is not None:
+        if unit is not None and lot.ingredient_id is not None:
             families[(lot.ingredient_id, unit.unit_family)].add(lot.unit_id)
 
     for reservation in db.scalars(
