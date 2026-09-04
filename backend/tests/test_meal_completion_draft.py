@@ -10,6 +10,7 @@ def test_completion_draft_persists_actual_usage_substitution_and_stale_plan() ->
     with TestClient(app) as client:
         units = client.get("/api/reference/units").json()
         each = next(item for item in units if item["code"] == "each")
+        gram = next(item for item in units if item["code"] == "g")
         location = client.get("/api/reference/inventory-locations").json()[0]
 
         onion = client.post("/api/ingredients", json={
@@ -59,6 +60,12 @@ def test_completion_draft_persists_actual_usage_substitution_and_stale_plan() ->
         assert usage["actual_quantity"] == "2.000000"
         assert usage["substitutions"][0]["ingredient_id"] == shallot["id"]
         assert usage["substitutions"][0]["preferred"] is True
+
+        incompatible = client.put(f"/api/planned-meals/{planned['id']}/completion", json={"usages": [{
+            "usage_id": usage["id"], "actual_ingredient_id": shallot["id"], "actual_quantity": "1.5",
+            "actual_unit_id": gram["id"], "notes": None,
+        }]})
+        assert incompatible.status_code == 422
 
         saved = client.put(f"/api/planned-meals/{planned['id']}/completion", json={"usages": [{
             "usage_id": usage["id"], "actual_ingredient_id": shallot["id"], "actual_quantity": "1.5",
