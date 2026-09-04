@@ -33,7 +33,9 @@ def upgrade() -> None:
     if "source_quantity" not in columns:
         op.add_column("planned_meals", sa.Column("source_quantity", sa.Numeric(14, 6), nullable=True))
     if "source_unit_id" not in columns:
-        op.add_column("planned_meals", sa.Column("source_unit_id", sa.Integer(), sa.ForeignKey("measurement_units.id", ondelete="RESTRICT"), nullable=True))
+        # Keep this provenance column additive on SQLite. The authoritative
+        # coverage row below enforces its unit foreign key.
+        op.add_column("planned_meals", sa.Column("source_unit_id", sa.Integer(), nullable=True))
 
     tables = set(sa.inspect(bind).get_table_names())
     if "production_coverage_reservations" not in tables:
