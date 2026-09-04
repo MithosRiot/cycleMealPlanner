@@ -30,7 +30,10 @@ def _origin_or_404(db: Session, planned_meal_id: int) -> PlannedMeal:
         .join(CycleSlot, CycleSlot.id == PlannedMeal.cycle_slot_id)
         .join(MealCycle, MealCycle.id == CycleSlot.cycle_id)
         .where(PlannedMeal.id == planned_meal_id, MealCycle.household_id == HOUSEHOLD_ID)
-        .options(selectinload(PlannedMeal.cycle_slot).selectinload(CycleSlot.cycle))
+        .options(
+            selectinload(PlannedMeal.cycle_slot).selectinload(CycleSlot.cycle),
+            selectinload(PlannedMeal.cycle_slot).selectinload(CycleSlot.slot_definition),
+        )
     )
     if planned is None:
         raise HTTPException(status_code=404, detail="Source Planned Meal not found")
@@ -118,6 +121,10 @@ def produced_source_options(db: Session = Depends(get_db)) -> list[ProducedSourc
         .join(CycleSlot, CycleSlot.id == PlannedMeal.cycle_slot_id)
         .join(MealCycle, MealCycle.id == CycleSlot.cycle_id)
         .where(MealCycle.household_id == HOUSEHOLD_ID, PlannedMeal.source_type == "SAVED_MEAL")
+        .options(
+            selectinload(PlannedMeal.cycle_slot).selectinload(CycleSlot.cycle),
+            selectinload(PlannedMeal.cycle_slot).selectinload(CycleSlot.slot_definition),
+        )
         .order_by(MealCycle.id, CycleSlot.day_number, CycleSlot.sort_order, PlannedMeal.id)
     ))
     result: list[ProducedSourceOption] = []
@@ -162,12 +169,25 @@ def _validate_source(db: Session, payload: ProducedSourceAssign, origin: Planned
     return f"Recipe output: {recipe_output.name}", None, recipe_output.id
 
 
+def _target_is_after_source(slot: CycleSlot, origin: PlannedMeal) -> bool:
+    source_slot = origin.cycle_slot
+    if source_slot.cycle_id == slot.cycle_id:
+        return (slot.day_number, slot.sort_order, slot.id) > (source_slot.day_number, source_slot.sort_order, source_slot.id)
+    source_dt = origin.scheduled_datetime
+    target_dt = slot.scheduled_datetime
+    if source_dt is not None and target_dt is not None:
+        return target_dt > source_dt
+    return True
+
+
 @router.post("/api/meal-cycles/{cycle_id}/slots/{slot_id}/planned-source", response_model=PlannedMealRead, status_code=status.HTTP_201_CREATED)
 def assign_produced_source(cycle_id: int, slot_id: int, payload: ProducedSourceAssign, db: Session = Depends(get_db)) -> PlannedMeal:
     slot = _load_slot(db, cycle_id, slot_id)
     origin = _origin_or_404(db, payload.source_origin_planned_meal_id)
     if origin.cycle_slot_id == slot.id:
         raise HTTPException(status_code=422, detail="A Meal cannot consume produced stock from itself")
+    if not _target_is_after_source(slot, origin):
+        raise HTTPException(status_code=422, detail="Produced stock can only cover a future slot after its source Meal")
     source_name, source_record_id, source_recipe_output_id = _validate_source(db, payload, origin)
 
     if slot.planned_meal is not None:
