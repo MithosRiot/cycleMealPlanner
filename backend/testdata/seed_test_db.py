@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import sqlite3
+from datetime import datetime
 
 from sqlalchemy import text
 
@@ -151,6 +154,84 @@ def _seed_cooking_steps() -> None:
         """))
 
 
+def _seed_completion_draft() -> None:
+    from app.database.session import engine
+
+    with engine.begin() as connection:
+        planned = connection.execute(text("""
+            SELECT id, snapshot_name, planned_servings, planned_leftover_servings,
+                   component_serving_overrides, scaled_components
+            FROM planned_meals WHERE id=1
+        """)).mappings().first()
+        if planned is None:
+            return
+        fingerprint_source = {
+            "planned_servings": str(planned["planned_servings"]),
+            "planned_leftover_servings": str(planned["planned_leftover_servings"]),
+            "component_serving_overrides": json.loads(planned["component_serving_overrides"] or "{}"),
+            "scaled_components": json.loads(planned["scaled_components"] or "[]"),
+        }
+        fingerprint = hashlib.sha256(json.dumps(fingerprint_source, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+        connection.execute(text("DELETE FROM meal_completions WHERE planned_meal_id=1"))
+        connection.execute(text("""
+            INSERT INTO meal_completions
+            (id, planned_meal_id, status, plan_fingerprint, snapshot_name,
+             snapshot_planned_servings, snapshot_planned_leftover_servings,
+             snapshot_scaled_components, created_at, updated_at)
+            VALUES (1,1,'DRAFT',:fingerprint,:name,:servings,:leftovers,:components,:now,:now)
+        """), {
+            "fingerprint": fingerprint,
+            "name": planned["snapshot_name"],
+            "servings": planned["planned_servings"],
+            "leftovers": planned["planned_leftover_servings"],
+            "components": planned["scaled_components"],
+            "now": datetime.utcnow(),
+        })
+        usage_id = 1
+        for component_index, component in enumerate(json.loads(planned["scaled_components"] or "[]")):
+            recipe_id = int(component["recipe_id"])
+            recipe_name = connection.execute(text("SELECT name FROM recipes WHERE id=:id"), {"id": recipe_id}).scalar_one()
+            component_key = int(component.get("meal_recipe_id") or -(component_index + 1))
+            for scaled in component.get("ingredients", []):
+                recipe_ingredient_id = int(scaled["recipe_ingredient_id"])
+                ingredient_id = int(scaled["ingredient_id"])
+                unit_id = int(scaled["unit_id"])
+                ingredient_name = connection.execute(text("SELECT name FROM ingredients WHERE id=:id"), {"id": ingredient_id}).scalar_one()
+                unit_code = connection.execute(text("SELECT code FROM measurement_units WHERE id=:id"), {"id": unit_id}).scalar_one()
+                prep = connection.execute(text("""
+                    SELECT preparation, prep_method, prep_size, prep_state
+                    FROM recipe_ingredients WHERE id=:id
+                """), {"id": recipe_ingredient_id}).mappings().first()
+                connection.execute(text("""
+                    INSERT INTO meal_completion_usage
+                    (id, completion_id, component_key, recipe_id, recipe_name, recipe_ingredient_id,
+                     planned_ingredient_id, planned_ingredient_name, planned_quantity, planned_unit_id, planned_unit_code,
+                     actual_ingredient_id, actual_ingredient_name, actual_quantity, actual_unit_id, actual_unit_code,
+                     preparation, prep_method, prep_size, prep_state, notes)
+                    VALUES
+                    (:id,1,:component_key,:recipe_id,:recipe_name,:recipe_ingredient_id,
+                     :ingredient_id,:ingredient_name,:quantity,:unit_id,:unit_code,
+                     :ingredient_id,:ingredient_name,:quantity,:unit_id,:unit_code,
+                     :preparation,:prep_method,:prep_size,:prep_state,NULL)
+                """), {
+                    "id": usage_id,
+                    "component_key": component_key,
+                    "recipe_id": recipe_id,
+                    "recipe_name": recipe_name,
+                    "recipe_ingredient_id": recipe_ingredient_id,
+                    "ingredient_id": ingredient_id,
+                    "ingredient_name": ingredient_name,
+                    "quantity": scaled["quantity"],
+                    "unit_id": unit_id,
+                    "unit_code": unit_code,
+                    "preparation": prep["preparation"] if prep else None,
+                    "prep_method": prep["prep_method"] if prep else None,
+                    "prep_size": prep["prep_size"] if prep else None,
+                    "prep_state": prep["prep_state"] if prep else None,
+                })
+                usage_id += 1
+
+
 def seed(reset: bool = False):
     had_existing_data = not reset and _has_existing_seed_data()
     path = _base.seed(reset=reset)
@@ -159,6 +240,7 @@ def seed(reset: bool = False):
     _seed_typed_prep_examples()
     _seed_gather_examples()
     _seed_cooking_steps()
+    _seed_completion_draft()
     return path
 
 
