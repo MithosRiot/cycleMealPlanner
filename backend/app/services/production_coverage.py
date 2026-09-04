@@ -18,6 +18,14 @@ HOUSEHOLD_ID = 1
 TOLERANCE = Decimal("0.000001")
 
 
+def _pending_active_coverage(db: Session) -> list[ProductionCoverageReservation]:
+    return [
+        row
+        for row in db.new
+        if isinstance(row, ProductionCoverageReservation) and row.status == "ACTIVE"
+    ]
+
+
 def release_source_ingredient_reservations(db: Session, planned_meal_id: int) -> int:
     rows = list(db.scalars(
         select(InventoryReservation).where(
@@ -39,6 +47,11 @@ def release_coverage_for_planned(db: Session, planned_meal_id: int, reason: str 
             ProductionCoverageReservation.status == "ACTIVE",
         )
     ))
+    rows.extend(
+        row
+        for row in _pending_active_coverage(db)
+        if row.planned_meal_id == planned_meal_id and row not in rows
+    )
     for row in rows:
         row.status = "RELEASED"
         row.release_reason = reason
@@ -111,6 +124,12 @@ def reconcile_production_coverage(db: Session) -> list[ProductionCoverageReserva
         .where(ProductionCoverageReservation.status == "ACTIVE")
         .order_by(ProductionCoverageReservation.id)
     ))
+    # A reconciliation may be invoked explicitly immediately after an ORM flush,
+    # while an after_flush_postexec listener has already queued a new coverage row
+    # that has not itself been flushed yet. SQL queries cannot see that pending row,
+    # so include session.new to keep one canonical ACTIVE reservation in-session.
+    active_rows.extend(row for row in _pending_active_coverage(db) if row not in active_rows)
+
     by_planned: dict[int, list[ProductionCoverageReservation]] = {}
     now = datetime.utcnow()
     for row in active_rows:
@@ -183,6 +202,7 @@ def reconcile_production_coverage(db: Session) -> list[ProductionCoverageReserva
                 updated_at=now,
             )
             db.add(existing)
+            by_planned.setdefault(planned.id, []).append(existing)
         else:
             existing.source_record_id = source_record_id
             existing.lot_id = lot.id if valid_lot else None
@@ -197,13 +217,18 @@ def reconcile_production_coverage(db: Session) -> list[ProductionCoverageReserva
 
 
 def reserved_for_lot(db: Session, lot_id: int) -> Decimal:
-    rows = db.scalars(
+    persisted = list(db.scalars(
         select(ProductionCoverageReservation.reserved_quantity).where(
             ProductionCoverageReservation.lot_id == lot_id,
             ProductionCoverageReservation.status == "ACTIVE",
         )
-    )
-    return sum((Decimal(value) for value in rows), Decimal("0"))
+    ))
+    pending = [
+        row.reserved_quantity
+        for row in _pending_active_coverage(db)
+        if row.lot_id == lot_id
+    ]
+    return sum((Decimal(value) for value in [*persisted, *pending]), Decimal("0"))
 
 
 def production_availability_rows(db: Session) -> list[dict]:
@@ -240,6 +265,11 @@ def coverage_summary_for_origin(db: Session, source_origin_planned_meal_id: int)
             ProductionCoverageReservation.status == "ACTIVE",
         )
     ))
+    rows.extend(
+        row
+        for row in _pending_active_coverage(db)
+        if row.source_origin_planned_meal_id == source_origin_planned_meal_id and row not in rows
+    )
     return {
         "reservation_count": len(rows),
         "reserved_quantity": sum((Decimal(row.reserved_quantity) for row in rows), Decimal("0")),
