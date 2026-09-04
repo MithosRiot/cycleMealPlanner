@@ -40,7 +40,7 @@ def upgrade() -> None:
             sa.Column("remaining_seconds", sa.Integer(), nullable=False),
             sa.Column("ends_at_epoch", sa.Integer(), nullable=True),
             sa.UniqueConstraint("planned_meal_id", "cooking_timer_id", name="uq_planned_cooking_timers_meal_timer"),
-            sa.CheckConstraint("status IN ('READY','RUNNING','PAUSED','COMPLETED')", name="ck_planned_cooking_timers_status"),
+            sa.CheckConstraint("status IN ('READY','RUNNING','PAUSED','COMPLETED','DISMISSED')", name="ck_planned_cooking_timers_status"),
             sa.CheckConstraint("remaining_seconds >= 0", name="ck_planned_cooking_timers_remaining_nonnegative"),
         )
 
