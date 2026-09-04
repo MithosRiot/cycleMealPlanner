@@ -28,15 +28,7 @@ def _check_map(bind, table_name: str) -> dict[str, dict]:
 
 
 def _recover_stale_batch_table(bind, table_name: str) -> None:
-    """Recover an Alembic SQLite batch table left by interrupted DDL.
-
-    Alembic batch mode creates ``_alembic_tmp_<table>`` before copying and
-    replacing the original table. SQLite DDL is non-transactional, so an
-    interrupted migration can leave that temporary table behind. If the real
-    table still exists, the temporary table is incomplete/redundant and is
-    safe to drop. If only the temporary table exists, restore it as the real
-    table so the migration can continue without discarding copied data.
-    """
+    """Recover an Alembic SQLite batch table left by interrupted DDL."""
     temp_name = f"_alembic_tmp_{table_name}"
     tables = set(sa.inspect(bind).get_table_names())
     if temp_name not in tables:
@@ -47,18 +39,37 @@ def _recover_stale_batch_table(bind, table_name: str) -> None:
         bind.execute(sa.text(f'ALTER TABLE "{temp_name}" RENAME TO "{table_name}"'))
 
 
-def upgrade() -> None:
-    """Apply 0032 safely even after an interrupted SQLite DDL migration.
+def _sqlite_foreign_keys_enabled(bind) -> bool:
+    if bind.dialect.name != "sqlite":
+        return False
+    return bool(bind.exec_driver_sql("PRAGMA foreign_keys").scalar())
 
-    SQLite DDL is non-transactional in this app. If a prior 0032 attempt stops
-    after one or more ALTER/CREATE statements, Alembic can still report 0031
-    while part of the 0032 schema already exists. Every step below therefore
-    inspects the live schema/data before applying the corresponding change.
-    """
+
+def _set_sqlite_foreign_keys(bind, enabled: bool) -> None:
+    if bind.dialect.name != "sqlite":
+        return
+    value = "ON" if enabled else "OFF"
+    # SQLite ignores PRAGMA foreign_keys changes while a transaction is active.
+    # Alembic's autocommit block ends the current transaction before toggling it.
+    with op.get_context().autocommit_block():
+        bind.exec_driver_sql(f"PRAGMA foreign_keys={value}")
+    actual = bool(bind.exec_driver_sql("PRAGMA foreign_keys").scalar())
+    if actual != enabled:
+        raise RuntimeError(f"Could not set SQLite foreign_keys={value} for migration 0032")
+
+
+def _assert_sqlite_foreign_keys_valid(bind) -> None:
+    if bind.dialect.name != "sqlite":
+        return
+    violations = bind.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+    if violations:
+        raise RuntimeError(f"SQLite foreign key violations after migration 0032: {violations}")
+
+
+def upgrade() -> None:
+    """Apply 0032 safely even after an interrupted SQLite DDL migration."""
     bind = op.get_bind()
 
-    # Clean up/restore known Alembic batch artifacts before inspecting schema.
-    # These are the two tables altered with batch mode by this migration.
     _recover_stale_batch_table(bind, "inventory_lots")
     _recover_stale_batch_table(bind, "inventory_transactions")
 
@@ -89,41 +100,57 @@ def upgrade() -> None:
     needs_source_type_check = "ck_inventory_lots_source_type" not in lot_checks
     needs_source_identity_check = "ck_inventory_lots_source_identity" not in lot_checks
 
-    if any((ingredient_needs_nullable, source_needs_required, source_needs_default, needs_source_type_check, needs_source_identity_check)):
-        _recover_stale_batch_table(bind, "inventory_lots")
-        with op.batch_alter_table("inventory_lots") as batch:
-            if ingredient_needs_nullable:
-                batch.alter_column("ingredient_id", existing_type=sa.Integer(), nullable=True)
-            if source_needs_required or source_needs_default:
-                batch.alter_column(
-                    "source_type",
-                    existing_type=sa.String(length=30),
-                    nullable=False,
-                    server_default="INGREDIENT",
-                )
-            if needs_source_type_check:
+    # Alembic batch mode rebuilds tables by creating a temporary copy, copying
+    # rows, dropping the original, and renaming the copy. With SQLite foreign
+    # keys enabled, dropping inventory_lots fails when inventory_transactions,
+    # gather selections, allocations, etc. reference populated lots. Disable FK
+    # enforcement only for the rebuild, validate the finished graph, then restore
+    # the original setting.
+    foreign_keys_were_enabled = _sqlite_foreign_keys_enabled(bind)
+    if foreign_keys_were_enabled:
+        _set_sqlite_foreign_keys(bind, False)
+
+    try:
+        if any((ingredient_needs_nullable, source_needs_required, source_needs_default, needs_source_type_check, needs_source_identity_check)):
+            _recover_stale_batch_table(bind, "inventory_lots")
+            with op.batch_alter_table("inventory_lots") as batch:
+                if ingredient_needs_nullable:
+                    batch.alter_column("ingredient_id", existing_type=sa.Integer(), nullable=True)
+                if source_needs_required or source_needs_default:
+                    batch.alter_column(
+                        "source_type",
+                        existing_type=sa.String(length=30),
+                        nullable=False,
+                        server_default="INGREDIENT",
+                    )
+                if needs_source_type_check:
+                    batch.create_check_constraint(
+                        "ck_inventory_lots_source_type",
+                        "source_type IN ('INGREDIENT','LEFTOVER','RECIPE_OUTPUT')",
+                    )
+                if needs_source_identity_check:
+                    batch.create_check_constraint(
+                        "ck_inventory_lots_source_identity",
+                        "(source_type='INGREDIENT' AND ingredient_id IS NOT NULL) OR (source_type!='INGREDIENT' AND source_id IS NOT NULL)",
+                    )
+
+        transaction_checks = _check_map(bind, "inventory_transactions")
+        transaction_type_check = transaction_checks.get("ck_inventory_transactions_type")
+        transaction_sql = str(transaction_type_check.get("sqltext", "")) if transaction_type_check else ""
+        if "PRODUCTION" not in transaction_sql:
+            _recover_stale_batch_table(bind, "inventory_transactions")
+            with op.batch_alter_table("inventory_transactions") as batch:
+                if transaction_type_check is not None:
+                    batch.drop_constraint("ck_inventory_transactions_type", type_="check")
                 batch.create_check_constraint(
-                    "ck_inventory_lots_source_type",
-                    "source_type IN ('INGREDIENT','LEFTOVER','RECIPE_OUTPUT')",
-                )
-            if needs_source_identity_check:
-                batch.create_check_constraint(
-                    "ck_inventory_lots_source_identity",
-                    "(source_type='INGREDIENT' AND ingredient_id IS NOT NULL) OR (source_type!='INGREDIENT' AND source_id IS NOT NULL)",
+                    "ck_inventory_transactions_type",
+                    "transaction_type IN ('PURCHASE','CONSUME','TRANSFER','MANUAL_ADD','MANUAL_REMOVE','CORRECTION','PRODUCTION')",
                 )
 
-    transaction_checks = _check_map(bind, "inventory_transactions")
-    transaction_type_check = transaction_checks.get("ck_inventory_transactions_type")
-    transaction_sql = str(transaction_type_check.get("sqltext", "")) if transaction_type_check else ""
-    if "PRODUCTION" not in transaction_sql:
-        _recover_stale_batch_table(bind, "inventory_transactions")
-        with op.batch_alter_table("inventory_transactions") as batch:
-            if transaction_type_check is not None:
-                batch.drop_constraint("ck_inventory_transactions_type", type_="check")
-            batch.create_check_constraint(
-                "ck_inventory_transactions_type",
-                "transaction_type IN ('PURCHASE','CONSUME','TRANSFER','MANUAL_ADD','MANUAL_REMOVE','CORRECTION','PRODUCTION')",
-            )
+        _assert_sqlite_foreign_keys_valid(bind)
+    finally:
+        if foreign_keys_were_enabled:
+            _set_sqlite_foreign_keys(bind, True)
 
     serving_unit_id = bind.execute(sa.text("SELECT id FROM measurement_units WHERE code='serving' LIMIT 1")).scalar()
     if serving_unit_id is None:
@@ -199,6 +226,8 @@ def upgrade() -> None:
             sa.CheckConstraint("calculated_quantity >= 0", name="ck_meal_completion_outputs_calculated_nonnegative"),
             sa.CheckConstraint("actual_quantity >= 0", name="ck_meal_completion_outputs_actual_nonnegative"),
         )
+
+    _assert_sqlite_foreign_keys_valid(bind)
 
 
 def downgrade() -> None:
