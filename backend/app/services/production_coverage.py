@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.completion import MealCompletion
 from app.models.inventory import InventoryLot
-from app.models.meal_cycle import CycleSlot
+from app.models.meal_cycle import CycleSlot, MealCycle
 from app.models.planned_meal import PlannedMeal
 from app.models.production import Leftover, MealCompletionOutput
 from app.models.production_coverage import ProductionCoverageReservation
@@ -130,7 +130,7 @@ def reconcile_production_coverage(db: Session) -> list[ProductionCoverageReserva
             continue
 
         source_record_id, lot = _resolve_source(db, planned)
-        valid_lot = lot is not None and lot.quantity > 0 and lot.unit_id == planned.source_unit_id
+        valid_lot = lot is not None and Decimal(lot.quantity) > 0 and lot.unit_id == planned.source_unit_id
         if valid_lot and planned.scheduled_date is not None and lot.expiration_date is not None and lot.expiration_date < planned.scheduled_date:
             valid_lot = False
 
@@ -240,3 +240,35 @@ def coverage_summary_for_origin(db: Session, source_origin_planned_meal_id: int)
         "reserved_quantity": sum((Decimal(row.reserved_quantity) for row in rows), Decimal("0")),
         "shortage_quantity": sum((Decimal(row.shortage_quantity) for row in rows), Decimal("0")),
     }
+
+
+def _coverage_relevant(obj) -> bool:
+    if isinstance(obj, PlannedMeal):
+        return True
+    if isinstance(obj, (Leftover, MealCompletionOutput, CycleSlot, MealCycle)):
+        return True
+    if isinstance(obj, InventoryLot):
+        return obj.source_type in {"LEFTOVER", "RECIPE_OUTPUT"}
+    return False
+
+
+@event.listens_for(Session, "before_flush")
+def _mark_coverage_dirty(session: Session, _flush_context, _instances) -> None:
+    if session.info.get("production_coverage_reconciling"):
+        return
+    candidates = list(session.new) + list(session.dirty) + list(session.deleted)
+    if any(_coverage_relevant(obj) for obj in candidates):
+        session.info["production_coverage_dirty"] = True
+
+
+@event.listens_for(Session, "after_flush_postexec")
+def _auto_reconcile_coverage(session: Session, _flush_context) -> None:
+    if not session.info.pop("production_coverage_dirty", False):
+        return
+    if session.info.get("production_coverage_reconciling"):
+        return
+    session.info["production_coverage_reconciling"] = True
+    try:
+        reconcile_production_coverage(session)
+    finally:
+        session.info.pop("production_coverage_reconciling", None)
