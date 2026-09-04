@@ -4,7 +4,7 @@ A self-hosted/web-based meal planning application for recipes, reusable meals, f
 
 ## Project status
 
-Active development is in v0.7 Cooking Mode. Step-by-step cooking, persistent multiple timers, and equipment/temperature context are implemented; multi-component cooking coordination is the final v0.7 workstream before v0.8 planning begins.
+Active development is in v0.8 Completion + Leftovers. v0.7 Cooking Mode is complete, including step-by-step execution, persistent multiple timers, equipment/temperature context, and multi-component coordination. The current v0.8 work adds a draft reconciliation flow for planned-versus-actual ingredient usage before Inventory finalization.
 
 ## Stack
 
