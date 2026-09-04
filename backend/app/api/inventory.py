@@ -97,6 +97,9 @@ def create_inventory_lot(payload: InventoryLotCreate, db: Session = Depends(get_
     lot = InventoryLot(
         household_id=DEFAULT_HOUSEHOLD_ID,
         ingredient_id=payload.ingredient_id,
+        source_type="INGREDIENT",
+        source_id=None,
+        source_name=None,
         location_id=payload.location_id,
         quantity=payload.quantity,
         unit_id=payload.unit_id,
@@ -116,11 +119,7 @@ def create_inventory_lot(payload: InventoryLotCreate, db: Session = Depends(get_
 
 
 @router.put("/{lot_id}", response_model=InventoryLotRead)
-def update_inventory_metadata(
-    lot_id: int,
-    payload: InventoryLotMetadataUpdate,
-    db: Session = Depends(get_db),
-) -> InventoryLot:
+def update_inventory_metadata(lot_id: int, payload: InventoryLotMetadataUpdate, db: Session = Depends(get_db)) -> InventoryLot:
     lot = _lot_or_404(db, lot_id)
     lot.purchase_date = payload.purchase_date
     lot.opened_date = payload.opened_date
@@ -201,6 +200,9 @@ def split_inventory(lot_id: int, payload: SplitAction, db: Session = Depends(get
     child = InventoryLot(
         household_id=source.household_id,
         ingredient_id=source.ingredient_id,
+        source_type=source.source_type,
+        source_id=source.source_id,
+        source_name=source.source_name,
         location_id=payload.to_location_id,
         quantity=quantity,
         unit_id=source.unit_id,
@@ -224,7 +226,4 @@ def split_inventory(lot_id: int, payload: SplitAction, db: Session = Depends(get
     child_id = child.id
     db.commit()
     db.expire_all()
-    return {
-        "source": _lot_or_404(db, source_id),
-        "child": _lot_or_404(db, child_id),
-    }
+    return {"source": _lot_or_404(db, source_id), "child": _lot_or_404(db, child_id)}

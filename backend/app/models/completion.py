@@ -23,6 +23,9 @@ class MealCompletion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime)
+    actual_servings_produced: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    actual_servings_eaten: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    production_committed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     usages: Mapped[list[MealCompletionUsage]] = relationship(
         back_populates="completion",
@@ -37,6 +40,12 @@ class MealCompletion(Base):
 
     __table_args__ = (
         CheckConstraint("status IN ('DRAFT','FINALIZED')", name="ck_meal_completions_status"),
+        CheckConstraint("actual_servings_produced IS NULL OR actual_servings_produced >= 0", name="ck_meal_completions_produced_nonnegative"),
+        CheckConstraint("actual_servings_eaten IS NULL OR actual_servings_eaten >= 0", name="ck_meal_completions_eaten_nonnegative"),
+        CheckConstraint(
+            "actual_servings_produced IS NULL OR actual_servings_eaten IS NULL OR actual_servings_eaten <= actual_servings_produced",
+            name="ck_meal_completions_eaten_not_over_produced",
+        ),
     )
 
 

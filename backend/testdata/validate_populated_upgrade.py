@@ -62,8 +62,12 @@ def main() -> None:
         completion_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_completions)"))}
         usage_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_completion_usage)"))}
         allocation_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_completion_allocations)"))}
+        inventory_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(inventory_lots)"))}
+        leftover_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(leftovers)"))}
+        output_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_completion_outputs)"))}
+        serving_unit = connection.execute(text("SELECT code, unit_family FROM measurement_units WHERE id=16")).one()
 
-    assert version == "0031_meal_completion_finalization"
+    assert version == "0032_completion_leftovers_outputs"
     assert row.name == "Migration Test Ingredient"
     assert bool(row.staple_enabled) is False
     assert row.staple_minimum is None and row.staple_target is None and row.staple_unit_id is None
@@ -81,12 +85,16 @@ def main() -> None:
     assert {"cooking_step_id", "label", "value", "unit", "notes", "sort_order"}.issubset(temperature_columns)
     assert {"cooking_step_id", "stage", "parallel_capable"}.issubset(coordination_columns)
     assert {"cooking_step_id", "depends_on_step_id"}.issubset(dependency_columns)
-    assert {"planned_meal_id", "status", "plan_fingerprint", "snapshot_scaled_components", "finalized_at"}.issubset(completion_columns)
+    assert {"planned_meal_id", "status", "plan_fingerprint", "snapshot_scaled_components", "finalized_at", "actual_servings_produced", "actual_servings_eaten", "production_committed_at"}.issubset(completion_columns)
     assert {"completion_id", "component_key", "recipe_ingredient_id", "planned_ingredient_id", "actual_ingredient_id", "actual_quantity", "actual_unit_id"}.issubset(usage_columns)
     assert {"completion_id", "usage_id", "lot_id", "inventory_transaction_id", "quantity", "source_quantity"}.issubset(allocation_columns)
+    assert {"ingredient_id", "source_type", "source_id", "source_name", "location_id", "quantity", "unit_id"}.issubset(inventory_columns)
+    assert {"completion_id", "planned_meal_id", "leftover_servings", "inventory_lot_id", "inventory_transaction_id"}.issubset(leftover_columns)
+    assert {"completion_id", "component_key", "recipe_output_id", "calculated_quantity", "actual_quantity", "inventory_lot_id"}.issubset(output_columns)
+    assert serving_unit.code == "serving" and serving_unit.unit_family == "SERVING"
 
     engine.dispose(); DB_PATH.unlink(missing_ok=True)
-    print("Populated SQLite upgrade 0020 -> 0031 succeeded and preserved existing data while adding meal completion finalization.")
+    print("Populated SQLite upgrade 0020 -> 0032 succeeded and preserved existing data while adding completion leftovers and Recipe outputs.")
 
 
 if __name__ == "__main__":
