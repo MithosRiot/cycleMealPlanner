@@ -5,6 +5,7 @@ import CombinedPrepPanel from './CombinedPrepPanel'
 import CookingModePanel from './CookingModePanel'
 import CycleSchedulingPanel from './CycleSchedulingPanel'
 import CycleValidationPage from './CycleValidationPage'
+import DashboardPage from './DashboardPage'
 import GatherPanel from './GatherPanel'
 import IngredientsPage from './IngredientsPage'
 import './InventoryPage.css'
@@ -41,7 +42,7 @@ function App() {
     <header className="topbar"><div><strong>Cycle Meal Planner</strong><span className={`status ${health.isError ? 'status-error' : ''}`}>{backendStatus}</span></div></header>
     <aside className="sidebar" aria-label="Primary navigation"><nav>{navigation.map(([label, path]) => <NavLink key={path} to={path} end={path === '/'}>{label}</NavLink>)}</nav></aside>
     <main className="content"><Routes>
-      <Route path="/" element={<PlaceholderPage title="Dashboard" />} />
+      <Route path="/" element={<DashboardPage />} />
       <Route path="/recipes" element={<RecipesPage />} />
       <Route path="/recipes/new" element={<RecipeEditorPage />} />
       <Route path="/recipes/:recipeId" element={<RecipeDetailWithAdvancedPage />} />
