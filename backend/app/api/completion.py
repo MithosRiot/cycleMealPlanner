@@ -14,7 +14,7 @@ from app.models.completion import MealCompletion, MealCompletionUsage
 from app.models.ingredient import Ingredient
 from app.models.meal_cycle import CycleSlot, MealCycle
 from app.models.planned_meal import PlannedMeal
-from app.models.recipe import Recipe, RecipeIngredient, RecipeIngredientSubstitution
+from app.models.recipe import Recipe, RecipeIngredientSubstitution
 from app.models.reference import MeasurementUnit
 from app.schemas.completion import CompletionDraftUpdate, MealCompletionRead
 from app.services.units import UnitConversionError, convert_quantity
@@ -216,13 +216,16 @@ def update_completion(planned_meal_id: int, payload: CompletionDraftUpdate, db: 
 
     ingredient_ids = {item.actual_ingredient_id for item in payload.usages}
     unit_ids = {item.actual_unit_id for item in payload.usages} | {row.planned_unit_id for row in completion.usages}
-    ingredients = {row.id: row for row in db.scalars(select(Ingredient).where(Ingredient.id.in_(ingredient_ids), Ingredient.household_id == HOUSEHOLD_ID, Ingredient.active.is_(True)))}
+    ingredients = {row.id: row for row in db.scalars(select(Ingredient).where(Ingredient.id.in_(ingredient_ids), Ingredient.household_id == HOUSEHOLD_ID))}
     units = {row.id: row for row in db.scalars(select(MeasurementUnit).where(MeasurementUnit.id.in_(unit_ids)))}
     if len(ingredients) != len(ingredient_ids):
-        raise HTTPException(status_code=422, detail="Actual Ingredient must be an active household Ingredient")
+        raise HTTPException(status_code=422, detail="Actual Ingredient must belong to this household")
 
     for item in payload.usages:
         row = rows[item.usage_id]
+        ingredient = ingredients[item.actual_ingredient_id]
+        if not ingredient.active and ingredient.id != row.actual_ingredient_id:
+            raise HTTPException(status_code=422, detail="Archived Ingredients cannot be selected for new actual usage")
         actual_unit = units.get(item.actual_unit_id)
         planned_unit = units.get(row.planned_unit_id)
         if actual_unit is None or planned_unit is None:
@@ -231,7 +234,6 @@ def update_completion(planned_meal_id: int, payload: CompletionDraftUpdate, db: 
             convert_quantity(item.actual_quantity, actual_unit, planned_unit)
         except UnitConversionError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        ingredient = ingredients[item.actual_ingredient_id]
         row.actual_ingredient_id = ingredient.id
         row.actual_ingredient_name = ingredient.name
         row.actual_quantity = item.actual_quantity
