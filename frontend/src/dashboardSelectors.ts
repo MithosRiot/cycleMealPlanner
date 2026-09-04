@@ -9,6 +9,10 @@ function toLocalDateKey(value: Date): string {
   return `${year}-${month}-${day}`
 }
 
+function localMidnight(value: Date): Date {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate())
+}
+
 export function selectCurrentCycle(cycles: MealCycle[], now = new Date()): MealCycle | null {
   const today = toLocalDateKey(now)
   const scheduled = cycles.filter((cycle) => cycle.start_date !== null)
@@ -18,13 +22,13 @@ export function selectCurrentCycle(cycles: MealCycle[], now = new Date()): MealC
     end.setDate(end.getDate() + cycle.duration_days - 1)
     return cycle.start_date! <= today && toLocalDateKey(end) >= today
   })
-  return active ?? scheduled.sort((a, b) => (a.start_date ?? '').localeCompare(b.start_date ?? ''))[0] ?? cycles[0] ?? null
+  return active ?? [...scheduled].sort((a, b) => (a.start_date ?? '').localeCompare(b.start_date ?? ''))[0] ?? cycles[0] ?? null
 }
 
 export function todaysMealSlots(cycle: MealCycle | null, now = new Date()): CycleSlot[] {
   if (!cycle?.start_date) return []
   const start = new Date(`${cycle.start_date}T00:00:00`)
-  const dayNumber = Math.floor((new Date(toLocalDateKey(now)).getTime() - start.getTime()) / 86_400_000) + 1
+  const dayNumber = Math.floor((localMidnight(now).getTime() - start.getTime()) / 86_400_000) + 1
   if (dayNumber < 1 || dayNumber > cycle.duration_days) return []
   return cycle.slots
     .filter((slot) => slot.day_number === dayNumber && slot.planned_meal !== null)
