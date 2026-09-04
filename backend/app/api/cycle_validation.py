@@ -14,6 +14,7 @@ from app.models.ingredient import Ingredient
 from app.models.inventory import InventoryLot
 from app.models.meal import Meal
 from app.models.meal_cycle import CycleSlot, MealCycle
+from app.models.production_coverage import ProductionCoverageReservation
 from app.models.recipe import Recipe
 from app.models.reference import MeasurementUnit
 from app.services.inventory_availability import availability_for
@@ -84,10 +85,24 @@ def validate_cycle(cycle_id: int, db: Session = Depends(get_db)) -> dict:
     )
     active_meal_ids = {meal.id for meal in active_meals}
     active_recipe_ids = set(db.scalars(select(Recipe.id).where(Recipe.household_id == HOUSEHOLD_ID, Recipe.active.is_(True))))
+    coverage = {
+        row.planned_meal_id: row
+        for row in db.scalars(
+            select(ProductionCoverageReservation).where(
+                ProductionCoverageReservation.cycle_id == cycle.id,
+                ProductionCoverageReservation.status == "ACTIVE",
+            )
+        )
+    }
 
     inventory_by_ingredient: dict[int, list[InventoryLot]] = defaultdict(list)
-    for lot in db.scalars(select(InventoryLot).where(InventoryLot.household_id == HOUSEHOLD_ID, InventoryLot.quantity > 0)):
-        inventory_by_ingredient[lot.ingredient_id].append(lot)
+    for lot in db.scalars(select(InventoryLot).where(
+        InventoryLot.household_id == HOUSEHOLD_ID,
+        InventoryLot.source_type == "INGREDIENT",
+        InventoryLot.quantity > 0,
+    )):
+        if lot.ingredient_id is not None:
+            inventory_by_ingredient[lot.ingredient_id].append(lot)
 
     requirements: dict[tuple[int, str], dict] = {}
     for slot in sorted(cycle.slots, key=lambda value: (value.day_number, value.sort_order, value.id)):
@@ -95,6 +110,34 @@ def validate_cycle(cycle_id: int, db: Session = Depends(get_db)) -> dict:
         planned = slot.planned_meal
         if planned is None:
             issues.append(_issue("ERROR", "EMPTY_SLOT", f"Day {slot.day_number} · {label} has no planned Meal.", day_number=slot.day_number, slot_label=label, cycle_slot_id=slot.id))
+            continue
+
+        if planned.source_type in {"LEFTOVER", "RECIPE_OUTPUT"}:
+            row = coverage.get(planned.id)
+            requested = Decimal(planned.source_quantity or 0)
+            unit = units.get(planned.source_unit_id) if planned.source_unit_id is not None else None
+            shortage = requested if row is None else Decimal(row.shortage_quantity)
+            reserved = Decimal("0") if row is None else Decimal(row.reserved_quantity)
+            if row is None or shortage > 0:
+                code = "LEFTOVER_COVERAGE_SHORTAGE" if planned.source_type == "LEFTOVER" else "RECIPE_OUTPUT_COVERAGE_SHORTAGE"
+                issues.append(_issue(
+                    "WARNING",
+                    code,
+                    f"{planned.snapshot_name} is short by {shortage} {unit.code if unit else ''} of its specifically planned produced source.".strip(),
+                    planned_meal_id=planned.id,
+                    source_type=planned.source_type,
+                    source_origin_planned_meal_id=planned.source_origin_planned_meal_id,
+                    source_record_id=planned.source_record_id,
+                    source_recipe_output_id=planned.source_recipe_output_id,
+                    requested_quantity=str(requested),
+                    reserved_quantity=str(reserved),
+                    shortage_quantity=str(shortage),
+                    unit_id=planned.source_unit_id,
+                    unit_code=unit.code if unit else None,
+                    lot_id=row.lot_id if row else None,
+                    day_number=slot.day_number,
+                    slot_label=label,
+                ))
             continue
 
         if planned.meal_id not in active_meal_ids:
