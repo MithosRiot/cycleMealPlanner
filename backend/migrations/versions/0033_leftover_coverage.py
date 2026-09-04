@@ -26,6 +26,8 @@ def upgrade() -> None:
         op.add_column("planned_meals", sa.Column("source_type", sa.String(length=30), nullable=False, server_default="SAVED_MEAL"))
     if "source_origin_planned_meal_id" not in columns:
         op.add_column("planned_meals", sa.Column("source_origin_planned_meal_id", sa.Integer(), nullable=True))
+    if "source_record_id" not in columns:
+        op.add_column("planned_meals", sa.Column("source_record_id", sa.Integer(), nullable=True))
     if "source_recipe_output_id" not in columns:
         op.add_column("planned_meals", sa.Column("source_recipe_output_id", sa.Integer(), nullable=True))
     if "source_quantity" not in columns:
@@ -75,5 +77,6 @@ def downgrade() -> None:
     op.drop_column("planned_meals", "source_unit_id")
     op.drop_column("planned_meals", "source_quantity")
     op.drop_column("planned_meals", "source_recipe_output_id")
+    op.drop_column("planned_meals", "source_record_id")
     op.drop_column("planned_meals", "source_origin_planned_meal_id")
     op.drop_column("planned_meals", "source_type")
