@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchMeasurementUnits } from './api'
 import { assignProducedSource, fetchMealCycle, fetchMealCycles, fetchProducedSourceOptions, removePlannedMeal, type ProducedSourceOption } from './mealCyclesApi'
 import { fetchProductionAvailability, fetchProductionCoverage } from './reservationsApi'
+import { onProductionInventoryChanged } from './productionEvents'
 import { producedSourcePlacements } from './producedStockCoverageSelectors'
 
 export default function ProducedStockCoveragePanel() {
@@ -32,6 +33,8 @@ export default function ProducedStockCoveragePanel() {
     await queryClient.invalidateQueries({ queryKey: ['production-inventory-availability'] })
     await queryClient.invalidateQueries({ queryKey: ['cycle-validation', cycleId] })
   }
+
+  useEffect(() => onProductionInventoryChanged(() => { void refresh() }), [cycleId, queryClient])
 
   const place = useMutation({
     mutationFn: () => {
