@@ -61,8 +61,9 @@ def main() -> None:
         dependency_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(recipe_cooking_dependencies)"))}
         completion_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_completions)"))}
         usage_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_completion_usage)"))}
+        allocation_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_completion_allocations)"))}
 
-    assert version == "0030_meal_completion_drafts"
+    assert version == "0031_meal_completion_finalization"
     assert row.name == "Migration Test Ingredient"
     assert bool(row.staple_enabled) is False
     assert row.staple_minimum is None and row.staple_target is None and row.staple_unit_id is None
@@ -80,11 +81,12 @@ def main() -> None:
     assert {"cooking_step_id", "label", "value", "unit", "notes", "sort_order"}.issubset(temperature_columns)
     assert {"cooking_step_id", "stage", "parallel_capable"}.issubset(coordination_columns)
     assert {"cooking_step_id", "depends_on_step_id"}.issubset(dependency_columns)
-    assert {"planned_meal_id", "status", "plan_fingerprint", "snapshot_scaled_components"}.issubset(completion_columns)
+    assert {"planned_meal_id", "status", "plan_fingerprint", "snapshot_scaled_components", "finalized_at"}.issubset(completion_columns)
     assert {"completion_id", "component_key", "recipe_ingredient_id", "planned_ingredient_id", "actual_ingredient_id", "actual_quantity", "actual_unit_id"}.issubset(usage_columns)
+    assert {"completion_id", "usage_id", "lot_id", "inventory_transaction_id", "quantity", "source_quantity"}.issubset(allocation_columns)
 
     engine.dispose(); DB_PATH.unlink(missing_ok=True)
-    print("Populated SQLite upgrade 0020 -> 0030 succeeded and preserved existing data while adding meal completion drafts.")
+    print("Populated SQLite upgrade 0020 -> 0031 succeeded and preserved existing data while adding meal completion finalization.")
 
 
 if __name__ == "__main__":

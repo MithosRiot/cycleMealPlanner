@@ -22,11 +22,17 @@ class MealCompletion(Base):
     snapshot_scaled_components: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     usages: Mapped[list[MealCompletionUsage]] = relationship(
         back_populates="completion",
         cascade="all, delete-orphan",
         order_by="MealCompletionUsage.id",
+    )
+    allocations: Mapped[list[MealCompletionAllocation]] = relationship(
+        back_populates="completion",
+        cascade="all, delete-orphan",
+        order_by="MealCompletionAllocation.id",
     )
 
     __table_args__ = (
@@ -65,4 +71,27 @@ class MealCompletionUsage(Base):
         UniqueConstraint("completion_id", "component_key", "recipe_ingredient_id", name="uq_meal_completion_usage_source"),
         CheckConstraint("planned_quantity >= 0", name="ck_meal_completion_usage_planned_nonnegative"),
         CheckConstraint("actual_quantity >= 0", name="ck_meal_completion_usage_actual_nonnegative"),
+    )
+
+
+class MealCompletionAllocation(Base):
+    __tablename__ = "meal_completion_allocations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    completion_id: Mapped[int] = mapped_column(ForeignKey("meal_completions.id", ondelete="CASCADE"), nullable=False)
+    usage_id: Mapped[int] = mapped_column(ForeignKey("meal_completion_usage.id", ondelete="RESTRICT"), nullable=False)
+    lot_id: Mapped[int] = mapped_column(ForeignKey("inventory_lots.id", ondelete="RESTRICT"), nullable=False)
+    inventory_transaction_id: Mapped[int] = mapped_column(ForeignKey("inventory_transactions.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(14, 6), nullable=False)
+    unit_id: Mapped[int] = mapped_column(ForeignKey("measurement_units.id", ondelete="RESTRICT"), nullable=False)
+    unit_code: Mapped[str] = mapped_column(String(30), nullable=False)
+    source_quantity: Mapped[Decimal] = mapped_column(Numeric(14, 6), nullable=False)
+    source_unit_id: Mapped[int] = mapped_column(ForeignKey("measurement_units.id", ondelete="RESTRICT"), nullable=False)
+    source_unit_code: Mapped[str] = mapped_column(String(30), nullable=False)
+
+    completion: Mapped[MealCompletion] = relationship(back_populates="allocations")
+
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_meal_completion_allocations_quantity_positive"),
+        CheckConstraint("source_quantity > 0", name="ck_meal_completion_allocations_source_quantity_positive"),
     )
