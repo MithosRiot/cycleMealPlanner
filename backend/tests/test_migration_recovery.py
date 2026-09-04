@@ -146,6 +146,7 @@ def test_0033_recovers_after_partial_additive_sqlite_ddl(tmp_path) -> None:
     try:
         command.upgrade(_config(), "0032_completion_leftovers_outputs")
         engine = _engine(database_url)
+        _seed_dependent_inventory(engine)
         with engine.begin() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0032_completion_leftovers_outputs"
             connection.execute(text("ALTER TABLE planned_meals ADD COLUMN source_type VARCHAR(30) DEFAULT 'SAVED_MEAL' NOT NULL"))
