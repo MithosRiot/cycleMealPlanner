@@ -9,11 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database.session import get_db
-from app.models.cooking import PlannedCookingTimer, RecipeCookingTimer
+from app.models.cooking import PlannedCookingTimer, RecipeCookingStepEquipment, RecipeCookingTemperature, RecipeCookingTimer
+from app.models.equipment import Equipment
 from app.models.ingredient import Ingredient
 from app.models.meal_cycle import CycleSlot, MealCycle
 from app.models.planned_meal import PlannedMeal
-from app.models.recipe import Recipe, RecipeCookingStep
+from app.models.recipe import Recipe, RecipeCookingStep, RecipeEquipment
 from app.models.reference import MeasurementUnit
 from app.schemas.cooking import CookingStepInput, CookingStepRead, CookingTimerAction, CycleCookingModeResponse
 
@@ -25,7 +26,11 @@ def _recipe_or_404(db: Session, recipe_id: int) -> Recipe:
     recipe = db.scalar(
         select(Recipe)
         .where(Recipe.id == recipe_id, Recipe.household_id == HOUSEHOLD_ID)
-        .options(selectinload(Recipe.cooking_steps), selectinload(Recipe.prep_groups))
+        .options(
+            selectinload(Recipe.cooking_steps),
+            selectinload(Recipe.prep_groups),
+            selectinload(Recipe.equipment),
+        )
     )
     if recipe is None:
         raise HTTPException(status_code=404, detail="Recipe not found")
@@ -46,7 +51,71 @@ def _timer_rows(db: Session, step_ids: list[int]) -> dict[int, list[RecipeCookin
     return result
 
 
-def _step_payload(step: RecipeCookingStep, group_names: dict[int, str], timers: list[RecipeCookingTimer]) -> dict:
+def _temperature_rows(db: Session, step_ids: list[int]) -> dict[int, list[RecipeCookingTemperature]]:
+    if not step_ids:
+        return {}
+    rows = list(db.scalars(
+        select(RecipeCookingTemperature)
+        .where(RecipeCookingTemperature.cooking_step_id.in_(step_ids))
+        .order_by(RecipeCookingTemperature.cooking_step_id, RecipeCookingTemperature.sort_order, RecipeCookingTemperature.id)
+    ))
+    result: dict[int, list[RecipeCookingTemperature]] = {}
+    for row in rows:
+        result.setdefault(row.cooking_step_id, []).append(row)
+    return result
+
+
+def _equipment_rows(db: Session, step_ids: list[int]) -> dict[int, list[dict]]:
+    if not step_ids:
+        return {}
+    links = list(db.scalars(
+        select(RecipeCookingStepEquipment)
+        .where(RecipeCookingStepEquipment.cooking_step_id.in_(step_ids))
+        .order_by(RecipeCookingStepEquipment.cooking_step_id, RecipeCookingStepEquipment.sort_order, RecipeCookingStepEquipment.id)
+    ))
+    recipe_equipment_ids = {row.recipe_equipment_id for row in links}
+    requirements = {
+        row.id: row for row in db.scalars(select(RecipeEquipment).where(RecipeEquipment.id.in_(recipe_equipment_ids)))
+    } if recipe_equipment_ids else {}
+    equipment_ids = {row.equipment_id for row in requirements.values()}
+    names = {
+        row.id: row.name for row in db.scalars(select(Equipment).where(Equipment.id.in_(equipment_ids)))
+    } if equipment_ids else {}
+    result: dict[int, list[dict]] = {}
+    for link in links:
+        requirement = requirements.get(link.recipe_equipment_id)
+        if requirement is None:
+            continue
+        result.setdefault(link.cooking_step_id, []).append({
+            "recipe_equipment_id": requirement.id,
+            "equipment_id": requirement.equipment_id,
+            "equipment_name": names.get(requirement.equipment_id, f"Equipment {requirement.equipment_id}"),
+            "quantity": requirement.quantity,
+            "notes": requirement.notes,
+            "sort_order": link.sort_order,
+        })
+    return result
+
+
+def _temperature_payload(row: RecipeCookingTemperature) -> dict:
+    return {
+        "id": row.id,
+        "cooking_step_id": row.cooking_step_id,
+        "label": row.label,
+        "value": row.value,
+        "unit": row.unit,
+        "notes": row.notes,
+        "sort_order": row.sort_order,
+    }
+
+
+def _step_payload(
+    step: RecipeCookingStep,
+    group_names: dict[int, str],
+    timers: list[RecipeCookingTimer],
+    equipment: list[dict],
+    temperatures: list[RecipeCookingTemperature],
+) -> dict:
     return {
         "id": step.id,
         "recipe_id": step.recipe_id,
@@ -63,6 +132,8 @@ def _step_payload(step: RecipeCookingStep, group_names: dict[int, str], timers: 
             "notes": timer.notes,
             "sort_order": timer.sort_order,
         } for timer in timers],
+        "equipment": equipment,
+        "temperatures": [_temperature_payload(row) for row in temperatures],
     }
 
 
@@ -111,17 +182,29 @@ def _runtime_payload(timer: RecipeCookingTimer, runtime: PlannedCookingTimer | N
 def list_cooking_steps(recipe_id: int, db: Session = Depends(get_db)) -> list[dict]:
     recipe = _recipe_or_404(db, recipe_id)
     groups = {group.id: group.name for group in recipe.prep_groups}
-    timers = _timer_rows(db, [step.id for step in recipe.cooking_steps])
-    return [_step_payload(step, groups, timers.get(step.id, [])) for step in recipe.cooking_steps]
+    step_ids = [step.id for step in recipe.cooking_steps]
+    timers = _timer_rows(db, step_ids)
+    equipment = _equipment_rows(db, step_ids)
+    temperatures = _temperature_rows(db, step_ids)
+    return [
+        _step_payload(step, groups, timers.get(step.id, []), equipment.get(step.id, []), temperatures.get(step.id, []))
+        for step in recipe.cooking_steps
+    ]
 
 
 @router.put("/api/recipes/{recipe_id}/cooking-steps", response_model=list[CookingStepRead])
 def replace_cooking_steps(recipe_id: int, payload: list[CookingStepInput], db: Session = Depends(get_db)) -> list[dict]:
     recipe = _recipe_or_404(db, recipe_id)
     group_ids = {group.id for group in recipe.prep_groups}
+    recipe_equipment_ids = {row.id for row in recipe.equipment}
     for item in payload:
         if item.prep_group_id is not None and item.prep_group_id not in group_ids:
             raise HTTPException(status_code=422, detail=f"Prep group {item.prep_group_id} does not belong to this Recipe")
+        invalid_equipment = [row_id for row_id in item.recipe_equipment_ids if row_id not in recipe_equipment_ids]
+        if invalid_equipment:
+            raise HTTPException(status_code=422, detail=f"Recipe equipment {invalid_equipment[0]} does not belong to this Recipe")
+        if len(set(item.recipe_equipment_ids)) != len(item.recipe_equipment_ids):
+            raise HTTPException(status_code=422, detail="Cooking step equipment references must be unique")
 
     recipe.cooking_steps.clear()
     db.flush()
@@ -142,11 +225,32 @@ def replace_cooking_steps(recipe_id: int, payload: list[CookingStepInput], db: S
                 notes=timer.notes.strip() if timer.notes else None,
                 sort_order=timer_index,
             ))
+        for equipment_index, recipe_equipment_id in enumerate(item.recipe_equipment_ids):
+            db.add(RecipeCookingStepEquipment(
+                cooking_step_id=step.id,
+                recipe_equipment_id=recipe_equipment_id,
+                sort_order=equipment_index,
+            ))
+        for temperature_index, temperature in enumerate(item.temperatures):
+            db.add(RecipeCookingTemperature(
+                cooking_step_id=step.id,
+                label=temperature.label.strip(),
+                value=temperature.value,
+                unit=temperature.unit,
+                notes=temperature.notes.strip() if temperature.notes else None,
+                sort_order=temperature_index,
+            ))
     db.commit()
     recipe = _recipe_or_404(db, recipe_id)
     groups = {group.id: group.name for group in recipe.prep_groups}
-    timers = _timer_rows(db, [step.id for step in recipe.cooking_steps])
-    return [_step_payload(step, groups, timers.get(step.id, [])) for step in recipe.cooking_steps]
+    step_ids = [step.id for step in recipe.cooking_steps]
+    timers = _timer_rows(db, step_ids)
+    equipment = _equipment_rows(db, step_ids)
+    temperatures = _temperature_rows(db, step_ids)
+    return [
+        _step_payload(step, groups, timers.get(step.id, []), equipment.get(step.id, []), temperatures.get(step.id, []))
+        for step in recipe.cooking_steps
+    ]
 
 
 @router.post("/api/planned-meals/{planned_meal_id}/cooking-timers/{timer_id}")
@@ -245,6 +349,8 @@ def cycle_cooking_mode(cycle_id: int, db: Session = Depends(get_db)) -> dict:
     recipe_map = {recipe.id: recipe for recipe in recipes}
     all_step_ids = [step.id for recipe in recipes for step in recipe.cooking_steps]
     timers_by_step = _timer_rows(db, all_step_ids)
+    equipment_by_step = _equipment_rows(db, all_step_ids)
+    temperatures_by_step = _temperature_rows(db, all_step_ids)
     all_timer_ids = [timer.id for rows in timers_by_step.values() for timer in rows]
     planned_ids = [meal.id for meal in planned]
     runtimes = list(db.scalars(select(PlannedCookingTimer).where(
@@ -321,6 +427,8 @@ def cycle_cooking_mode(cycle_id: int, db: Session = Depends(get_db)) -> dict:
                         "prep_state": row["recipe_ingredient"].prep_state if row["recipe_ingredient"] else None,
                     } for row in visible],
                     "timers": timer_payloads,
+                    "equipment": equipment_by_step.get(step.id, []),
+                    "temperatures": [_temperature_payload(row) for row in temperatures_by_step.get(step.id, [])],
                 })
         total = len(flat_steps)
         for index, row in enumerate(flat_steps):

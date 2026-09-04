@@ -121,6 +121,20 @@ def _seed_cooking_steps() -> None:
             (2,2,'Rice simmer',900,'Keep covered while simmering.',0),
             (3,2,'Rice rest',300,'Rest off heat before fluffing.',1)
         """))
+        connection.execute(text("""
+            INSERT INTO recipe_cooking_step_equipment
+            (id, cooking_step_id, recipe_equipment_id, sort_order)
+            VALUES
+            (1,1,1,0),
+            (2,2,2,0)
+        """))
+        connection.execute(text("""
+            INSERT INTO recipe_cooking_temperatures
+            (id, cooking_step_id, label, value, unit, notes, sort_order)
+            VALUES
+            (1,1,'Internal',165,'F','Verify chicken reaches a safe internal temperature.',0),
+            (2,2,'Simmer',212,'F','Bring liquid to a boil before reducing to a simmer.',0)
+        """))
 
 
 def seed(reset: bool = False):

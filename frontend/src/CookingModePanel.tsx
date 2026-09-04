@@ -63,7 +63,7 @@ export default function CookingModePanel() {
 
   return <section className="panel" style={{ marginTop: 20 }}>
     <div className="section-heading">
-      <div><h2>Cooking Mode</h2><p className="planning-note">Focused step-by-step execution for one planned Meal. Timers persist while you navigate and across reloads.</p></div>
+      <div><h2>Cooking Mode</h2><p className="planning-note">Focused step-by-step execution with equipment, temperature guidance, and persistent timers.</p></div>
       <div className="header-actions">
         <select value={effectiveCycleId ?? ''} onChange={(event) => { setSelectedCycleId(event.target.value ? Number(event.target.value) : null); setPlannedMealId(null) }}><option value="">Select cycle</option>{cycles.data?.map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.name}</option>)}</select>
         <select value={selectedMeal?.planned_meal_id ?? ''} onChange={(event) => setPlannedMealId(event.target.value ? Number(event.target.value) : null)}><option value="">Select planned Meal</option>{cooking.data?.meals.map((meal) => <option key={meal.planned_meal_id} value={meal.planned_meal_id}>Day {meal.day_number} · {meal.slot_label} · {meal.meal_name}</option>)}</select>
@@ -77,6 +77,12 @@ export default function CookingModePanel() {
       {step ? <div className="recipe-ingredient-editor" style={{ marginTop: 12 }}>
         <div className="section-heading"><div><p className="eyebrow">Step {step.step_number} of {step.total_steps}</p><h3>{step.title}</h3><p className="planning-note">{step.recipe_name}{step.prep_group_name ? ` · ${step.prep_group_name}` : ''}</p></div></div>
         {step.instructions && <p>{step.instructions}</p>}
+
+        {(step.equipment.length > 0 || step.temperatures.length > 0) && <div className="recipe-ingredient-list" style={{ marginBottom: 12 }}>
+          {step.equipment.map((item) => <div className="ingredient-row" key={`equipment-${item.recipe_equipment_id}`}><strong>Equipment: {item.quantity} × {item.equipment_name}</strong>{item.notes && <div className="ingredient-meta"><span>{item.notes}</span></div>}</div>)}
+          {step.temperatures.map((item) => <div className="ingredient-row" key={`temperature-${item.id}`}><strong>{item.label}: {quantity(String(item.value))}°{item.unit}</strong>{item.notes && <div className="ingredient-meta"><span>{item.notes}</span></div>}</div>)}
+        </div>}
+
         <div className="recipe-ingredient-list">{step.ingredients.map((ingredient) => <div className="ingredient-row" key={`${step.step_id}-${ingredient.ingredient_id}`}><strong>{ingredient.ingredient_name}</strong><div className="ingredient-meta"><span>{quantity(ingredient.quantity)} {ingredient.unit_code}</span>{ingredient.prep_method && <span>{ingredient.prep_method}</span>}{ingredient.prep_size && <span>{ingredient.prep_size}</span>}{ingredient.prep_state && <span>{ingredient.prep_state}</span>}</div></div>)}</div>
         {step.timers.length > 0 && <div className="recipe-ingredient-list" style={{ marginTop: 12 }}>{step.timers.map((timer) => {
           const remaining = timerRemaining(timer, nowSeconds)
