@@ -4,9 +4,9 @@ A self-hosted/web-based meal planning application for recipes, reusable meals, f
 
 ## Project status
 
-Planning complete. Milestone 1 implementation is beginning.
+Active development is in v0.7, focused on the first Cooking Mode workflows. Core recipe, meal, meal-cycle planning, inventory, shopping, Gather, and Prep workflows are implemented and continuing to evolve.
 
-## Planned stack
+## Stack
 
 - React + TypeScript frontend
 - Python + FastAPI backend
@@ -14,4 +14,4 @@ Planning complete. Milestone 1 implementation is beginning.
 - SQLite for the one-click desktop release
 - Docker as an optional self-hosted deployment method later
 
-Detailed product, architecture, workflow, data model, and roadmap documentation will live under `docs/`.
+Detailed product, architecture, workflow, data model, and roadmap documentation lives under `docs/`.
