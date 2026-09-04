@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchMeasurementUnits } from './api'
 import { assignProducedSource, fetchMealCycle, fetchMealCycles, fetchProducedSourceOptions, removePlannedMeal, type ProducedSourceOption } from './mealCyclesApi'
 import { fetchProductionAvailability, fetchProductionCoverage } from './reservationsApi'
+import { producedSourcePlacements } from './producedStockCoverageSelectors'
 
 export default function ProducedStockCoveragePanel() {
   const queryClient = useQueryClient()
@@ -21,7 +22,7 @@ export default function ProducedStockCoveragePanel() {
   const unitCodes = useMemo(() => new Map((units.data ?? []).map((unit) => [unit.id, unit.code])), [units.data])
 
   const emptySlots = cycle.data?.slots.filter((slot) => slot.planned_meal === null) ?? []
-  const producedPlacements = cycle.data?.slots.filter((slot) => slot.planned_meal?.source_type !== 'SAVED_MEAL') ?? []
+  const producedPlacements = producedSourcePlacements(cycle.data?.slots ?? [])
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ['meal-cycles'] })
@@ -70,7 +71,7 @@ export default function ProducedStockCoveragePanel() {
       <div style={{ marginTop: 16 }}>
         <h3>Active produced-source placements</h3>
         {producedPlacements.map((slot) => {
-          const planned = slot.planned_meal!
+          const planned = slot.planned_meal
           const row = coverage.data?.reservations.find((item) => item.planned_meal_id === planned.id && item.status === 'ACTIVE')
           const definition = cycle.data?.slot_definitions.find((item) => item.id === slot.slot_definition_id)
           return <div className="inventory-history-row" key={planned.id}>
