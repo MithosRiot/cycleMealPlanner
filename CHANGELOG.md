@@ -46,6 +46,7 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Location-grouped Gather pick lists with hierarchical location paths, repeated-lot quantity consolidation, source traceability, and explicit incomplete-requirement visibility without Inventory mutation.
 - Combined ingredient prep and duplicate advance-prep tasks across compatible Recipe components within a placed Meal, with safe unit conversion, source traceability, and serving-sensitive recalculation.
 - Ordered Recipe cooking steps and a read-only Meal Plan Cooking Mode with one-step-at-a-time navigation, component/source context, prep-group ingredient context, current planned serving quantities, and explicit no-step component visibility.
+- Multiple persistent Cooking Mode timers with ordered Recipe step timer definitions, concurrent countdowns, pause/resume/reset/dismiss controls, per-PlannedMeal runtime isolation, and reload-safe absolute end-time tracking.
 
 ### Known limitations
 - Exact-lot reservations, expiration-aware alerts, automated cooking reconciliation, and advanced recipe execution features are planned for later milestones.
