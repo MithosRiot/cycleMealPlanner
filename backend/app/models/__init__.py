@@ -1,3 +1,4 @@
+from app.models.completion import MealCompletion, MealCompletionUsage
 from app.models.cooking import PlannedCookingTimer, RecipeCookingCoordination, RecipeCookingDependency, RecipeCookingStepEquipment, RecipeCookingTemperature, RecipeCookingTimer
 from app.models.equipment import Equipment
 from app.models.gather import GatherLotSelection
@@ -18,5 +19,5 @@ __all__ = [
     "RecipeCookingTimer", "PlannedCookingTimer", "RecipeCookingStepEquipment", "RecipeCookingTemperature", "RecipeCookingCoordination", "RecipeCookingDependency", "RecipeEquipment", "RecipeIngredient", "RecipeIngredientSubstitution", "RecipeVariant",
     "RecipeVariantIngredientOverride", "RecipeOutput", "RecipeDependency", "RecipeMealType", "recipe_tags",
     "InventoryLot", "InventoryTransaction", "InventoryReservation", "GatherLotSelection", "Meal", "MealRecipe", "MealMealType", "meal_tags", "MealCycle",
-    "MealSlotDefinition", "CycleSlot", "PlannedMeal", "ShoppingList", "ShoppingListItem",
+    "MealSlotDefinition", "CycleSlot", "PlannedMeal", "MealCompletion", "MealCompletionUsage", "ShoppingList", "ShoppingListItem",
 ]
