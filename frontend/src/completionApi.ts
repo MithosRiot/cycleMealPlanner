@@ -83,11 +83,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: string | { message?: string; shortages?: CompletionShortage[] } } | null
-    if (body?.detail && typeof body.detail === 'object') {
-      const shortageText = body.detail.shortages?.map((row) => `${row.ingredient_name}: short ${row.shortage_quantity} ${row.unit_code}`).join('; ')
-      throw new Error([body.detail.message, shortageText].filter(Boolean).join(' — ') || `Request failed: ${response.status}`)
+    const detail = body?.detail
+    if (detail && typeof detail === 'object') {
+      const shortageText = detail.shortages?.map((row) => `${row.ingredient_name}: short ${row.shortage_quantity} ${row.unit_code}`).join('; ')
+      throw new Error([detail.message, shortageText].filter(Boolean).join(' — ') || `Request failed: ${response.status}`)
     }
-    throw new Error(body?.detail ?? `Request failed: ${response.status}`)
+    throw new Error(typeof detail === 'string' ? detail : `Request failed: ${response.status}`)
   }
   return response.json() as Promise<T>
 }
