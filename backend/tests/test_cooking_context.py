@@ -5,28 +5,33 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
+def _create_recipe_with_equipment(client: TestClient, suffix: str) -> tuple[dict, dict]:
+    units = client.get("/api/reference/units").json()
+    unit = next(item for item in units if item["code"] == "each")
+    location = client.get("/api/reference/inventory-locations").json()[0]
+    ingredient = client.post("/api/ingredients", json={
+        "name": f"Context Ingredient {suffix}", "shopping_category_id": None,
+        "preferred_unit_id": unit["id"], "default_location_id": location["id"],
+        "perishable": False, "notes": None, "aliases": [],
+    }).json()
+    skillet = client.post("/api/equipment", json={
+        "name": f"Context Skillet {suffix}", "category": "COOKWARE", "notes": None,
+    }).json()
+    recipe = client.post("/api/recipes", json={
+        "name": f"Context Recipe {suffix}", "description": None, "base_servings": "4",
+        "serving_unit": "servings", "yield_quantity": None, "yield_unit_id": None,
+        "prep_time_minutes": 5, "cook_time_minutes": 10, "notes": None, "favorite": False,
+        "meal_types": ["CONTEXT_TEST"], "tag_ids": [], "prep_groups": [], "advance_prep": [],
+        "equipment": [{"equipment_id": skillet["id"], "quantity": 1, "notes": "Use a heavy pan", "sort_order": 0}],
+        "ingredients": [{"ingredient_id": ingredient["id"], "prep_group_key": None, "quantity": "1", "unit_id": unit["id"], "display_text": None, "preparation": None, "prep_method": None, "prep_size": None, "prep_state": None, "optional": False, "scaling_mode": "LINEAR", "required_state": "ANY", "sort_order": 0, "notes": None, "substitutions": []}],
+    }).json()
+    return recipe, skillet
+
+
 def test_cooking_mode_exposes_step_equipment_and_temperatures() -> None:
     suffix = uuid4().hex[:8]
     with TestClient(app) as client:
-        units = client.get("/api/reference/units").json()
-        unit = next(item for item in units if item["code"] == "each")
-        location = client.get("/api/reference/inventory-locations").json()[0]
-        ingredient = client.post("/api/ingredients", json={
-            "name": f"Context Ingredient {suffix}", "shopping_category_id": None,
-            "preferred_unit_id": unit["id"], "default_location_id": location["id"],
-            "perishable": False, "notes": None, "aliases": [],
-        }).json()
-        skillet = client.post("/api/equipment", json={
-            "name": f"Context Skillet {suffix}", "category": "COOKWARE", "notes": None,
-        }).json()
-        recipe = client.post("/api/recipes", json={
-            "name": f"Context Recipe {suffix}", "description": None, "base_servings": "4",
-            "serving_unit": "servings", "yield_quantity": None, "yield_unit_id": None,
-            "prep_time_minutes": 5, "cook_time_minutes": 10, "notes": None, "favorite": False,
-            "meal_types": ["CONTEXT_TEST"], "tag_ids": [], "prep_groups": [], "advance_prep": [],
-            "equipment": [{"equipment_id": skillet["id"], "quantity": 1, "notes": "Use a heavy pan", "sort_order": 0}],
-            "ingredients": [{"ingredient_id": ingredient["id"], "prep_group_key": None, "quantity": "1", "unit_id": unit["id"], "display_text": None, "preparation": None, "prep_method": None, "prep_size": None, "prep_state": None, "optional": False, "scaling_mode": "LINEAR", "required_state": "ANY", "sort_order": 0, "notes": None, "substitutions": []}],
-        }).json()
+        recipe, skillet = _create_recipe_with_equipment(client, suffix)
         recipe_equipment_id = recipe["equipment"][0]["id"]
         saved = client.put(f"/api/recipes/{recipe['id']}/cooking-steps", json=[{
             "title": "Sear", "instructions": "Sear until browned.", "prep_group_id": None, "sort_order": 0,
@@ -62,12 +67,10 @@ def test_cooking_mode_exposes_step_equipment_and_temperatures() -> None:
 
 
 def test_step_rejects_equipment_requirement_from_another_recipe() -> None:
+    suffix = uuid4().hex[:8]
     with TestClient(app) as client:
-        recipes = client.get("/api/recipes").json()
-        recipes_with_equipment = [recipe for recipe in recipes if recipe["equipment"]]
-        assert len(recipes_with_equipment) >= 2
-        first = recipes_with_equipment[0]
-        second = recipes_with_equipment[1]
+        first, _ = _create_recipe_with_equipment(client, f"{suffix}-a")
+        second, _ = _create_recipe_with_equipment(client, f"{suffix}-b")
         response = client.put(f"/api/recipes/{first['id']}/cooking-steps", json=[{
             "title": "Invalid equipment", "instructions": None, "prep_group_id": None, "sort_order": 0,
             "timers": [], "recipe_equipment_ids": [second["equipment"][0]["id"]], "temperatures": [],
