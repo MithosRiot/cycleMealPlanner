@@ -3,10 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, event, update
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
+from app.models.completion import MealCompletion
+from app.models.reservation import InventoryReservation
 
 
 class ProductionCoverageReservation(Base):
@@ -38,4 +40,18 @@ class ProductionCoverageReservation(Base):
         CheckConstraint("reserved_quantity >= 0", name="ck_production_coverage_reserved_nonnegative"),
         CheckConstraint("shortage_quantity >= 0", name="ck_production_coverage_shortage_nonnegative"),
         CheckConstraint("status IN ('ACTIVE','RELEASED')", name="ck_production_coverage_status"),
+    )
+
+
+@event.listens_for(MealCompletion, "after_update")
+def _release_source_reservations_after_finalize(_mapper, connection, target: MealCompletion) -> None:
+    if target.status != "FINALIZED":
+        return
+    connection.execute(
+        update(InventoryReservation)
+        .where(
+            InventoryReservation.planned_meal_id == target.planned_meal_id,
+            InventoryReservation.status == "ACTIVE",
+        )
+        .values(status="RELEASED")
     )
