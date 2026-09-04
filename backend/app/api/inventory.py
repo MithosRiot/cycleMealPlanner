@@ -238,8 +238,8 @@ def split_inventory(lot_id: int, payload: SplitAction, db: Session = Depends(get
     db.flush()
 
     user_note = payload.note.strip() if payload.note else None
-    source_note = f"Split {quantity} to lot {child.id}" + (f" — {user_note}" if user_note else "")
-    child_note = f"Split {quantity} from lot {source.id}" + (f" — {user_note}" if user_note else "")
+    source_note = f"Split {quantity} to lot #{child.id}" + (f" — {user_note}" if user_note else "")
+    child_note = f"Split {quantity} from lot #{source.id}" + (f" — {user_note}" if user_note else "")
     _record(db, source, "TRANSFER", -quantity, source_note, source.location_id, payload.to_location_id)
     _record(db, child, "TRANSFER", quantity, child_note, source.location_id, payload.to_location_id)
 
