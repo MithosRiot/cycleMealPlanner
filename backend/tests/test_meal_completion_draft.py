@@ -1,3 +1,4 @@
+from decimal import Decimal
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -57,7 +58,7 @@ def test_completion_draft_persists_actual_usage_substitution_and_stale_plan() ->
         usage = draft["usages"][0]
         assert usage["planned_ingredient_id"] == onion["id"]
         assert usage["actual_ingredient_id"] == onion["id"]
-        assert usage["actual_quantity"] == "2.000000"
+        assert Decimal(usage["actual_quantity"]) == Decimal("2")
         assert usage["substitutions"][0]["ingredient_id"] == shallot["id"]
         assert usage["substitutions"][0]["preferred"] is True
 
@@ -75,11 +76,12 @@ def test_completion_draft_persists_actual_usage_substitution_and_stale_plan() ->
         changed = saved.json()["usages"][0]
         assert changed["planned_ingredient_id"] == onion["id"]
         assert changed["actual_ingredient_id"] == shallot["id"]
-        assert changed["actual_quantity"] == "1.500000"
+        assert Decimal(changed["actual_quantity"]) == Decimal("1.5")
 
         reopened = client.post(f"/api/planned-meals/{planned['id']}/completion").json()
         assert reopened["id"] == draft["id"]
         assert reopened["usages"][0]["actual_ingredient_id"] == shallot["id"]
+        assert Decimal(reopened["usages"][0]["actual_quantity"]) == Decimal("1.5")
         assert client.get("/api/inventory").json() == inventory_before
 
         planning = client.put(f"/api/meal-cycles/{cycle['id']}/slots/{slot['id']}/planned-meal/planning", json={
@@ -88,13 +90,13 @@ def test_completion_draft_persists_actual_usage_substitution_and_stale_plan() ->
         assert planning.status_code == 200
         stale = client.get(f"/api/planned-meals/{planned['id']}/completion").json()
         assert stale["stale"] is True
-        assert stale["usages"][0]["actual_quantity"] == "1.500000"
+        assert Decimal(stale["usages"][0]["actual_quantity"]) == Decimal("1.5")
 
         refreshed = client.post(f"/api/planned-meals/{planned['id']}/completion/refresh")
         assert refreshed.status_code == 200
         refreshed_body = refreshed.json()
         assert refreshed_body["stale"] is False
-        assert refreshed_body["usages"][0]["planned_quantity"] == "4.000000"
-        assert refreshed_body["usages"][0]["actual_quantity"] == "1.500000"
+        assert Decimal(refreshed_body["usages"][0]["planned_quantity"]) == Decimal("4")
+        assert Decimal(refreshed_body["usages"][0]["actual_quantity"]) == Decimal("1.5")
         assert refreshed_body["usages"][0]["actual_ingredient_id"] == shallot["id"]
         assert client.get("/api/inventory").json() == inventory_before
