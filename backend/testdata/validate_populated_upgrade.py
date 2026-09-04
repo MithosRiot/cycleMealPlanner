@@ -59,8 +59,10 @@ def main() -> None:
         temperature_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(recipe_cooking_temperatures)"))}
         coordination_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(recipe_cooking_coordination)"))}
         dependency_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(recipe_cooking_dependencies)"))}
+        completion_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_completions)"))}
+        usage_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_completion_usage)"))}
 
-    assert version == "0029_cooking_coordination"
+    assert version == "0030_meal_completion_drafts"
     assert row.name == "Migration Test Ingredient"
     assert bool(row.staple_enabled) is False
     assert row.staple_minimum is None and row.staple_target is None and row.staple_unit_id is None
@@ -78,9 +80,11 @@ def main() -> None:
     assert {"cooking_step_id", "label", "value", "unit", "notes", "sort_order"}.issubset(temperature_columns)
     assert {"cooking_step_id", "stage", "parallel_capable"}.issubset(coordination_columns)
     assert {"cooking_step_id", "depends_on_step_id"}.issubset(dependency_columns)
+    assert {"planned_meal_id", "status", "plan_fingerprint", "snapshot_scaled_components"}.issubset(completion_columns)
+    assert {"completion_id", "component_key", "recipe_ingredient_id", "planned_ingredient_id", "actual_ingredient_id", "actual_quantity", "actual_unit_id"}.issubset(usage_columns)
 
     engine.dispose(); DB_PATH.unlink(missing_ok=True)
-    print("Populated SQLite upgrade 0020 -> 0029 succeeded and preserved existing data while adding cooking coordination metadata.")
+    print("Populated SQLite upgrade 0020 -> 0030 succeeded and preserved existing data while adding meal completion drafts.")
 
 
 if __name__ == "__main__":
