@@ -73,6 +73,10 @@ class MealCompletionRead(BaseModel):
     actual_servings_produced: Decimal | None = None
     actual_servings_eaten: Decimal | None = None
     production_committed_at: datetime | None = None
+    released_reservation_count: int = 0
+    coverage_reservation_count: int = 0
+    coverage_reserved_quantity: Decimal = Decimal("0")
+    coverage_shortage_quantity: Decimal = Decimal("0")
     usages: list[CompletionUsageRead]
 
 
