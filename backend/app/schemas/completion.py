@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel, Field
 
@@ -22,6 +23,19 @@ class CompletionSubstitutionSuggestion(BaseModel):
     notes: str | None
 
 
+class CompletionAllocationRead(BaseModel):
+    id: int
+    usage_id: int
+    lot_id: int
+    inventory_transaction_id: int
+    quantity: Decimal
+    unit_id: int
+    unit_code: str
+    source_quantity: Decimal
+    source_unit_id: int
+    source_unit_code: str
+
+
 class CompletionUsageRead(BaseModel):
     id: int
     component_key: int
@@ -44,6 +58,7 @@ class CompletionUsageRead(BaseModel):
     prep_state: str | None
     notes: str | None
     substitutions: list[CompletionSubstitutionSuggestion]
+    allocations: list[CompletionAllocationRead] = Field(default_factory=list)
 
 
 class MealCompletionRead(BaseModel):
@@ -54,4 +69,20 @@ class MealCompletionRead(BaseModel):
     snapshot_planned_servings: Decimal
     snapshot_planned_leftover_servings: Decimal
     stale: bool
+    finalized_at: datetime | None = None
     usages: list[CompletionUsageRead]
+
+
+class CompletionShortageRead(BaseModel):
+    usage_id: int
+    ingredient_id: int
+    ingredient_name: str
+    requested_quantity: Decimal
+    unit_id: int
+    unit_code: str
+    shortage_quantity: Decimal
+
+
+class CompletionFinalizeResponse(BaseModel):
+    completion: MealCompletionRead | None = None
+    shortages: list[CompletionShortageRead] = Field(default_factory=list)
