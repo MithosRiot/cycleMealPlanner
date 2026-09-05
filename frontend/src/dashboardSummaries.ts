@@ -51,7 +51,7 @@ export function buildDailySummary(
     .map((slot) => ({ slot, time: timestamp(slot.scheduled_datetime) }))
     .filter((row) => row.time !== null && row.time >= now.getTime())
     .sort((a, b) => (a.time as number) - (b.time as number))
-  const next = upcoming[0]?.slot ?? meals[0] ?? null
+  const next = upcoming[0]?.slot ?? null
 
   return {
     mealCount: meals.length,
