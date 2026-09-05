@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import text
 
@@ -49,7 +49,7 @@ def seed_fixture() -> None:
         if sample is None:
             raise RuntimeError("Seeded Planned Meal 1 was not found. Run seed_test_db.py --reset first.")
 
-        start_date = connection.execute(text("SELECT date('now')")).scalar_one()
+        start_date = date.today().isoformat()
         connection.execute(text("""
             INSERT INTO meal_cycles
             (id, household_id, name, normalized_name, duration_days, status,
