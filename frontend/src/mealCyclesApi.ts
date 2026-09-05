@@ -153,16 +153,21 @@ export type MealCycleInput = {
   slot_definitions: MealSlotDefinitionInput[]
 }
 
+export type MealCycleStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+
 export type MealCycle = {
   id: number
   household_id: number
   name: string
   duration_days: number
-  status: 'DRAFT'
+  status: MealCycleStatus
   start_date: string | null
   notes: string | null
   population_rules: string
   smart_preferences: string
+  activated_at: string | null
+  completed_at: string | null
+  cancelled_at: string | null
   slot_definitions: MealSlotDefinition[]
   slots: CycleSlot[]
 }
@@ -175,8 +180,14 @@ export type MealCycleScheduleUpdate = {
 async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } })
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { detail?: string } | null
-    throw new Error(body?.detail ?? `Request failed: ${response.status}`)
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    const detail = body?.detail
+    const message = typeof detail === 'string'
+      ? detail
+      : detail && typeof detail === 'object' && 'message' in detail && typeof detail.message === 'string'
+        ? detail.message
+        : `Request failed: ${response.status}`
+    throw new Error(message)
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
@@ -192,6 +203,9 @@ export const updateMealCycle = (id: number, input: MealCycleInput): Promise<Meal
 export const updateMealCycleSchedule = (id: number, input: MealCycleScheduleUpdate): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/schedule`, { method: 'PUT', body: JSON.stringify(input) })
 export const updatePopulationRules = (id: number, input: PopulationRules): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/population-rules`, { method: 'PUT', body: JSON.stringify(input) })
 export const updateSmartPlanningPreferences = (id: number, input: SmartPlanningPreferences): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/smart-preferences`, { method: 'PUT', body: JSON.stringify(input) })
+export const activateMealCycle = (id: number): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/activate`, { method: 'POST' })
+export const completeMealCycle = (id: number): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/complete`, { method: 'POST' })
+export const cancelMealCycle = (id: number): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}/cancel`, { method: 'POST' })
 export const deleteMealCycle = (id: number): Promise<void> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'DELETE' })
 export const assignPlannedMeal = (cycleId: number, slotId: number, mealId: number): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal`, { method: 'POST', body: JSON.stringify({ meal_id: mealId }) })
 export const assignProducedSource = (cycleId: number, slotId: number, source: ProducedSourceOption, quantity: string): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-source`, { method: 'POST', body: JSON.stringify({ source_type: source.source_type, source_origin_planned_meal_id: source.source_origin_planned_meal_id, source_record_id: source.source_record_id, source_recipe_output_id: source.source_recipe_output_id, quantity, unit_id: source.unit_id }) })
