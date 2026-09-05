@@ -95,12 +95,28 @@ def verify_fixture() -> None:
             SELECT COUNT(*) AS count FROM inventory_reservations
             WHERE cycle_id=:cycle AND status='ACTIVE'
         """), {"cycle": CYCLE_ID}).scalar_one()
-        shopping = connection.execute(text("""
-            SELECT COUNT(*) AS count FROM shopping_list_items
-            WHERE shopping_list_id IN (SELECT id FROM shopping_lists WHERE meal_cycle_id=:cycle)
-        """), {"cycle": CYCLE_ID}).scalar_one()
+        shopping_rows = list(connection.execute(text("""
+            SELECT sli.id, sli.source_trace
+            FROM shopping_list_items sli
+            WHERE sli.shopping_list_id IN (
+                SELECT id FROM shopping_lists WHERE meal_cycle_id=:cycle
+            )
+            ORDER BY sli.id
+        """), {"cycle": CYCLE_ID}).mappings())
         units = {row.id: row.code for row in connection.execute(text("SELECT id, code FROM measurement_units"))}
         ingredients = {row.id: row.name for row in connection.execute(text("SELECT id, name FROM ingredients"))}
+
+    direct_shopping_rows = 0
+    for item in shopping_rows:
+        try:
+            trace = json.loads(item["source_trace"] or "[]")
+        except json.JSONDecodeError:
+            trace = []
+        if any(
+            isinstance(row, dict) and row.get("planned_meal_id") == planned["id"]
+            for row in trace
+        ):
+            direct_shopping_rows += 1
 
     print(f"Placement: {planned['snapshot_name']} · {planned['source_type']} · Planned Meal {planned['id']}")
     print(f"Provenance: meal_id={planned['meal_id']} · source_recipe_id={planned['source_recipe_id']}")
@@ -110,7 +126,8 @@ def verify_fixture() -> None:
         for row in component.get("ingredients", []):
             print(f"Requirement: {ingredients.get(int(row['ingredient_id']), row['ingredient_id'])} · {row['quantity']} {units.get(int(row['unit_id']), row['unit_id'])}")
     print(f"Active Ingredient reservations: {reservations}")
-    print(f"Generated Shopping rows: {shopping}")
+    print(f"Direct Recipe Shopping rows: {direct_shopping_rows}")
+    print(f"Total Shopping rows: {len(shopping_rows)}")
 
 
 def main() -> None:
