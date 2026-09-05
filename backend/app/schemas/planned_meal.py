@@ -8,6 +8,12 @@ class PlannedMealAssign(BaseModel):
     meal_id: int
 
 
+class DirectRecipeAssign(BaseModel):
+    recipe_id: int
+    planned_servings: Decimal = Field(gt=0)
+    planned_leftover_servings: Decimal = Field(default=Decimal("0"), ge=0)
+
+
 class ProducedSourceAssign(BaseModel):
     source_type: str = Field(pattern="^(LEFTOVER|RECIPE_OUTPUT)$")
     source_origin_planned_meal_id: int
@@ -29,7 +35,7 @@ class ProducedSourceOption(BaseModel):
     source_record_id: int | None
     source_recipe_output_id: int | None
     source_name: str
-    source_meal_id: int
+    source_meal_id: int | None
     unit_id: int
     unit_code: str
     planned_quantity: Decimal
@@ -59,8 +65,9 @@ class PlannedMealRead(BaseModel):
 
     id: int
     cycle_slot_id: int
-    meal_id: int
+    meal_id: int | None
     source_type: str = "SAVED_MEAL"
+    source_recipe_id: int | None = None
     source_origin_planned_meal_id: int | None = None
     source_record_id: int | None = None
     source_recipe_output_id: int | None = None
