@@ -69,11 +69,12 @@ def _seed_dependent_inventory(engine) -> tuple[int, int]:
 def _assert_recovered(engine) -> None:
     with engine.connect() as connection:
         assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0033_leftover_coverage"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0034_cycle_lifecycle"
         completion_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(meal_completions)"))}
         inventory_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(inventory_lots)"))}
         planned_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(planned_meals)"))}
         coverage_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(production_coverage_reservations)"))}
+        cycle_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(meal_cycles)"))}
         tables = {row[0] for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
         serving = connection.execute(text("SELECT code, unit_family FROM measurement_units WHERE code='serving'")) .one()
         fk_violations = connection.execute(text("PRAGMA foreign_key_check")).all()
@@ -84,6 +85,7 @@ def _assert_recovered(engine) -> None:
     assert {"source_type", "source_id", "source_name"}.issubset(inventory_columns)
     assert {"source_type", "source_origin_planned_meal_id", "source_record_id", "source_recipe_output_id", "source_quantity", "source_unit_id"}.issubset(planned_columns)
     assert {"source_origin_planned_meal_id", "requested_quantity", "reserved_quantity", "shortage_quantity", "status"}.issubset(coverage_columns)
+    assert {"lifecycle_status", "activated_at", "completed_at", "cancelled_at"}.issubset(cycle_columns)
     assert {"leftovers", "meal_completion_outputs", "production_coverage_reservations"}.issubset(tables)
     assert "_alembic_tmp_inventory_lots" not in tables
     assert "_alembic_tmp_inventory_transactions" not in tables
@@ -151,6 +153,27 @@ def test_0033_recovers_after_partial_additive_sqlite_ddl(tmp_path) -> None:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0032_completion_leftovers_outputs"
             connection.execute(text("ALTER TABLE planned_meals ADD COLUMN source_type VARCHAR(30) DEFAULT 'SAVED_MEAL' NOT NULL"))
             connection.execute(text("ALTER TABLE planned_meals ADD COLUMN source_origin_planned_meal_id INTEGER"))
+            assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
+
+        command.upgrade(_config(), "head")
+        _assert_recovered(engine)
+        engine.dispose()
+    finally:
+        _restore_env(previous_url, previous_env)
+
+
+def test_0034_recovers_after_partial_additive_sqlite_ddl_with_foreign_keys_on(tmp_path) -> None:
+    db_path = tmp_path / "partial-0034.db"
+    database_url = f"sqlite:///{db_path.as_posix()}"
+    previous_url, previous_env = _set_env(database_url)
+    try:
+        command.upgrade(_config(), "0033_leftover_coverage")
+        engine = _engine(database_url)
+        _seed_dependent_inventory(engine)
+        with engine.begin() as connection:
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0033_leftover_coverage"
+            connection.execute(text("ALTER TABLE meal_cycles ADD COLUMN lifecycle_status VARCHAR(20) DEFAULT 'DRAFT' NOT NULL"))
+            connection.execute(text("ALTER TABLE meal_cycles ADD COLUMN activated_at DATETIME"))
             assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
 
         command.upgrade(_config(), "head")
