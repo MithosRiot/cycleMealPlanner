@@ -25,12 +25,20 @@ def seed_dashboard_alert_fixture() -> None:
 
         shopping = client.post("/api/shopping/1/regenerate")
         shopping.raise_for_status()
-        onion = next(item for item in shopping.json()["items"] if item["ingredient_name"] == "Onion")
+        shopping_json = shopping.json()
+        onion = next(item for item in shopping_json["items"] if item["ingredient_name"] == "Onion")
+        shopping_shortages = [
+            item
+            for item in shopping_json["items"]
+            if item["status"] == "PENDING" and float(item["generated_quantity"]) > 0
+        ]
+
         validation = client.get("/api/meal-cycles/1/validate")
         validation.raise_for_status()
+        validation_json = validation.json()
         shortage = next(
             issue
-            for issue in validation.json()["issues"]
+            for issue in validation_json["issues"]
             if issue["code"] == "INVENTORY_SHORTAGE" and issue["context"].get("ingredient_id") == 10
         )
 
@@ -41,6 +49,12 @@ def seed_dashboard_alert_fixture() -> None:
             f"Missing {onion['generated_quantity']} {onion['unit_code']}"
         )
         print(f"Validation alert: {shortage['message']}")
+        print(
+            "Expected Dashboard counts: "
+            f"{len(validation_json['issues'])} validation; "
+            f"{len(shopping_shortages)} shopping "
+            f"({validation_json['error_count']} errors, {validation_json['warning_count']} warnings in Plan Validation)"
+        )
 
 
 if __name__ == "__main__":
