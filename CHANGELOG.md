@@ -55,7 +55,8 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Produced-stock planning coverage with automatic release of finalized Meal ingredient reservations, exact leftover/RecipeOutput source provenance, future-slot reservations, Physical / Reserved / Available visibility, excess-stock availability, deterministic shortage warnings, reservation-safe produced Inventory edits, and release-on-removal history.
 - Operational Dashboard foundation for current-cycle meals, today's prep work, and high-level Ingredient/produced-stock status.
 - Dashboard use-soon recommendations for Ingredient, Leftover, and RecipeOutput lots expiring within seven days, ordered by urgency and filtered by reservation-aware Available quantity.
+- Dashboard Plan alerts that reuse current-cycle validation and generated Shopping-list shortages, provide source-workflow links, deduplicate validation rows, and refresh automatically when underlying alert state changes.
 
 ### Known limitations
-- Dashboard alerts for cycle-validation issues, Shopping shortages, and daily/evening summaries remain planned for later v0.9 increments.
+- Daily/evening Dashboard summaries remain planned for the final v0.9 increment.
 - The development database currently defaults to `./data`; packaged Windows persistence will be moved outside the installation directory.
