@@ -7,6 +7,7 @@ import { fetchPrepSchedule } from './prepScheduleApi'
 import { fetchInventoryAvailability, fetchProductionAvailability } from './reservationsApi'
 import { fetchShoppingList } from './shoppingApi'
 import { inventoryDashboardSummary, producedInventoryDashboardSummary, selectCurrentCycle, todaysMealSlots, todaysPrepTasks } from './dashboardSelectors'
+import { buildDailySummary, buildEveningSummary } from './dashboardSummaries'
 
 function formatServingTime(value: string | null): string {
   if (!value) return 'Unscheduled'
@@ -21,16 +22,17 @@ function useSoonLabel(days: number): string {
 }
 
 export default function DashboardPage() {
-  const cycles = useQuery({ queryKey: ['meal-cycles'], queryFn: fetchMealCycles })
+  const cycles = useQuery({ queryKey: ['meal-cycles'], queryFn: fetchMealCycles, refetchInterval: 5_000 })
   const currentCycle = selectCurrentCycle(cycles.data ?? [])
   const prep = useQuery({
     queryKey: ['prep-schedule', currentCycle?.id ?? null],
     queryFn: () => fetchPrepSchedule(currentCycle!.id),
     enabled: currentCycle !== null,
+    refetchInterval: 5_000,
   })
   const inventory = useQuery({ queryKey: ['inventory-availability'], queryFn: fetchInventoryAvailability })
   const production = useQuery({ queryKey: ['production-inventory-availability'], queryFn: fetchProductionAvailability })
-  const useSoon = useQuery({ queryKey: ['dashboard-use-soon', 7], queryFn: () => fetchUseSoon(7) })
+  const useSoon = useQuery({ queryKey: ['dashboard-use-soon', 7], queryFn: () => fetchUseSoon(7), refetchInterval: 5_000 })
   const validation = useQuery({
     queryKey: ['cycle-validation', currentCycle?.id ?? null],
     queryFn: () => fetchCycleValidation(currentCycle!.id),
@@ -62,11 +64,13 @@ export default function DashboardPage() {
   const producedSummary = producedInventoryDashboardSummary(production.data ?? [])
   const validationAlerts = dashboardValidationAlerts(validation.data?.issues ?? [])
   const shoppingShortages = dashboardShoppingShortages(shopping.data?.items ?? [])
+  const dailySummary = buildDailySummary(currentCycle, prep.data?.tasks ?? [], validationAlerts, shoppingShortages, useSoon.data?.recommendations ?? [])
+  const eveningSummary = buildEveningSummary(currentCycle, prep.data?.tasks ?? [])
 
   return <section className="page-card">
     <p className="eyebrow">Cycle Meal Planner</p>
     <div className="section-heading">
-      <div><h1>Dashboard</h1><p className="planning-note">Current operational view for meals, prep, stock, and plan alerts.</p></div>
+      <div><h1>Dashboard</h1><p className="planning-note">Current operational view for meals, prep, stock, alerts, and what needs attention next.</p></div>
       <div className="ingredient-meta"><span>{currentCycle.name}</span><span>{currentCycle.status}</span>{currentCycle.start_date && <span>Starts {currentCycle.start_date}</span>}<span>{currentCycle.duration_days} days</span></div>
     </div>
 
@@ -75,6 +79,39 @@ export default function DashboardPage() {
       <div className="settings-card"><strong>Today's prep</strong><div className="ingredient-meta"><span>{todayPrep.length} tasks</span></div></div>
       <div className="settings-card"><strong>Ingredient stock</strong><div className="ingredient-meta"><span>{inventorySummary.tracked} tracked</span><span>{inventorySummary.reserved} reserved</span><span>{inventorySummary.shortages} shortages</span></div></div>
       <div className="settings-card"><strong>Produced stock</strong><div className="ingredient-meta"><span>{producedSummary.lots} lots</span><span>{producedSummary.reservedLots} reserved</span><span>{producedSummary.availableLots} available</span></div></div>
+    </div>
+
+    <div className="advanced-grid" style={{ marginTop: 16 }}>
+      <section className="settings-card">
+        <h2>Daily summary</h2>
+        <p className="planning-note">Today's concise operational picture. Refreshes automatically.</p>
+        <div className="inventory-history-row">
+          <strong>{dailySummary.mealCount} meal{dailySummary.mealCount === 1 ? '' : 's'} today · {dailySummary.prepCount} prep task{dailySummary.prepCount === 1 ? '' : 's'}</strong>
+          {dailySummary.nextMealName ? <span>Next meal: {formatServingTime(dailySummary.nextMealTime)} · {dailySummary.nextMealName}</span> : <span>No scheduled Meal today.</span>}
+        </div>
+        <div className="inventory-history-row">
+          <strong>{dailySummary.validationCount} validation · {dailySummary.shoppingCount} shopping · {dailySummary.useSoonCount} use-soon</strong>
+          {dailySummary.topValidation && <span>Top plan issue: {dailySummary.topValidation.severity} · {dailySummary.topValidation.code.replaceAll('_', ' ')}</span>}
+          {dailySummary.topShopping && <span>Top Shopping shortage: {dailySummary.topShopping.ingredient_name} · Missing {Number(dailySummary.topShopping.generated_quantity).toLocaleString()} {dailySummary.topShopping.unit_code}</span>}
+          {dailySummary.mostUrgentUseSoon && <span>Most urgent use-soon: {dailySummary.mostUrgentUseSoon.source_name} · {useSoonLabel(dailySummary.mostUrgentUseSoon.days_remaining)}</span>}
+          {!dailySummary.topValidation && !dailySummary.topShopping && !dailySummary.mostUrgentUseSoon && <span>All clear — no plan alerts, Shopping shortages, or use-soon Inventory.</span>}
+        </div>
+      </section>
+
+      <section className="settings-card">
+        <h2>Evening summary</h2>
+        <p className="planning-note">Remaining work today plus tomorrow's scheduled advance preparation.</p>
+        <div className="inventory-history-row">
+          <strong>{eveningSummary.remainingMealCount} meal{eveningSummary.remainingMealCount === 1 ? '' : 's'} remaining · {eveningSummary.remainingPrepCount} prep task{eveningSummary.remainingPrepCount === 1 ? '' : 's'} remaining today</strong>
+        </div>
+        {eveningSummary.tomorrowPrep.map((task) => <div className="inventory-history-row" key={`tomorrow-${task.planned_meal_id}-${task.advance_prep_id}`}>
+          <strong>Tomorrow · {task.task_type} · {task.title}</strong>
+          <span>{task.meal_name} · {task.recipe_name}</span>
+          <span>{task.start_datetime ? new Date(task.start_datetime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Unscheduled'}</span>
+        </div>)}
+        {eveningSummary.remainingMealCount === 0 && eveningSummary.remainingPrepCount === 0 && eveningSummary.tomorrowPrep.length === 0 && <p className="muted-line">All clear — no remaining scheduled work today and no advance-prep tasks tomorrow.</p>}
+        {eveningSummary.tomorrowPrep.length === 0 && (eveningSummary.remainingMealCount > 0 || eveningSummary.remainingPrepCount > 0) && <p className="muted-line">No advance-prep tasks are scheduled for tomorrow.</p>}
+      </section>
     </div>
 
     <section className="settings-card" style={{ marginTop: 16 }}>
