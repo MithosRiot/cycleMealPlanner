@@ -57,6 +57,8 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Dashboard use-soon recommendations for Ingredient, Leftover, and RecipeOutput lots expiring within seven days, ordered by urgency and filtered by reservation-aware Available quantity.
 - Dashboard Plan alerts that reuse current-cycle validation and generated Shopping-list shortages, provide source-workflow links, deduplicate validation rows, and refresh automatically when underlying alert state changes.
 - Dashboard Daily and Evening summaries that compose current Meals, prep work, plan alerts, Shopping shortages, and use-soon Inventory into concise next-action views, including remaining-today and tomorrow advance-prep context with automatic refresh.
+- Meal Cycle lifecycle with validation-gated atomic activation, a single ACTIVE cycle invariant, lifecycle timestamps, Dashboard ACTIVE-cycle preference, DRAFT-only plan editing until revision reconciliation is implemented, and reservation-safe completion/cancellation.
 
 ### Known limitations
+- Active Meal Cycle revisions are intentionally locked until the v1.0 reconciliation increment is implemented.
 - The development database currently defaults to `./data`; packaged Windows persistence will be moved outside the installation directory.

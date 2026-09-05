@@ -1,14 +1,20 @@
 import json
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.cycle_validation import validate_cycle
 from app.database.session import get_db
+from app.models.completion import MealCompletion
 from app.models.ingredient import Tag
 from app.models.meal import Meal
 from app.models.meal_cycle import CycleSlot, MealCycle, MealSlotDefinition
+from app.models.planned_meal import PlannedMeal
+from app.models.production_coverage import ProductionCoverageReservation
+from app.models.reservation import InventoryReservation
 from app.schemas.meal_cycle import (
     MealCycleInput,
     MealCycleRead,
@@ -28,6 +34,11 @@ def _load_cycle(db: Session, cycle_id: int) -> MealCycle:
     if cycle is None:
         raise HTTPException(status_code=404, detail="Meal cycle not found")
     return cycle
+
+
+def _require_draft(cycle: MealCycle, action: str) -> None:
+    if cycle.status != "DRAFT":
+        raise HTTPException(status_code=409, detail=f"Cannot {action} a {cycle.status} Meal Cycle")
 
 
 def _normalize_slots(payload: MealCycleInput) -> list[MealSlotDefinitionInput]:
@@ -55,7 +66,7 @@ def _apply_cycle(db: Session, cycle: MealCycle, payload: MealCycleInput) -> None
     slot_inputs = _normalize_slots(payload)
     same_structure = bool(cycle.id) and _same_cycle_structure(cycle, slot_inputs, payload.duration_days)
 
-    cycle.name = payload.name.strip(); cycle.normalized_name = normalize_name(payload.name); cycle.duration_days = payload.duration_days; cycle.start_date = payload.start_date; cycle.notes = payload.notes; cycle.status = "DRAFT"
+    cycle.name = payload.name.strip(); cycle.normalized_name = normalize_name(payload.name); cycle.duration_days = payload.duration_days; cycle.start_date = payload.start_date; cycle.notes = payload.notes
 
     if same_structure:
         definitions = sorted(cycle.slot_definitions, key=lambda item: item.sort_order)
@@ -81,6 +92,32 @@ def _validate_rule_ids(db: Session, meal_ids: set[int]) -> None:
     if missing: raise HTTPException(status_code=422, detail=f"Unknown or archived Meal: {min(missing)}")
 
 
+def _release_cycle_reservations(db: Session, cycle_id: int, reason: str, now: datetime) -> None:
+    db.execute(
+        update(InventoryReservation)
+        .where(InventoryReservation.cycle_id == cycle_id, InventoryReservation.status == "ACTIVE")
+        .values(status="RELEASED")
+    )
+    db.execute(
+        update(ProductionCoverageReservation)
+        .where(ProductionCoverageReservation.cycle_id == cycle_id, ProductionCoverageReservation.status == "ACTIVE")
+        .values(status="RELEASED", release_reason=reason, released_at=now, updated_at=now)
+    )
+
+
+def _unfinalized_meal_count(db: Session, cycle_id: int) -> int:
+    count = db.scalar(
+        select(func.count(PlannedMeal.id))
+        .join(CycleSlot, CycleSlot.id == PlannedMeal.cycle_slot_id)
+        .outerjoin(MealCompletion, MealCompletion.planned_meal_id == PlannedMeal.id)
+        .where(
+            CycleSlot.cycle_id == cycle_id,
+            or_(MealCompletion.id.is_(None), MealCompletion.status != "FINALIZED"),
+        )
+    )
+    return int(count or 0)
+
+
 @router.get("", response_model=list[MealCycleRead])
 def list_meal_cycles(db: Session = Depends(get_db)) -> list[MealCycle]:
     return list(db.scalars(select(MealCycle).where(MealCycle.household_id == HOUSEHOLD_ID).options(selectinload(MealCycle.slot_definitions), selectinload(MealCycle.slots).selectinload(CycleSlot.slot_definition), selectinload(MealCycle.slots).selectinload(CycleSlot.planned_meal)).order_by(MealCycle.id.desc())).unique())
@@ -101,7 +138,7 @@ def create_meal_cycle(payload: MealCycleInput, db: Session = Depends(get_db)) ->
 
 @router.put("/{cycle_id}", response_model=MealCycleRead)
 def update_meal_cycle(cycle_id: int, payload: MealCycleInput, db: Session = Depends(get_db)) -> MealCycle:
-    cycle = _load_cycle(db, cycle_id)
+    cycle = _load_cycle(db, cycle_id); _require_draft(cycle, "edit")
     try: _apply_cycle(db, cycle, payload); db.commit()
     except IntegrityError as exc: db.rollback(); raise HTTPException(status_code=409, detail="Meal cycle name already exists") from exc
     return _load_cycle(db, cycle.id)
@@ -109,7 +146,7 @@ def update_meal_cycle(cycle_id: int, payload: MealCycleInput, db: Session = Depe
 
 @router.put("/{cycle_id}/schedule", response_model=MealCycleRead)
 def update_cycle_schedule(cycle_id: int, payload: MealCycleScheduleUpdate, db: Session = Depends(get_db)) -> MealCycle:
-    cycle = _load_cycle(db, cycle_id)
+    cycle = _load_cycle(db, cycle_id); _require_draft(cycle, "reschedule")
     definitions = {item.id: item for item in cycle.slot_definitions}
     unknown = set(payload.serving_times) - set(definitions)
     if unknown: raise HTTPException(status_code=422, detail=f"Unknown slot definition: {min(unknown)}")
@@ -120,7 +157,7 @@ def update_cycle_schedule(cycle_id: int, payload: MealCycleScheduleUpdate, db: S
 
 @router.put("/{cycle_id}/population-rules", response_model=MealCycleRead)
 def update_population_rules(cycle_id: int, payload: PopulationRulesUpdate, db: Session = Depends(get_db)) -> MealCycle:
-    cycle = _load_cycle(db, cycle_id); valid_slot_labels = {normalize_name(slot.label) for slot in cycle.slot_definitions}
+    cycle = _load_cycle(db, cycle_id); _require_draft(cycle, "change population rules"); valid_slot_labels = {normalize_name(slot.label) for slot in cycle.slot_definitions}
     global_include = set(payload.include_meal_ids); global_exclude = set(payload.exclude_meal_ids)
     if global_include & global_exclude: raise HTTPException(status_code=422, detail="A Meal cannot be both included and excluded for the cycle")
     all_ids = global_include | global_exclude; normalized_slot_rules: dict[str, dict[str, list[int]]] = {}
@@ -136,7 +173,7 @@ def update_population_rules(cycle_id: int, payload: PopulationRulesUpdate, db: S
 
 @router.put("/{cycle_id}/smart-preferences", response_model=MealCycleRead)
 def update_smart_preferences(cycle_id: int, payload: SmartPlanningPreferencesUpdate, db: Session = Depends(get_db)) -> MealCycle:
-    cycle = _load_cycle(db, cycle_id); tag_weights = {int(tag_id): float(weight) for tag_id, weight in payload.tag_weights.items()}; invalid_weights = [tag_id for tag_id, weight in tag_weights.items() if weight <= 0 or weight > 10]
+    cycle = _load_cycle(db, cycle_id); _require_draft(cycle, "change smart preferences"); tag_weights = {int(tag_id): float(weight) for tag_id, weight in payload.tag_weights.items()}; invalid_weights = [tag_id for tag_id, weight in tag_weights.items() if weight <= 0 or weight > 10]
     if invalid_weights: raise HTTPException(status_code=422, detail=f"Tag weight must be greater than 0 and at most 10: {min(invalid_weights)}")
     if tag_weights:
         active_tag_ids = set(db.scalars(select(Tag.id).where(Tag.household_id == HOUSEHOLD_ID, Tag.active.is_(True), Tag.id.in_(set(tag_weights)))))
@@ -145,6 +182,76 @@ def update_smart_preferences(cycle_id: int, payload: SmartPlanningPreferencesUpd
     cycle.smart_preferences = json.dumps({"repeat_spacing_days": payload.repeat_spacing_days, "favorite_boost": payload.favorite_boost, "history_penalty": payload.history_penalty, "tag_weights": {str(tag_id): weight for tag_id, weight in sorted(tag_weights.items())}}, sort_keys=True); db.commit(); return _load_cycle(db, cycle.id)
 
 
+@router.post("/{cycle_id}/activate", response_model=MealCycleRead)
+def activate_meal_cycle(cycle_id: int, db: Session = Depends(get_db)) -> MealCycle:
+    cycle = _load_cycle(db, cycle_id)
+    if cycle.status == "ACTIVE":
+        return cycle
+    if cycle.status != "DRAFT":
+        raise HTTPException(status_code=409, detail=f"Cannot activate a {cycle.status} Meal Cycle")
+    if cycle.start_date is None:
+        raise HTTPException(status_code=409, detail="Set a cycle start date before activation")
+    missing_times = [slot.label for slot in cycle.slot_definitions if slot.serving_time is None]
+    if missing_times:
+        raise HTTPException(status_code=409, detail=f"Set serving times before activation: {', '.join(missing_times)}")
+    active_cycle_id = db.scalar(
+        select(MealCycle.id).where(
+            MealCycle.household_id == HOUSEHOLD_ID,
+            MealCycle.status == "ACTIVE",
+            MealCycle.id != cycle.id,
+        ).limit(1)
+    )
+    if active_cycle_id is not None:
+        raise HTTPException(status_code=409, detail=f"Meal Cycle {active_cycle_id} is already ACTIVE")
+    validation = validate_cycle(cycle.id, db)
+    if validation["error_count"] > 0:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Meal Cycle has blocking validation errors",
+                "error_count": validation["error_count"],
+                "issues": [issue for issue in validation["issues"] if issue["severity"] == "ERROR"],
+            },
+        )
+    cycle.status = "ACTIVE"
+    cycle.activated_at = datetime.utcnow()
+    db.commit()
+    return _load_cycle(db, cycle.id)
+
+
+@router.post("/{cycle_id}/complete", response_model=MealCycleRead)
+def complete_meal_cycle(cycle_id: int, db: Session = Depends(get_db)) -> MealCycle:
+    cycle = _load_cycle(db, cycle_id)
+    if cycle.status == "COMPLETED":
+        return cycle
+    if cycle.status != "ACTIVE":
+        raise HTTPException(status_code=409, detail=f"Cannot complete a {cycle.status} Meal Cycle")
+    unfinalized = _unfinalized_meal_count(db, cycle.id)
+    if unfinalized:
+        raise HTTPException(status_code=409, detail=f"{unfinalized} planned Meal(s) are not finalized")
+    now = datetime.utcnow()
+    _release_cycle_reservations(db, cycle.id, "CYCLE_COMPLETED", now)
+    cycle.status = "COMPLETED"
+    cycle.completed_at = now
+    db.commit()
+    return _load_cycle(db, cycle.id)
+
+
+@router.post("/{cycle_id}/cancel", response_model=MealCycleRead)
+def cancel_meal_cycle(cycle_id: int, db: Session = Depends(get_db)) -> MealCycle:
+    cycle = _load_cycle(db, cycle_id)
+    if cycle.status == "CANCELLED":
+        return cycle
+    if cycle.status == "COMPLETED":
+        raise HTTPException(status_code=409, detail="A COMPLETED Meal Cycle cannot be cancelled")
+    now = datetime.utcnow()
+    _release_cycle_reservations(db, cycle.id, "CYCLE_CANCELLED", now)
+    cycle.status = "CANCELLED"
+    cycle.cancelled_at = now
+    db.commit()
+    return _load_cycle(db, cycle.id)
+
+
 @router.delete("/{cycle_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_meal_cycle(cycle_id: int, db: Session = Depends(get_db)) -> None:
-    cycle = _load_cycle(db, cycle_id); db.delete(cycle); db.commit()
+    cycle = _load_cycle(db, cycle_id); _require_draft(cycle, "delete"); db.delete(cycle); db.commit()

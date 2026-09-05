@@ -35,6 +35,9 @@ const cycle = {
   notes: null,
   population_rules: '{}',
   smart_preferences: '{}',
+  activated_at: null,
+  completed_at: null,
+  cancelled_at: null,
   slot_definitions: [],
   slots: [
     { id: 1, cycle_id: 1, slot_definition_id: 1, day_number: 1, sort_order: 0, scheduled_date: '2026-09-04', serving_time: '08:00:00', scheduled_datetime: '2026-09-04T08:00:00', planned_meal: null },
@@ -44,6 +47,10 @@ const cycle = {
 
 const now = new Date(2026, 8, 4, 15, 0, 0)
 assert.equal(selectCurrentCycle([cycle], now)?.name, 'Sample Week')
+const activeCycle = { ...cycle, id: 2, name: 'Active Cycle', status: 'ACTIVE', start_date: '2026-10-01', activated_at: '2026-09-04T12:00:00' }
+assert.equal(selectCurrentCycle([cycle, activeCycle], now)?.name, 'Active Cycle')
+const completedCycle = { ...cycle, id: 3, name: 'Completed Cycle', status: 'COMPLETED', completed_at: '2026-09-04T12:00:00' }
+assert.equal(selectCurrentCycle([completedCycle], now), null)
 assert.equal(todaysMealSlots(cycle, now).length, 1)
 assert.equal(todaysMealSlots(cycle, now)[0].planned_meal.snapshot_name, 'Chicken Dinner')
 assert.equal(todaysMealSlots(cycle, new Date(2026, 8, 12)).length, 0)

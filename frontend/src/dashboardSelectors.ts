@@ -14,15 +14,19 @@ function localMidnight(value: Date): Date {
 }
 
 export function selectCurrentCycle(cycles: MealCycle[], now = new Date()): MealCycle | null {
+  const lifecycleActive = cycles.find((cycle) => cycle.status === 'ACTIVE')
+  if (lifecycleActive) return lifecycleActive
+
+  const eligible = cycles.filter((cycle) => cycle.status === 'DRAFT')
   const today = toLocalDateKey(now)
-  const scheduled = cycles.filter((cycle) => cycle.start_date !== null)
-  const active = scheduled.find((cycle) => {
+  const scheduled = eligible.filter((cycle) => cycle.start_date !== null)
+  const dateActive = scheduled.find((cycle) => {
     const start = new Date(`${cycle.start_date}T00:00:00`)
     const end = new Date(start)
     end.setDate(end.getDate() + cycle.duration_days - 1)
     return cycle.start_date! <= today && toLocalDateKey(end) >= today
   })
-  return active ?? [...scheduled].sort((a, b) => (a.start_date ?? '').localeCompare(b.start_date ?? ''))[0] ?? cycles[0] ?? null
+  return dateActive ?? [...scheduled].sort((a, b) => (a.start_date ?? '').localeCompare(b.start_date ?? ''))[0] ?? eligible[0] ?? null
 }
 
 export function todaysMealSlots(cycle: MealCycle | null, now = new Date()): CycleSlot[] {

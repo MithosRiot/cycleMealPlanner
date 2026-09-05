@@ -49,5 +49,8 @@ jobs:
       - name: Populate dashboard alert fixture
         run: python testdata/seed_dashboard_alert_fixture.py
 
+      - name: Populate lifecycle fixture
+        run: python testdata/seed_cycle_lifecycle_fixture.py
+
       - name: Validate repeated populated seed reset
         run: python testdata/seed_test_db.py --reset
