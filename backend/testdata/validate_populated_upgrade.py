@@ -48,6 +48,7 @@ def main() -> None:
         alias_count = connection.execute(text("SELECT COUNT(*) FROM ingredient_aliases WHERE ingredient_id=9001")).scalar_one()
         slot = connection.execute(text("SELECT label, serving_time FROM meal_slot_definitions WHERE id=9001")).one()
         cycle_slot_count = connection.execute(text("SELECT COUNT(*) FROM cycle_slots WHERE id=9001 AND slot_definition_id=9001")).scalar_one()
+        cycle = connection.execute(text("SELECT status, lifecycle_status, activated_at, completed_at, cancelled_at FROM meal_cycles WHERE id=9001")).one()
         prep = connection.execute(text("SELECT title, task_type, reminder_enabled, reminder_offset_minutes FROM recipe_advance_prep WHERE id=9001")).one()
         slot_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_slot_definitions)"))}
         prep_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(recipe_advance_prep)"))}
@@ -67,16 +68,22 @@ def main() -> None:
         output_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_completion_outputs)"))}
         planned_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(planned_meals)"))}
         coverage_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(production_coverage_reservations)"))}
+        cycle_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_cycles)"))}
+        cycle_indexes = {item[1] for item in connection.execute(text("PRAGMA index_list(meal_cycles)"))}
         serving_unit = connection.execute(text("SELECT code, unit_family FROM measurement_units WHERE id=16")).one()
         fk_violations = connection.execute(text("PRAGMA foreign_key_check")).all()
 
-    assert version == "0033_leftover_coverage"
+    assert version == "0034_cycle_lifecycle"
     assert row.name == "Migration Test Ingredient"
     assert bool(row.staple_enabled) is False
     assert row.staple_minimum is None and row.staple_target is None and row.staple_unit_id is None
     assert alias_count == 1
     assert "serving_time" in slot_columns and slot.label == "Dinner" and slot.serving_time is None
     assert cycle_slot_count == 1
+    assert cycle.status == "DRAFT" and cycle.lifecycle_status == "DRAFT"
+    assert cycle.activated_at is None and cycle.completed_at is None and cycle.cancelled_at is None
+    assert {"lifecycle_status", "activated_at", "completed_at", "cancelled_at"}.issubset(cycle_columns)
+    assert "uq_meal_cycles_household_active" in cycle_indexes
     assert {"task_type", "reminder_enabled", "reminder_offset_minutes"}.issubset(prep_columns)
     assert prep.title == "Legacy prep task" and prep.task_type == "PREP"
     assert bool(prep.reminder_enabled) is False and prep.reminder_offset_minutes is None
@@ -100,7 +107,7 @@ def main() -> None:
     assert fk_violations == []
 
     engine.dispose(); DB_PATH.unlink(missing_ok=True)
-    print("Populated SQLite upgrade 0020 -> 0033 succeeded and preserved existing data while adding produced-stock coverage.")
+    print("Populated SQLite upgrade 0020 -> 0034 succeeded and preserved existing data while adding Meal Cycle lifecycle state.")
 
 
 if __name__ == "__main__":
