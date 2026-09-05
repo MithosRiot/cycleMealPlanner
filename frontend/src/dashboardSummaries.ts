@@ -1,4 +1,4 @@
-import type { DashboardUseSoonItem } from './dashboardApi'
+import type { UseSoonRecommendation } from './dashboardApi'
 import type { DashboardValidationAlert } from './dashboardAlerts'
 import type { MealCycle } from './mealCyclesApi'
 import type { PrepScheduleTask } from './prepScheduleApi'
@@ -39,7 +39,7 @@ export function buildDailySummary(
   prepTasks: PrepScheduleTask[],
   validationAlerts: DashboardValidationAlert[],
   shoppingShortages: ShoppingItem[],
-  useSoon: DashboardUseSoonItem[],
+  useSoon: UseSoonRecommendation[],
   now = new Date(),
 ): DashboardDailySummary {
   const meals = todaysMealSlots(cycle, now)
