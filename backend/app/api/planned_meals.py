@@ -13,6 +13,7 @@ from app.models.meal_cycle import CycleSlot, MealCycle
 from app.models.planned_meal import PlannedMeal
 from app.models.recipe import Recipe
 from app.schemas.planned_meal import (
+    DirectRecipeAssign,
     PlannedMealAssign,
     PlannedMealLock,
     PlannedMealMove,
@@ -59,6 +60,17 @@ def _load_meal(db: Session, meal_id: int) -> Meal:
     return meal
 
 
+def _load_recipe(db: Session, recipe_id: int) -> Recipe:
+    recipe = db.scalar(
+        select(Recipe)
+        .where(Recipe.id == recipe_id, Recipe.household_id == HOUSEHOLD_ID, Recipe.active.is_(True))
+        .options(selectinload(Recipe.ingredients), selectinload(Recipe.meal_types))
+    )
+    if recipe is None:
+        raise HTTPException(status_code=400, detail="Active Recipe not found")
+    return recipe
+
+
 def _snapshot(meal: Meal) -> dict[str, str | None]:
     components = [
         {
@@ -76,6 +88,24 @@ def _snapshot(meal: Meal) -> dict[str, str | None]:
         "snapshot_description": meal.description,
         "snapshot_meal_types": json.dumps([item.meal_type for item in meal.meal_types]),
         "snapshot_components": json.dumps(components),
+    }
+
+
+def _recipe_snapshot(recipe: Recipe) -> dict[str, str | None]:
+    return {
+        "snapshot_name": recipe.name,
+        "snapshot_description": recipe.description,
+        "snapshot_meal_types": json.dumps([item.meal_type for item in recipe.meal_types]),
+        "snapshot_components": json.dumps([
+            {
+                "meal_recipe_id": -1,
+                "recipe_id": recipe.id,
+                "serving_multiplier": "1",
+                "default_servings": None,
+                "sort_order": 0,
+                "notes": "Direct Recipe occurrence",
+            }
+        ]),
     }
 
 
@@ -133,20 +163,47 @@ def _calculate_scaled_components(db: Session, planned: PlannedMeal) -> str:
     return json.dumps(results)
 
 
+def _clear_slot(db: Session, slot: CycleSlot) -> None:
+    if slot.planned_meal is None:
+        return
+    if slot.planned_meal.locked:
+        raise HTTPException(status_code=409, detail="Placement is locked")
+    db.delete(slot.planned_meal)
+    db.flush()
+
+
 def _place(db: Session, slot: CycleSlot, meal: Meal) -> PlannedMeal:
-    if slot.planned_meal is not None:
-        if slot.planned_meal.locked:
-            raise HTTPException(status_code=409, detail="Placement is locked")
-        db.delete(slot.planned_meal)
-        db.flush()
+    _clear_slot(db, slot)
     planned = PlannedMeal(
         cycle_slot_id=slot.id,
         meal_id=meal.id,
+        source_type="SAVED_MEAL",
+        source_recipe_id=None,
         locked=False,
         planned_servings=DEFAULT_SERVINGS,
         planned_leftover_servings=Decimal("0"),
         component_serving_overrides="{}",
         **_snapshot(meal),
+    )
+    db.add(planned)
+    db.flush()
+    planned.scaled_components = _calculate_scaled_components(db, planned)
+    db.flush()
+    return planned
+
+
+def _place_recipe(db: Session, slot: CycleSlot, recipe: Recipe, payload: DirectRecipeAssign) -> PlannedMeal:
+    _clear_slot(db, slot)
+    planned = PlannedMeal(
+        cycle_slot_id=slot.id,
+        meal_id=None,
+        source_type="DIRECT_RECIPE",
+        source_recipe_id=recipe.id,
+        locked=False,
+        planned_servings=payload.planned_servings,
+        planned_leftover_servings=payload.planned_leftover_servings,
+        component_serving_overrides="{}",
+        **_recipe_snapshot(recipe),
     )
     db.add(planned)
     db.flush()
@@ -194,10 +251,15 @@ def _history_counts(db: Session, current_cycle_id: int) -> dict[int, int]:
         select(PlannedMeal.meal_id, func.count(PlannedMeal.id))
         .join(CycleSlot, CycleSlot.id == PlannedMeal.cycle_slot_id)
         .join(MealCycle, MealCycle.id == CycleSlot.cycle_id)
-        .where(MealCycle.household_id == HOUSEHOLD_ID, MealCycle.id != current_cycle_id)
+        .where(
+            MealCycle.household_id == HOUSEHOLD_ID,
+            MealCycle.id != current_cycle_id,
+            PlannedMeal.source_type == "SAVED_MEAL",
+            PlannedMeal.meal_id.is_not(None),
+        )
         .group_by(PlannedMeal.meal_id)
     ).all()
-    return {int(meal_id): int(count) for meal_id, count in rows}
+    return {int(meal_id): int(count) for meal_id, count in rows if meal_id is not None}
 
 
 def _meal_weight(meal: Meal, preferences: dict, history_counts: dict[int, int]) -> float:
@@ -223,6 +285,16 @@ def assign_meal(cycle_id: int, slot_id: int, payload: PlannedMealAssign, db: Ses
     slot = _load_slot(db, cycle_id, slot_id)
     meal = _load_meal(db, payload.meal_id)
     planned = _place(db, slot, meal)
+    db.commit()
+    db.refresh(planned)
+    return planned
+
+
+@router.post("/{cycle_id}/slots/{slot_id}/planned-recipe", response_model=PlannedMealRead, status_code=status.HTTP_201_CREATED)
+def assign_recipe(cycle_id: int, slot_id: int, payload: DirectRecipeAssign, db: Session = Depends(get_db)) -> PlannedMeal:
+    slot = _load_slot(db, cycle_id, slot_id)
+    recipe = _load_recipe(db, payload.recipe_id)
+    planned = _place_recipe(db, slot, recipe, payload)
     db.commit()
     db.refresh(planned)
     return planned
@@ -322,6 +394,8 @@ def random_fill(cycle_id: int, db: Session = Depends(get_db)) -> RandomFillResul
         (slot.day_number, slot.planned_meal.meal_id)
         for slot in cycle.slots
         if slot.planned_meal is not None
+        and slot.planned_meal.source_type == "SAVED_MEAL"
+        and slot.planned_meal.meal_id is not None
     ]
 
     filled = 0
