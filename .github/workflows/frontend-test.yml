@@ -40,5 +40,8 @@ jobs:
       - name: Test dashboard selectors
         run: node --experimental-strip-types src/dashboardSelectors.test.mjs
 
+      - name: Test dashboard alert selectors
+        run: node --experimental-strip-types src/dashboardAlerts.test.mjs
+
       - name: Build
         run: npm run build
