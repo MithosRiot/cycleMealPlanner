@@ -75,5 +75,8 @@ class MealCycleRead(BaseModel):
     notes: str | None
     population_rules: str
     smart_preferences: str
+    activated_at: datetime | None = None
+    completed_at: datetime | None = None
+    cancelled_at: datetime | None = None
     slot_definitions: list[MealSlotDefinitionRead]
     slots: list[CycleSlotRead]
