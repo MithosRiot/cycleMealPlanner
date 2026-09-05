@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { dashboardShoppingShortages, dashboardValidationAlerts } from './dashboardAlerts'
 import { fetchUseSoon } from './dashboardApi'
-import { fetchCycleValidation, fetchMealCycles } from './mealCyclesApi'
+import { fetchCycleValidation, fetchMealCycles, type PlannedMealSourceType } from './mealCyclesApi'
 import { fetchPrepSchedule } from './prepScheduleApi'
 import { fetchInventoryAvailability, fetchProductionAvailability } from './reservationsApi'
 import { fetchShoppingList } from './shoppingApi'
@@ -19,6 +19,14 @@ function useSoonLabel(days: number): string {
   if (days === 0) return 'Use today'
   if (days === 1) return '1 day left'
   return `${days} days left`
+}
+
+function plannedSourceLabel(sourceType: PlannedMealSourceType | undefined): string {
+  if (sourceType === 'SAVED_MEAL') return 'Saved Meal'
+  if (sourceType === 'DIRECT_RECIPE') return 'Direct Recipe'
+  if (sourceType === 'LEFTOVER') return 'Leftover'
+  if (sourceType === 'RECIPE_OUTPUT') return 'Recipe output'
+  return 'Planned occurrence'
 }
 
 export default function DashboardPage() {
@@ -154,7 +162,7 @@ export default function DashboardPage() {
       <h2>Today's Meals</h2>
       {todayMeals.map((slot) => <div className="inventory-history-row" key={slot.id}>
         <strong>{formatServingTime(slot.serving_time)} · {slot.planned_meal?.snapshot_name}</strong>
-        <span>{slot.planned_meal?.source_type === 'SAVED_MEAL' ? 'Saved Meal' : slot.planned_meal?.source_type === 'LEFTOVER' ? 'Leftover' : 'Recipe output'}</span>
+        <span>{plannedSourceLabel(slot.planned_meal?.source_type)}</span>
         <span>{slot.planned_meal?.locked ? 'Locked' : 'Editable'}</span>
       </div>)}
       {todayMeals.length === 0 && <p className="muted-line">No Meals are scheduled for today in {currentCycle.name}.</p>}
