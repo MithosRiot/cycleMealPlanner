@@ -22,6 +22,7 @@ from app.services.production_coverage import production_availability_rows, recon
 
 router = APIRouter(tags=["reservations"])
 HOUSEHOLD_ID = 1
+INGREDIENT_REQUIREMENT_SOURCES = {"SAVED_MEAL", "DIRECT_RECIPE"}
 
 
 def _cycle(db: Session, cycle_id: int) -> MealCycle:
@@ -44,7 +45,7 @@ def _requirements(db: Session, cycle_id: int) -> list[dict]:
     ).all()
     required: list[dict] = []
     for planned_meal_id, raw, source_type in rows:
-        if int(planned_meal_id) in completed_ids or source_type != "SAVED_MEAL":
+        if int(planned_meal_id) in completed_ids or source_type not in INGREDIENT_REQUIREMENT_SOURCES:
             continue
         try:
             components = json.loads(raw or "[]")
