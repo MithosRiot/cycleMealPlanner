@@ -39,10 +39,12 @@ def _load_slot(db: Session, cycle_id: int, slot_id: int) -> CycleSlot:
         select(CycleSlot)
         .join(MealCycle)
         .where(CycleSlot.id == slot_id, CycleSlot.cycle_id == cycle_id, MealCycle.household_id == HOUSEHOLD_ID)
-        .options(selectinload(CycleSlot.slot_definition), selectinload(CycleSlot.planned_meal))
+        .options(selectinload(CycleSlot.cycle), selectinload(CycleSlot.slot_definition), selectinload(CycleSlot.planned_meal))
     )
     if slot is None:
         raise HTTPException(status_code=404, detail="Cycle slot not found")
+    if slot.cycle.status != "DRAFT":
+        raise HTTPException(status_code=409, detail=f"Cannot edit placements in a {slot.cycle.status} Meal Cycle")
     return slot
 
 
@@ -299,6 +301,8 @@ def random_fill(cycle_id: int, db: Session = Depends(get_db)) -> RandomFillResul
     )
     if cycle is None:
         raise HTTPException(status_code=404, detail="Meal cycle not found")
+    if cycle.status != "DRAFT":
+        raise HTTPException(status_code=409, detail=f"Cannot random-fill a {cycle.status} Meal Cycle")
 
     meals = list(
         db.scalars(
