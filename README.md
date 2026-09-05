@@ -4,7 +4,7 @@ A self-hosted/web-based meal planning application for recipes, reusable meals, f
 
 ## Project status
 
-Active development is in v0.9 Dashboard + Alerts. v0.8 Completion + Leftovers is complete. v0.9 includes the operational Dashboard foundation plus use-soon recommendations for available Ingredient and produced Inventory expiring within seven days. Recommendations use reservation-aware Available quantities and are ordered by expiration urgency. The deterministic seeded reset starts Sample Week on the reset date; before any production is committed its Dashboard stock summary shows 16 tracked Ingredients, 3 with active reservations, 0 Ingredient shortages, and 0 produced lots.
+Active development is in v0.9 Dashboard + Alerts. v0.8 Completion + Leftovers is complete. v0.9 includes the operational Dashboard foundation, reservation-aware use-soon recommendations, and current-cycle Plan Validation plus generated Shopping shortage alerts with direct links back to the source workflow. Dashboard alert data refreshes automatically so resolved validation issues and completed Shopping shortages disappear without a browser reload. The deterministic seeded reset starts Sample Week on the reset date; before any production is committed its Dashboard stock summary shows 16 tracked Ingredients, 3 with active reservations, 0 Ingredient shortages, and 0 produced lots.
 
 ## Stack
 

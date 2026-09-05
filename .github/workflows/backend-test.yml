@@ -46,5 +46,8 @@ jobs:
       - name: Populate use-soon fixture
         run: python testdata/seed_use_soon_fixture.py
 
+      - name: Populate dashboard alert fixture
+        run: python testdata/seed_dashboard_alert_fixture.py
+
       - name: Validate repeated populated seed reset
         run: python testdata/seed_test_db.py --reset
