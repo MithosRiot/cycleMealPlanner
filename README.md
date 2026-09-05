@@ -4,7 +4,7 @@ A self-hosted/web-based meal planning application for recipes, reusable meals, f
 
 ## Project status
 
-Active development is in v0.8 Completion + Leftovers. v0.7 Cooking Mode is complete. v0.8 now includes draft reconciliation of planned-versus-actual ingredient usage, atomic Meal finalization and Inventory deduction, post-finalization production reconciliation for actual servings and Recipe outputs, automatic release of completed Meal ingredient reservations, and exact-source future coverage for leftovers or Recipe-output stock with Physical / Reserved / Available quantities and deterministic shortage warnings.
+Active development is in v0.9 Dashboard + Alerts. v0.8 Completion + Leftovers is complete. v0.9 now includes the operational Dashboard foundation for current-cycle meals, today's prep work, and high-level Ingredient/produced-stock status. The deterministic seeded reset starts Sample Week on the reset date; immediately after reset the Dashboard stock summary is expected to show 16 tracked Ingredients, 3 with active reservations, 0 Ingredient shortages, and 0 produced lots until Meal production is committed.
 
 ## Stack
 
