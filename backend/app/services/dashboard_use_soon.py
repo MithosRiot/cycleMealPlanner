@@ -59,7 +59,11 @@ def use_soon_rows(db: Session, horizon_days: int = 7, today: date | None = None)
         if ingredient is None:
             continue
         remaining_by_lot = {
-            lot.id: Decimal(lot.quantity) * Decimal(units[lot.unit_id].base_multiplier)
+            lot.id: (
+                Decimal("0")
+                if lot.expiration_date is not None and lot.expiration_date < today
+                else Decimal(lot.quantity) * Decimal(units[lot.unit_id].base_multiplier)
+            )
             for lot in lots
         }
         reserved_base = Decimal("0")
