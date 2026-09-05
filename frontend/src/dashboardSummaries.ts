@@ -13,6 +13,9 @@ export type DashboardDailySummary = {
   useSoonCount: number
   nextMealName: string | null
   nextMealTime: string | null
+  topValidation: DashboardValidationAlert | null
+  topShopping: ShoppingItem | null
+  mostUrgentUseSoon: UseSoonRecommendation | null
 }
 
 export type DashboardEveningSummary = {
@@ -58,6 +61,9 @@ export function buildDailySummary(
     useSoonCount: useSoon.length,
     nextMealName: next?.planned_meal?.snapshot_name ?? null,
     nextMealTime: next?.serving_time ?? null,
+    topValidation: validationAlerts[0] ?? null,
+    topShopping: shoppingShortages[0] ?? null,
+    mostUrgentUseSoon: useSoon[0] ?? null,
   }
 }
 
