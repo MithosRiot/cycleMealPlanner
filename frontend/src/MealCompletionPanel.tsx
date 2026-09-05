@@ -41,7 +41,7 @@ export default function MealCompletionPanel() {
   const [outputDrafts, setOutputDrafts] = useState<OutputDraft[]>([])
 
   const plannedMeals = useMemo(() => (cycles.data ?? []).flatMap((cycle) => cycle.slots
-    .filter((slot) => slot.planned_meal)
+    .filter((slot) => slot.planned_meal && !['MANUAL', 'EATING_OUT', 'SKIPPED'].includes(slot.planned_meal.source_type))
     .map((slot) => ({ cycleName: cycle.name, day: slot.day_number, meal: slot.planned_meal! }))), [cycles.data])
 
   useEffect(() => {
