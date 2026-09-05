@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { dashboardShoppingShortages, dashboardValidationAlerts } from './dashboardAlerts'
 import { fetchUseSoon } from './dashboardApi'
-import { fetchMealCycles } from './mealCyclesApi'
+import { fetchCycleValidation, fetchMealCycles } from './mealCyclesApi'
 import { fetchPrepSchedule } from './prepScheduleApi'
 import { fetchInventoryAvailability, fetchProductionAvailability } from './reservationsApi'
+import { fetchShoppingList } from './shoppingApi'
 import { inventoryDashboardSummary, producedInventoryDashboardSummary, selectCurrentCycle, todaysMealSlots, todaysPrepTasks } from './dashboardSelectors'
 
 function formatServingTime(value: string | null): string {
@@ -28,6 +31,19 @@ export default function DashboardPage() {
   const inventory = useQuery({ queryKey: ['inventory-availability'], queryFn: fetchInventoryAvailability })
   const production = useQuery({ queryKey: ['production-inventory-availability'], queryFn: fetchProductionAvailability })
   const useSoon = useQuery({ queryKey: ['dashboard-use-soon', 7], queryFn: () => fetchUseSoon(7) })
+  const validation = useQuery({
+    queryKey: ['cycle-validation', currentCycle?.id ?? null],
+    queryFn: () => fetchCycleValidation(currentCycle!.id),
+    enabled: currentCycle !== null,
+    refetchInterval: 5_000,
+  })
+  const shopping = useQuery({
+    queryKey: ['shopping-list', currentCycle?.id ?? null],
+    queryFn: () => fetchShoppingList(currentCycle!.id),
+    enabled: currentCycle !== null,
+    retry: false,
+    refetchInterval: 5_000,
+  })
 
   if (cycles.isPending) return <section className="page-card"><p className="eyebrow">Cycle Meal Planner</p><h1>Dashboard</h1><p>Loading dashboard…</p></section>
   if (cycles.error instanceof Error) return <section className="page-card"><p className="eyebrow">Cycle Meal Planner</p><h1>Dashboard</h1><div className="error-banner">{cycles.error.message}</div></section>
@@ -44,11 +60,13 @@ export default function DashboardPage() {
   const todayPrep = todaysPrepTasks(prep.data?.tasks ?? [])
   const inventorySummary = inventoryDashboardSummary(inventory.data ?? [])
   const producedSummary = producedInventoryDashboardSummary(production.data ?? [])
+  const validationAlerts = dashboardValidationAlerts(validation.data?.issues ?? [])
+  const shoppingShortages = dashboardShoppingShortages(shopping.data?.items ?? [])
 
   return <section className="page-card">
     <p className="eyebrow">Cycle Meal Planner</p>
     <div className="section-heading">
-      <div><h1>Dashboard</h1><p className="planning-note">Current operational view for meals, prep, and stock.</p></div>
+      <div><h1>Dashboard</h1><p className="planning-note">Current operational view for meals, prep, stock, and plan alerts.</p></div>
       <div className="ingredient-meta"><span>{currentCycle.name}</span><span>{currentCycle.status}</span>{currentCycle.start_date && <span>Starts {currentCycle.start_date}</span>}<span>{currentCycle.duration_days} days</span></div>
     </div>
 
@@ -58,6 +76,29 @@ export default function DashboardPage() {
       <div className="settings-card"><strong>Ingredient stock</strong><div className="ingredient-meta"><span>{inventorySummary.tracked} tracked</span><span>{inventorySummary.reserved} reserved</span><span>{inventorySummary.shortages} shortages</span></div></div>
       <div className="settings-card"><strong>Produced stock</strong><div className="ingredient-meta"><span>{producedSummary.lots} lots</span><span>{producedSummary.reservedLots} reserved</span><span>{producedSummary.availableLots} available</span></div></div>
     </div>
+
+    <section className="settings-card" style={{ marginTop: 16 }}>
+      <div className="section-heading">
+        <div><h2>Plan alerts</h2><p className="planning-note">Current-cycle validation and generated Shopping shortages. This section refreshes automatically.</p></div>
+        <div className="ingredient-meta"><span>{validationAlerts.length} validation</span><span>{shoppingShortages.length} shopping</span></div>
+      </div>
+      {validation.error instanceof Error && <div className="error-banner">{validation.error.message}</div>}
+      {validationAlerts.map((issue) => <div className="inventory-history-row" key={issue.key}>
+        <strong>{issue.severity} · {issue.code.replaceAll('_', ' ')}</strong>
+        <span>{issue.message}</span>
+        <Link to="/meal-plan/validation">Open Plan Validation</Link>
+      </div>)}
+      {!validation.isPending && !validation.error && validationAlerts.length === 0 && <p className="muted-line">No current cycle validation issues.</p>}
+
+      {shopping.isError && <p className="muted-line">No generated Shopping list for {currentCycle.name}. <Link to="/shopping">Generate it in Shopping.</Link></p>}
+      {shoppingShortages.map((item) => <div className="inventory-history-row" key={`shopping-${item.id}`}>
+        <strong>SHOPPING · {item.ingredient_name}</strong>
+        <span>Need {Number(item.required_quantity).toLocaleString()} {item.unit_code} · Have {Number(item.inventory_quantity).toLocaleString()} {item.unit_code} · Missing {Number(item.generated_quantity).toLocaleString()} {item.unit_code}</span>
+        {item.warning && <span className="warning-text">{item.warning}</span>}
+        <Link to="/shopping">Open Shopping</Link>
+      </div>)}
+      {shopping.data && shoppingShortages.length === 0 && <p className="muted-line">No current Shopping shortages.</p>}
+    </section>
 
     <section className="settings-card" style={{ marginTop: 16 }}>
       <h2>Use Soon</h2>
