@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
 from app.models.completion import MealCompletion
+from app.models.planned_meal import PlannedMeal
 from app.models.reservation import InventoryReservation
 
 
@@ -54,4 +55,17 @@ def _release_source_reservations_after_finalize(_mapper, connection, target: Mea
             InventoryReservation.status == "ACTIVE",
         )
         .values(status="RELEASED")
+    )
+
+
+@event.listens_for(PlannedMeal, "before_delete")
+def _release_produced_coverage_before_placement_delete(_mapper, connection, target: PlannedMeal) -> None:
+    now = datetime.utcnow()
+    connection.execute(
+        update(ProductionCoverageReservation)
+        .where(
+            ProductionCoverageReservation.planned_meal_id == target.id,
+            ProductionCoverageReservation.status == "ACTIVE",
+        )
+        .values(status="RELEASED", release_reason="PLACEMENT_DELETED", released_at=now, updated_at=now)
     )

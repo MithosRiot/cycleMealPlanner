@@ -22,6 +22,7 @@ from app.services.production_coverage import reconcile_production_coverage, rele
 router = APIRouter(tags=["produced-source-planning"])
 HOUSEHOLD_ID = 1
 SERVING_UNIT_ID = 16
+PRODUCING_SOURCES = {"SAVED_MEAL", "DIRECT_RECIPE"}
 
 
 def _origin_or_404(db: Session, planned_meal_id: int) -> PlannedMeal:
@@ -37,8 +38,8 @@ def _origin_or_404(db: Session, planned_meal_id: int) -> PlannedMeal:
     )
     if planned is None:
         raise HTTPException(status_code=404, detail="Source Planned Meal not found")
-    if planned.source_type != "SAVED_MEAL":
-        raise HTTPException(status_code=422, detail="Produced stock must originate from a saved Meal placement")
+    if planned.source_type not in PRODUCING_SOURCES:
+        raise HTTPException(status_code=422, detail="Produced stock must originate from a saved Meal or direct Recipe placement")
     return planned
 
 
@@ -120,7 +121,7 @@ def produced_source_options(db: Session = Depends(get_db)) -> list[ProducedSourc
         select(PlannedMeal)
         .join(CycleSlot, CycleSlot.id == PlannedMeal.cycle_slot_id)
         .join(MealCycle, MealCycle.id == CycleSlot.cycle_id)
-        .where(MealCycle.household_id == HOUSEHOLD_ID, PlannedMeal.source_type == "SAVED_MEAL")
+        .where(MealCycle.household_id == HOUSEHOLD_ID, PlannedMeal.source_type.in_(PRODUCING_SOURCES))
         .options(
             selectinload(PlannedMeal.cycle_slot).selectinload(CycleSlot.cycle),
             selectinload(PlannedMeal.cycle_slot).selectinload(CycleSlot.slot_definition),
@@ -143,19 +144,19 @@ def _validate_source(db: Session, payload: ProducedSourceAssign, origin: Planned
 
     if payload.source_type == "LEFTOVER":
         if payload.unit_id != SERVING_UNIT_ID:
-            raise HTTPException(status_code=422, detail="Leftover Meal coverage must use servings")
+            raise HTTPException(status_code=422, detail="Leftover coverage must use servings")
         if Decimal(origin.planned_leftover_servings) <= 0:
-            raise HTTPException(status_code=422, detail="Source Meal does not plan any leftover servings")
+            raise HTTPException(status_code=422, detail="Source occurrence does not plan any leftover servings")
         leftover = db.get(Leftover, payload.source_record_id) if payload.source_record_id is not None else None
         if leftover is not None and leftover.planned_meal_id != origin.id:
-            raise HTTPException(status_code=422, detail="Leftover record does not belong to the selected source Meal")
+            raise HTTPException(status_code=422, detail="Leftover record does not belong to the selected source occurrence")
         return f"Leftover: {origin.snapshot_name}", leftover.id if leftover else None, None
 
     output_record = db.get(MealCompletionOutput, payload.source_record_id) if payload.source_record_id is not None else None
     if output_record is not None:
         completion = db.get(MealCompletion, output_record.completion_id)
         if completion is None or completion.planned_meal_id != origin.id:
-            raise HTTPException(status_code=422, detail="Recipe output record does not belong to the selected source Meal")
+            raise HTTPException(status_code=422, detail="Recipe output record does not belong to the selected source occurrence")
         if output_record.unit_id != payload.unit_id:
             raise HTTPException(status_code=422, detail="Recipe output unit does not match the selected produced output")
         return f"Recipe output: {output_record.output_name}", output_record.id, output_record.recipe_output_id
@@ -165,7 +166,7 @@ def _validate_source(db: Session, payload: ProducedSourceAssign, origin: Planned
         raise HTTPException(status_code=422, detail="Recipe output source is not valid")
     recipe_ids = {int(row.get("recipe_id")) for row in json.loads(origin.scaled_components or "[]") if row.get("recipe_id") is not None}
     if recipe_output.recipe_id not in recipe_ids:
-        raise HTTPException(status_code=422, detail="Recipe output is not produced by the selected source Meal")
+        raise HTTPException(status_code=422, detail="Recipe output is not produced by the selected source occurrence")
     return f"Recipe output: {recipe_output.name}", None, recipe_output.id
 
 
@@ -185,9 +186,9 @@ def assign_produced_source(cycle_id: int, slot_id: int, payload: ProducedSourceA
     slot = _load_slot(db, cycle_id, slot_id)
     origin = _origin_or_404(db, payload.source_origin_planned_meal_id)
     if origin.cycle_slot_id == slot.id:
-        raise HTTPException(status_code=422, detail="A Meal cannot consume produced stock from itself")
+        raise HTTPException(status_code=422, detail="An occurrence cannot consume produced stock from itself")
     if not _target_is_after_source(slot, origin):
-        raise HTTPException(status_code=422, detail="Produced stock can only cover a future slot after its source Meal")
+        raise HTTPException(status_code=422, detail="Produced stock can only cover a future slot after its source occurrence")
     source_name, source_record_id, source_recipe_output_id = _validate_source(db, payload, origin)
 
     if slot.planned_meal is not None:
@@ -201,6 +202,7 @@ def assign_produced_source(cycle_id: int, slot_id: int, payload: ProducedSourceA
         cycle_slot_id=slot.id,
         meal_id=origin.meal_id,
         source_type=payload.source_type,
+        source_recipe_id=origin.source_recipe_id,
         source_origin_planned_meal_id=origin.id,
         source_record_id=source_record_id,
         source_recipe_output_id=source_recipe_output_id,

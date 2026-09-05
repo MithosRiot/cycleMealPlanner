@@ -14,8 +14,9 @@ class PlannedMeal(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     cycle_slot_id: Mapped[int] = mapped_column(ForeignKey("cycle_slots.id", ondelete="CASCADE"), nullable=False, unique=True)
-    meal_id: Mapped[int] = mapped_column(ForeignKey("meals.id", ondelete="RESTRICT"), nullable=False)
+    meal_id: Mapped[int | None] = mapped_column(ForeignKey("meals.id", ondelete="RESTRICT"), nullable=True)
     source_type: Mapped[str] = mapped_column(String(30), nullable=False, default="SAVED_MEAL")
+    source_recipe_id: Mapped[int | None] = mapped_column(Integer)
     source_origin_planned_meal_id: Mapped[int | None] = mapped_column(Integer)
     source_record_id: Mapped[int | None] = mapped_column(Integer)
     source_recipe_output_id: Mapped[int | None] = mapped_column(Integer)

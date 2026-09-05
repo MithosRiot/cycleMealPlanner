@@ -4,7 +4,7 @@ export type PrepReminderStatus = 'DISABLED' | 'UNSCHEDULED' | 'UPCOMING' | 'DUE'
 export type PrepScheduleTask = {
   planned_meal_id: number
   cycle_slot_id: number
-  meal_id: number
+  meal_id: number | null
   meal_name: string
   recipe_id: number
   recipe_name: string

@@ -177,6 +177,7 @@ def commit_production(planned_meal_id: int, payload: CompletionProductionCommitI
             completion_id=completion.id,
             planned_meal_id=planned.id,
             source_meal_id=planned.meal_id,
+            source_recipe_id=planned.source_recipe_id,
             source_meal_name=completion.snapshot_name,
             source_components=completion.snapshot_scaled_components,
             actual_servings_produced=payload.actual_servings_produced,

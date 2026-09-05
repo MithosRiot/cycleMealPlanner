@@ -6,7 +6,7 @@ from pydantic import BaseModel
 class PrepScheduleTaskRead(BaseModel):
     planned_meal_id: int
     cycle_slot_id: int
-    meal_id: int
+    meal_id: int | None
     meal_name: str
     recipe_id: int
     recipe_name: str

@@ -140,8 +140,12 @@ def validate_cycle(cycle_id: int, db: Session = Depends(get_db)) -> dict:
                 ))
             continue
 
-        if planned.meal_id not in active_meal_ids:
-            issues.append(_issue("ERROR", "MISSING_OR_ARCHIVED_MEAL", f"{planned.snapshot_name} references a missing or archived source Meal.", planned_meal_id=planned.id, meal_id=planned.meal_id, day_number=slot.day_number, slot_label=label))
+        if planned.source_type == "SAVED_MEAL":
+            if planned.meal_id is None or planned.meal_id not in active_meal_ids:
+                issues.append(_issue("ERROR", "MISSING_OR_ARCHIVED_MEAL", f"{planned.snapshot_name} references a missing or archived source Meal.", planned_meal_id=planned.id, meal_id=planned.meal_id, day_number=slot.day_number, slot_label=label))
+        elif planned.source_type == "DIRECT_RECIPE":
+            if planned.source_recipe_id is None or planned.source_recipe_id not in active_recipe_ids:
+                issues.append(_issue("ERROR", "MISSING_OR_ARCHIVED_RECIPE", f"{planned.snapshot_name} references a missing or archived source Recipe.", planned_meal_id=planned.id, recipe_id=planned.source_recipe_id, day_number=slot.day_number, slot_label=label))
 
         try:
             scaled_components = json.loads(planned.scaled_components or "[]")

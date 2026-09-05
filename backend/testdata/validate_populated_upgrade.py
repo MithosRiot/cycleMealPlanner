@@ -64,16 +64,16 @@ def main() -> None:
         usage_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_completion_usage)"))}
         allocation_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_completion_allocations)"))}
         inventory_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(inventory_lots)"))}
-        leftover_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(leftovers)"))}
+        leftover_info = {item[1]: item for item in connection.execute(text("PRAGMA table_info(leftovers)"))}
         output_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_completion_outputs)"))}
-        planned_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(planned_meals)"))}
+        planned_info = {item[1]: item for item in connection.execute(text("PRAGMA table_info(planned_meals)"))}
         coverage_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(production_coverage_reservations)"))}
         cycle_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_cycles)"))}
         cycle_indexes = {item[1] for item in connection.execute(text("PRAGMA index_list(meal_cycles)"))}
         serving_unit = connection.execute(text("SELECT code, unit_family FROM measurement_units WHERE id=16")).one()
         fk_violations = connection.execute(text("PRAGMA foreign_key_check")).all()
 
-    assert version == "0034_cycle_lifecycle"
+    assert version == "0035_direct_recipe_occurrences"
     assert row.name == "Migration Test Ingredient"
     assert bool(row.staple_enabled) is False
     assert row.staple_minimum is None and row.staple_target is None and row.staple_unit_id is None
@@ -99,15 +99,17 @@ def main() -> None:
     assert {"completion_id", "component_key", "recipe_ingredient_id", "planned_ingredient_id", "actual_ingredient_id", "actual_quantity", "actual_unit_id"}.issubset(usage_columns)
     assert {"completion_id", "usage_id", "lot_id", "inventory_transaction_id", "quantity", "source_quantity"}.issubset(allocation_columns)
     assert {"ingredient_id", "source_type", "source_id", "source_name", "location_id", "quantity", "unit_id"}.issubset(inventory_columns)
-    assert {"completion_id", "planned_meal_id", "leftover_servings", "inventory_lot_id", "inventory_transaction_id"}.issubset(leftover_columns)
+    assert {"completion_id", "planned_meal_id", "source_recipe_id", "leftover_servings", "inventory_lot_id", "inventory_transaction_id"}.issubset(leftover_info)
+    assert leftover_info["source_meal_id"][3] == 0
     assert {"completion_id", "component_key", "recipe_output_id", "calculated_quantity", "actual_quantity", "inventory_lot_id"}.issubset(output_columns)
-    assert {"source_type", "source_origin_planned_meal_id", "source_record_id", "source_recipe_output_id", "source_quantity", "source_unit_id"}.issubset(planned_columns)
+    assert {"source_type", "source_recipe_id", "source_origin_planned_meal_id", "source_record_id", "source_recipe_output_id", "source_quantity", "source_unit_id"}.issubset(planned_info)
+    assert planned_info["meal_id"][3] == 0
     assert {"planned_meal_id", "source_origin_planned_meal_id", "source_type", "lot_id", "requested_quantity", "reserved_quantity", "shortage_quantity", "status"}.issubset(coverage_columns)
     assert serving_unit.code == "serving" and serving_unit.unit_family == "SERVING"
     assert fk_violations == []
 
     engine.dispose(); DB_PATH.unlink(missing_ok=True)
-    print("Populated SQLite upgrade 0020 -> 0034 succeeded and preserved existing data while adding Meal Cycle lifecycle state.")
+    print("Populated SQLite upgrade 0020 -> 0035 succeeded and preserved existing data while adding direct Recipe occurrence storage.")
 
 
 if __name__ == "__main__":
