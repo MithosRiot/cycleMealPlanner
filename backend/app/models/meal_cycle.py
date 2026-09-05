@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, Text, Time, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, Time, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -16,11 +16,18 @@ class MealCycle(Base):
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     normalized_name: Mapped[str] = mapped_column(String(160), nullable=False)
     duration_days: Mapped[int] = mapped_column(Integer, nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="DRAFT")
+    # `status` is the original DRAFT-only database column retained for upgrade
+    # compatibility. `lifecycle_status` is authoritative from v1.0 onward and
+    # is exposed to application code through the `status` attribute.
+    legacy_status: Mapped[str] = mapped_column("status", String(20), nullable=False, default="DRAFT")
+    status: Mapped[str] = mapped_column("lifecycle_status", String(20), nullable=False, default="DRAFT")
     start_date: Mapped[date | None] = mapped_column()
     notes: Mapped[str | None] = mapped_column(Text)
     population_rules: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     smart_preferences: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     slot_definitions: Mapped[list[MealSlotDefinition]] = relationship(
         back_populates="cycle",
@@ -37,6 +44,10 @@ class MealCycle(Base):
         UniqueConstraint("household_id", "normalized_name", name="uq_meal_cycles_household_normalized_name"),
         CheckConstraint("duration_days > 0 AND duration_days <= 365", name="ck_meal_cycles_duration_supported"),
         CheckConstraint("status IN ('DRAFT')", name="ck_meal_cycles_status"),
+        CheckConstraint(
+            "lifecycle_status IN ('DRAFT','ACTIVE','COMPLETED','CANCELLED')",
+            name="ck_meal_cycles_lifecycle_status",
+        ),
     )
 
 
