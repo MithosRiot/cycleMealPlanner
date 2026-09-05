@@ -26,6 +26,9 @@ function plannedSourceLabel(sourceType: PlannedMealSourceType | undefined): stri
   if (sourceType === 'DIRECT_RECIPE') return 'Direct Recipe'
   if (sourceType === 'LEFTOVER') return 'Leftover'
   if (sourceType === 'RECIPE_OUTPUT') return 'Recipe output'
+  if (sourceType === 'MANUAL') return 'Manual'
+  if (sourceType === 'EATING_OUT') return 'Eating Out'
+  if (sourceType === 'SKIPPED') return 'Skipped'
   return 'Planned occurrence'
 }
 
