@@ -14,9 +14,15 @@ down_revision: Union[str, None] = "0033_leftover_coverage"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+ACTIVE_INDEX = "uq_meal_cycles_household_active"
+
 
 def _columns(bind, table_name: str) -> set[str]:
     return {row["name"] for row in sa.inspect(bind).get_columns(table_name)}
+
+
+def _indexes(bind, table_name: str) -> set[str]:
+    return {row["name"] for row in sa.inspect(bind).get_indexes(table_name) if row.get("name")}
 
 
 def upgrade() -> None:
@@ -38,8 +44,21 @@ def upgrade() -> None:
     if "cancelled_at" not in columns:
         op.add_column("meal_cycles", sa.Column("cancelled_at", sa.DateTime(), nullable=True))
 
+    # SQLite partial unique indexes are additive and avoid rebuilding the
+    # heavily referenced meal_cycles table while still enforcing the invariant
+    # under concurrent requests.
+    if ACTIVE_INDEX not in _indexes(bind, "meal_cycles"):
+        op.create_index(
+            ACTIVE_INDEX,
+            "meal_cycles",
+            ["household_id"],
+            unique=True,
+            sqlite_where=sa.text("lifecycle_status = 'ACTIVE'"),
+        )
+
 
 def downgrade() -> None:
+    op.drop_index(ACTIVE_INDEX, table_name="meal_cycles")
     op.drop_column("meal_cycles", "cancelled_at")
     op.drop_column("meal_cycles", "completed_at")
     op.drop_column("meal_cycles", "activated_at")
