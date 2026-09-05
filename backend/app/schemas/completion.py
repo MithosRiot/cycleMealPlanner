@@ -138,7 +138,8 @@ class LeftoverRead(BaseModel):
     id: int
     completion_id: int
     planned_meal_id: int
-    source_meal_id: int
+    source_meal_id: int | None
+    source_recipe_id: int | None = None
     source_meal_name: str
     actual_servings_produced: Decimal
     actual_servings_eaten: Decimal
