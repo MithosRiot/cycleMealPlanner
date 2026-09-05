@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { fetchUseSoon } from './dashboardApi'
 import { fetchMealCycles } from './mealCyclesApi'
 import { fetchPrepSchedule } from './prepScheduleApi'
 import { fetchInventoryAvailability, fetchProductionAvailability } from './reservationsApi'
@@ -8,6 +9,12 @@ function formatServingTime(value: string | null): string {
   if (!value) return 'Unscheduled'
   const [hour, minute] = value.split(':').map(Number)
   return new Date(2000, 0, 1, hour, minute).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+function useSoonLabel(days: number): string {
+  if (days === 0) return 'Use today'
+  if (days === 1) return '1 day left'
+  return `${days} days left`
 }
 
 export default function DashboardPage() {
@@ -20,6 +27,7 @@ export default function DashboardPage() {
   })
   const inventory = useQuery({ queryKey: ['inventory-availability'], queryFn: fetchInventoryAvailability })
   const production = useQuery({ queryKey: ['production-inventory-availability'], queryFn: fetchProductionAvailability })
+  const useSoon = useQuery({ queryKey: ['dashboard-use-soon', 7], queryFn: () => fetchUseSoon(7) })
 
   if (cycles.isPending) return <section className="page-card"><p className="eyebrow">Cycle Meal Planner</p><h1>Dashboard</h1><p>Loading dashboard…</p></section>
   if (cycles.error instanceof Error) return <section className="page-card"><p className="eyebrow">Cycle Meal Planner</p><h1>Dashboard</h1><div className="error-banner">{cycles.error.message}</div></section>
@@ -50,6 +58,19 @@ export default function DashboardPage() {
       <div className="settings-card"><strong>Ingredient stock</strong><div className="ingredient-meta"><span>{inventorySummary.tracked} tracked</span><span>{inventorySummary.reserved} reserved</span><span>{inventorySummary.shortages} shortages</span></div></div>
       <div className="settings-card"><strong>Produced stock</strong><div className="ingredient-meta"><span>{producedSummary.lots} lots</span><span>{producedSummary.reservedLots} reserved</span><span>{producedSummary.availableLots} available</span></div></div>
     </div>
+
+    <section className="settings-card" style={{ marginTop: 16 }}>
+      <h2>Use Soon</h2>
+      <p className="planning-note">Available Inventory expiring within the next 7 days, ordered by urgency.</p>
+      {useSoon.error instanceof Error && <div className="error-banner">{useSoon.error.message}</div>}
+      {useSoon.data?.recommendations.map((row) => <div className="inventory-history-row" key={`${row.source_type}-${row.lot_id}`}>
+        <strong>{useSoonLabel(row.days_remaining)} · {row.source_name}</strong>
+        <span>{row.source_type === 'INGREDIENT' ? 'Ingredient' : row.source_type === 'LEFTOVER' ? 'Leftover' : 'Recipe output'} · Lot {row.lot_id}</span>
+        <span>{row.available_quantity} {row.unit_code} available · {row.location_name}</span>
+        <span>Expires {row.expiration_date}</span>
+      </div>)}
+      {!useSoon.isPending && !useSoon.error && useSoon.data?.recommendations.length === 0 && <p className="muted-line">No available Inventory expires within the next 7 days.</p>}
+    </section>
 
     <section className="settings-card" style={{ marginTop: 16 }}>
       <h2>Today's Meals</h2>
