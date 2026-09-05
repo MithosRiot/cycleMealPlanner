@@ -55,5 +55,8 @@ jobs:
       - name: Populate direct Recipe fixture
         run: python testdata/seed_direct_recipe_fixture.py
 
+      - name: Populate non-food occurrence fixture
+        run: python testdata/seed_non_food_occurrence_fixture.py
+
       - name: Validate repeated populated seed reset
         run: python testdata/seed_test_db.py --reset
