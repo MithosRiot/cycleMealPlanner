@@ -9,6 +9,7 @@ from app.api.combined_prep import router as combined_prep_router
 from app.api.completion import router as completion_router
 from app.api.cooking import router as cooking_router
 from app.api.cycle_validation import router as cycle_validation_router
+from app.api.dashboard import router as dashboard_router
 from app.api.equipment import router as equipment_router
 from app.api.expiration_planning import router as expiration_planning_router
 from app.api.gather import router as gather_router
@@ -61,6 +62,7 @@ app.include_router(production_router)
 app.include_router(production_planning_router)
 app.include_router(inventory_router)
 app.include_router(reservations_router)
+app.include_router(dashboard_router)
 app.include_router(allocation_router)
 app.include_router(gather_router)
 app.include_router(gather_locations_router)
