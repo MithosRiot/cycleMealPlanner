@@ -7,6 +7,7 @@ const savedMeal = {
   cycle_slot_id: 2,
   meal_id: 1,
   source_type: 'SAVED_MEAL',
+  source_recipe_id: null,
   source_origin_planned_meal_id: null,
   source_record_id: null,
   source_recipe_output_id: null,
@@ -26,6 +27,16 @@ const savedMeal = {
   scheduled_datetime: null,
 }
 
+const directRecipe = {
+  ...savedMeal,
+  id: 4,
+  cycle_slot_id: 4,
+  meal_id: null,
+  source_type: 'DIRECT_RECIPE',
+  source_recipe_id: 5,
+  snapshot_name: 'Direct Recipe',
+}
+
 const producedMeal = {
   ...savedMeal,
   id: 2,
@@ -41,6 +52,7 @@ const slots = [
   { id: 1, cycle_id: 1, slot_definition_id: 1, day_number: 1, sort_order: 0, scheduled_date: null, serving_time: null, scheduled_datetime: null, planned_meal: null },
   { id: 2, cycle_id: 1, slot_definition_id: 2, day_number: 1, sort_order: 1, scheduled_date: null, serving_time: null, scheduled_datetime: null, planned_meal: savedMeal },
   { id: 3, cycle_id: 1, slot_definition_id: 3, day_number: 2, sort_order: 2, scheduled_date: null, serving_time: null, scheduled_datetime: null, planned_meal: producedMeal },
+  { id: 4, cycle_id: 1, slot_definition_id: 3, day_number: 3, sort_order: 2, scheduled_date: null, serving_time: null, scheduled_datetime: null, planned_meal: directRecipe },
 ]
 
 const result = producedSourcePlacements(slots)
