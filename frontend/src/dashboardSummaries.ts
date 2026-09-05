@@ -3,7 +3,7 @@ import type { DashboardValidationAlert } from './dashboardAlerts'
 import type { MealCycle } from './mealCyclesApi'
 import type { PrepScheduleTask } from './prepScheduleApi'
 import type { ShoppingItem } from './shoppingApi'
-import { todaysMealSlots, todaysPrepTasks } from './dashboardSelectors'
+import { todaysMealSlots, todaysPrepTasks } from './dashboardSelectors.ts'
 
 export type DashboardDailySummary = {
   mealCount: number
