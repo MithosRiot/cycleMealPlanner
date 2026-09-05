@@ -1,10 +1,14 @@
+from datetime import datetime
 from decimal import Decimal
+import hashlib
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database.session import get_db
+from app.models.completion import MealCompletion
 from app.models.meal_cycle import CycleSlot, MealCycle
 from app.models.planned_meal import PlannedMeal
 from app.schemas.planned_meal import NonFoodOccurrenceAssign, PlannedMealRead
@@ -37,6 +41,20 @@ def _display_name(payload: NonFoodOccurrenceAssign) -> str:
     if payload.occurrence_type == "EATING_OUT":
         return payload.title or "Eating out"
     return payload.title or "Manual entry"
+
+
+def _completion_fingerprint(planned: PlannedMeal) -> str:
+    raw = json.dumps(
+        {
+            "source_type": planned.source_type,
+            "snapshot_name": planned.snapshot_name,
+            "snapshot_description": planned.snapshot_description,
+            "scaled_components": [],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 @router.post(
@@ -78,6 +96,25 @@ def assign_non_food_occurrence(
         snapshot_components="[]",
     )
     db.add(planned)
+    db.flush()
+
+    now = datetime.utcnow()
+    db.add(
+        MealCompletion(
+            planned_meal_id=planned.id,
+            status="FINALIZED",
+            plan_fingerprint=_completion_fingerprint(planned),
+            snapshot_name=planned.snapshot_name,
+            snapshot_planned_servings=Decimal("0"),
+            snapshot_planned_leftover_servings=Decimal("0"),
+            snapshot_scaled_components="[]",
+            created_at=now,
+            updated_at=now,
+            finalized_at=now,
+            actual_servings_produced=Decimal("0"),
+            actual_servings_eaten=Decimal("0"),
+        )
+    )
     db.commit()
     db.refresh(planned)
     return planned
