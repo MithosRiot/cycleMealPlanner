@@ -53,7 +53,9 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Atomic Meal completion finalization with actual-Ingredient lot allocation, valid Gather-selection preference, deterministic fallback allocation, Decimal-safe cross-unit consumption, immutable CONSUME transactions, lot-level audit history, structured shortage rollback, finalized locking, and idempotent retry behavior.
 - Post-finalization production reconciliation with actual servings produced/eaten, deterministic leftover quantities including zero-leftover completion, durable leftover Inventory lots, actual RecipeOutput scaling and review/override, `PRODUCTION` transaction provenance, immutable historical output snapshots, and idempotent production commit behavior.
 - Produced-stock planning coverage with automatic release of finalized Meal ingredient reservations, exact leftover/RecipeOutput source provenance, future-slot reservations, Physical / Reserved / Available visibility, excess-stock availability, deterministic shortage warnings, reservation-safe produced Inventory edits, and release-on-removal history.
+- Operational Dashboard foundation for current-cycle meals, today's prep work, and high-level Ingredient/produced-stock status.
+- Dashboard use-soon recommendations for Ingredient, Leftover, and RecipeOutput lots expiring within seven days, ordered by urgency and filtered by reservation-aware Available quantity.
 
 ### Known limitations
-- Expiration-aware alerts beyond source-lot validation and advanced reconciliation corrections are planned for later milestones.
+- Dashboard alerts for cycle-validation issues, Shopping shortages, and daily/evening summaries remain planned for later v0.9 increments.
 - The development database currently defaults to `./data`; packaged Windows persistence will be moved outside the installation directory.
