@@ -4,7 +4,7 @@ A self-hosted/web-based meal planning application for recipes, reusable meals, f
 
 ## Project status
 
-v0.9 Dashboard + Alerts is complete. Active development is now v1.0 Initial Complete Product. v1.0 now includes an explicit Meal Cycle lifecycle plus direct Recipe occurrences: a Recipe can be placed into a cycle without first creating a saved Meal wrapper, while retaining normal scaling, reservations, Shopping demand, prep, Gather, Cooking Mode, completion, leftovers, Recipe outputs, validation, and Dashboard behavior. Manual, Eating Out, and Skipped occurrence types remain the second half of the occurrence-model increment.
+v0.9 Dashboard + Alerts is complete. Active development is now v1.0 Initial Complete Product. v1.0 now includes an explicit Meal Cycle lifecycle plus the complete planned-occurrence model: saved Meals, direct Recipes, Leftovers, RecipeOutputs, Manual entries, Eating Out, and Skipped meals. Direct Recipes retain the normal food workflow; non-food occurrences persist as historical plan entries while creating no Ingredient reservations, Shopping demand, prep, Gather, Cooking, or Inventory deductions.
 
 ACTIVE plan editing remains intentionally frozen until the dedicated active-cycle revision/reconciliation increment is implemented. The deterministic seeded reset starts Sample Week on the reset date; before any production is committed its Dashboard stock summary shows 16 tracked Ingredients, 3 with active reservations, 0 Ingredient shortages, and 0 produced lots.
 
