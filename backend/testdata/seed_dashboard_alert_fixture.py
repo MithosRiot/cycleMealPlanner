@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 try:
     from testdata.seed_test_db import configure_database
 except ModuleNotFoundError:  # Direct execution from backend/testdata.
@@ -9,36 +11,49 @@ except ModuleNotFoundError:  # Direct execution from backend/testdata.
 def seed_dashboard_alert_fixture() -> None:
     configure_database()
 
-    from fastapi.testclient import TestClient
-    from app.main import app
+    from app.api.cycle_validation import validate_cycle
+    from app.api.shopping import _cycle_or_404, _regenerate, _serialize
+    from app.database.migrations import run_migrations
+    from app.database.session import SessionLocal
+    from app.models.inventory import InventoryLot, InventoryTransaction
 
-    with TestClient(app) as client:
-        lot = client.get("/api/inventory/10")
-        lot.raise_for_status()
-        quantity = lot.json()["quantity"]
-        if float(quantity) > 0:
-            removed = client.post(
-                "/api/inventory/10/remove",
-                json={"quantity": quantity, "note": "v0.9 dashboard alert test fixture"},
+    run_migrations()
+
+    with SessionLocal() as db:
+        lot = db.get(InventoryLot, 10)
+        if lot is None:
+            raise RuntimeError("Seeded Onion Inventory Lot 10 was not found. Run seed_test_db.py --reset first.")
+
+        quantity = Decimal(lot.quantity)
+        if quantity > 0:
+            lot.quantity = Decimal("0")
+            db.add(
+                InventoryTransaction(
+                    household_id=1,
+                    lot_id=lot.id,
+                    transaction_type="MANUAL_REMOVE",
+                    quantity_delta=-quantity,
+                    unit_id=lot.unit_id,
+                    from_location_id=lot.location_id,
+                    note="v0.9 dashboard alert test fixture",
+                )
             )
-            removed.raise_for_status()
+            db.commit()
 
-        shopping = client.post("/api/shopping/1/regenerate")
-        shopping.raise_for_status()
-        shopping_json = shopping.json()
-        onion = next(item for item in shopping_json["items"] if item["ingredient_name"] == "Onion")
+        cycle = _cycle_or_404(db, 1)
+        shopping_list = _regenerate(db, cycle)
+        shopping = _serialize(db, shopping_list, cycle)
+        onion = next(item for item in shopping["items"] if item["ingredient_name"] == "Onion")
         shopping_shortages = [
             item
-            for item in shopping_json["items"]
-            if item["status"] == "PENDING" and float(item["generated_quantity"]) > 0
+            for item in shopping["items"]
+            if item["status"] == "PENDING" and Decimal(str(item["generated_quantity"])) > 0
         ]
 
-        validation = client.get("/api/meal-cycles/1/validate")
-        validation.raise_for_status()
-        validation_json = validation.json()
+        validation = validate_cycle(1, db)
         shortage = next(
             issue
-            for issue in validation_json["issues"]
+            for issue in validation["issues"]
             if issue["code"] == "INVENTORY_SHORTAGE" and issue["context"].get("ingredient_id") == 10
         )
 
@@ -51,9 +66,9 @@ def seed_dashboard_alert_fixture() -> None:
         print(f"Validation alert: {shortage['message']}")
         print(
             "Expected Dashboard counts: "
-            f"{len(validation_json['issues'])} validation; "
+            f"{len(validation['issues'])} validation; "
             f"{len(shopping_shortages)} shopping "
-            f"({validation_json['error_count']} errors, {validation_json['warning_count']} warnings in Plan Validation)"
+            f"({validation['error_count']} errors, {validation['warning_count']} warnings in Plan Validation)"
         )
 
 
