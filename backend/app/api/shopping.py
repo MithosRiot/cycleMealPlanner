@@ -19,26 +19,17 @@ from app.services.units import convert_quantity
 
 router = APIRouter(prefix="/api/shopping", tags=["shopping"])
 HOUSEHOLD_ID = 1
-TERMINAL_STATUSES = {"COMPLETED", "SKIPPED"}
 
 
 def _cycle_or_404(db: Session, cycle_id: int) -> MealCycle:
-    cycle = db.scalar(
-        select(MealCycle)
-        .where(MealCycle.id == cycle_id, MealCycle.household_id == HOUSEHOLD_ID)
-        .options(selectinload(MealCycle.slots).selectinload(CycleSlot.planned_meal))
-    )
+    cycle = db.scalar(select(MealCycle).where(MealCycle.id == cycle_id, MealCycle.household_id == HOUSEHOLD_ID).options(selectinload(MealCycle.slots).selectinload(CycleSlot.planned_meal)))
     if cycle is None:
         raise HTTPException(status_code=404, detail="Meal cycle not found")
     return cycle
 
 
 def _shopping_list_or_404(db: Session, cycle_id: int) -> ShoppingList:
-    shopping_list = db.scalar(
-        select(ShoppingList)
-        .where(ShoppingList.meal_cycle_id == cycle_id, ShoppingList.household_id == HOUSEHOLD_ID)
-        .options(selectinload(ShoppingList.items).selectinload(ShoppingListItem.purchases))
-    )
+    shopping_list = db.scalar(select(ShoppingList).where(ShoppingList.meal_cycle_id == cycle_id, ShoppingList.household_id == HOUSEHOLD_ID).options(selectinload(ShoppingList.items).selectinload(ShoppingListItem.purchases)))
     if shopping_list is None:
         raise HTTPException(status_code=404, detail="Shopping list has not been generated")
     return shopping_list
@@ -51,35 +42,53 @@ def _item_or_404(shopping_list: ShoppingList, item_id: int) -> ShoppingListItem:
     return item
 
 
+def _satisfied_in_target(item: ShoppingListItem, target_unit: MeasurementUnit, units: dict[int, MeasurementUnit]) -> Decimal:
+    total = Decimal("0")
+    for purchase in item.purchases:
+        source_unit = units.get(purchase.satisfied_unit_id or purchase.actual_unit_id)
+        if source_unit is None or source_unit.unit_family != target_unit.unit_family:
+            continue
+        quantity = Decimal(purchase.satisfied_quantity if purchase.satisfied_quantity is not None else purchase.actual_quantity)
+        total += convert_quantity(quantity, source_unit, target_unit)
+    return total
+
+
+def _remaining_for(item: ShoppingListItem, target_unit: MeasurementUnit, units: dict[int, MeasurementUnit]) -> Decimal:
+    desired = max(Decimal(item.generated_quantity) + Decimal(item.adjustment_quantity), Decimal("0"))
+    return max(desired - _satisfied_in_target(item, target_unit, units), Decimal("0"))
+
+
 def _serialize(db: Session, shopping_list: ShoppingList, cycle: MealCycle) -> dict:
-    ingredients = {
-        ingredient.id: ingredient
-        for ingredient in db.scalars(select(Ingredient).where(Ingredient.household_id == HOUSEHOLD_ID))
-    }
+    ingredients = {ingredient.id: ingredient for ingredient in db.scalars(select(Ingredient).where(Ingredient.household_id == HOUSEHOLD_ID))}
     categories = {category.id: category for category in db.scalars(select(ShoppingCategory))}
     units = {unit.id: unit for unit in db.scalars(select(MeasurementUnit))}
     items = []
     for item in shopping_list.items:
-        if (
-            cycle.status != "ACTIVE"
-            and item.status == "SKIPPED"
-            and Decimal(item.required_quantity or 0) == 0
-            and not item.purchases
-        ):
+        if cycle.status != "ACTIVE" and item.status == "SKIPPED" and Decimal(item.required_quantity or 0) == 0 and not item.purchases:
             continue
         ingredient = ingredients[item.ingredient_id]
         category = categories.get(item.shopping_category_id)
         unit = units[item.unit_id]
         actual_unit = units.get(item.actual_unit_id) if item.actual_unit_id else None
-        final_quantity = max(Decimal(item.generated_quantity) + Decimal(item.adjustment_quantity), Decimal("0"))
+        desired = max(Decimal(item.generated_quantity) + Decimal(item.adjustment_quantity), Decimal("0"))
+        satisfied = _satisfied_in_target(item, unit, units)
+        remaining = max(desired - satisfied, Decimal("0"))
         purchases = []
         for purchase in item.purchases:
             purchase_unit = units[purchase.actual_unit_id]
+            satisfied_unit = units[purchase.satisfied_unit_id or purchase.actual_unit_id]
+            purchased_ingredient = ingredients.get(purchase.purchased_ingredient_id or item.ingredient_id)
             purchases.append({
                 "id": purchase.id,
                 "actual_quantity": purchase.actual_quantity,
                 "actual_unit_id": purchase.actual_unit_id,
                 "actual_unit_code": purchase_unit.code,
+                "purchased_ingredient_id": purchase.purchased_ingredient_id or item.ingredient_id,
+                "purchased_ingredient_name": purchased_ingredient.name if purchased_ingredient else f"Ingredient {purchase.purchased_ingredient_id}",
+                "satisfied_quantity": purchase.satisfied_quantity if purchase.satisfied_quantity is not None else purchase.actual_quantity,
+                "satisfied_unit_id": purchase.satisfied_unit_id or purchase.actual_unit_id,
+                "satisfied_unit_code": satisfied_unit.code,
+                "purchase_kind": purchase.purchase_kind,
                 "purchase_date": purchase.purchase_date,
                 "storage_location_id": purchase.storage_location_id,
                 "expiration_date": purchase.expiration_date,
@@ -87,364 +96,146 @@ def _serialize(db: Session, shopping_list: ShoppingList, cycle: MealCycle) -> di
                 "inventory_lot_id": purchase.inventory_lot_id,
                 "completed_at": purchase.completed_at,
             })
-        items.append(
-            {
-                "id": item.id,
-                "ingredient_id": item.ingredient_id,
-                "ingredient_name": ingredient.name,
-                "shopping_category_id": item.shopping_category_id,
-                "shopping_category_name": category.name if category else "Uncategorized",
-                "shopping_category_sort_order": category.sort_order if category else 9999,
-                "unit_id": item.unit_id,
-                "unit_code": unit.code,
-                "unit_family": item.unit_family,
-                "required_quantity": item.required_quantity,
-                "inventory_quantity": item.inventory_quantity,
-                "generated_quantity": item.generated_quantity,
-                "adjustment_quantity": item.adjustment_quantity,
-                "final_quantity": final_quantity,
-                "source_trace": item.source_trace,
-                "warning": item.warning,
-                "status": item.status,
-                "actual_quantity": item.actual_quantity,
-                "actual_unit_id": item.actual_unit_id,
-                "actual_unit_code": actual_unit.code if actual_unit else None,
-                "purchase_date": item.purchase_date,
-                "storage_location_id": item.storage_location_id,
-                "expiration_date": item.expiration_date,
-                "purchase_notes": item.purchase_notes,
-                "inventory_lot_id": item.inventory_lot_id,
-                "completed_at": item.completed_at,
-                "baseline_required_quantity": item.baseline_required_quantity,
-                "plan_delta_quantity": item.plan_delta_quantity,
-                "purchased_excess_quantity": item.purchased_excess_quantity,
-                "purchases": purchases,
-            }
-        )
+        items.append({
+            "id": item.id, "ingredient_id": item.ingredient_id, "ingredient_name": ingredient.name,
+            "shopping_category_id": item.shopping_category_id,
+            "shopping_category_name": category.name if category else "Uncategorized",
+            "shopping_category_sort_order": category.sort_order if category else 9999,
+            "unit_id": item.unit_id, "unit_code": unit.code, "unit_family": item.unit_family,
+            "required_quantity": item.required_quantity, "inventory_quantity": item.inventory_quantity,
+            "generated_quantity": item.generated_quantity, "adjustment_quantity": item.adjustment_quantity,
+            "final_quantity": remaining, "satisfied_quantity": satisfied, "remaining_quantity": remaining,
+            "source_trace": item.source_trace, "warning": item.warning, "status": item.status,
+            "actual_quantity": item.actual_quantity, "actual_unit_id": item.actual_unit_id,
+            "actual_unit_code": actual_unit.code if actual_unit else None, "purchase_date": item.purchase_date,
+            "storage_location_id": item.storage_location_id, "expiration_date": item.expiration_date,
+            "purchase_notes": item.purchase_notes, "inventory_lot_id": item.inventory_lot_id,
+            "completed_at": item.completed_at, "baseline_required_quantity": item.baseline_required_quantity,
+            "plan_delta_quantity": item.plan_delta_quantity, "purchased_excess_quantity": item.purchased_excess_quantity,
+            "purchases": purchases,
+        })
     items.sort(key=lambda value: (value["shopping_category_sort_order"], value["shopping_category_name"], value["ingredient_name"], value["unit_family"]))
-    return {
-        "id": shopping_list.id,
-        "meal_cycle_id": shopping_list.meal_cycle_id,
-        "meal_cycle_name": cycle.name,
-        "generated_at": shopping_list.generated_at,
-        "items": items,
-    }
-
-
-def _purchased_in_target(item: ShoppingListItem, target_unit: MeasurementUnit, units: dict[int, MeasurementUnit]) -> Decimal:
-    total = Decimal("0")
-    for purchase in item.purchases:
-        source_unit = units.get(purchase.actual_unit_id)
-        if source_unit is None or source_unit.unit_family != target_unit.unit_family:
-            continue
-        total += convert_quantity(Decimal(purchase.actual_quantity), source_unit, target_unit)
-    return total
+    return {"id": shopping_list.id, "meal_cycle_id": shopping_list.meal_cycle_id, "meal_cycle_name": cycle.name, "generated_at": shopping_list.generated_at, "items": items}
 
 
 def _regenerate(db: Session, cycle: MealCycle, *, commit: bool = True) -> ShoppingList:
     units = {unit.id: unit for unit in db.scalars(select(MeasurementUnit))}
-    ingredients = {
-        ingredient.id: ingredient
-        for ingredient in db.scalars(select(Ingredient).where(Ingredient.household_id == HOUSEHOLD_ID))
-    }
-
-    existing = db.scalar(
-        select(ShoppingList)
-        .where(ShoppingList.meal_cycle_id == cycle.id, ShoppingList.household_id == HOUSEHOLD_ID)
-        .options(selectinload(ShoppingList.items).selectinload(ShoppingListItem.purchases))
-    )
+    ingredients = {ingredient.id: ingredient for ingredient in db.scalars(select(Ingredient).where(Ingredient.household_id == HOUSEHOLD_ID))}
+    existing = db.scalar(select(ShoppingList).where(ShoppingList.meal_cycle_id == cycle.id, ShoppingList.household_id == HOUSEHOLD_ID).options(selectinload(ShoppingList.items).selectinload(ShoppingListItem.purchases)))
     if existing is None:
         shopping_list = ShoppingList(household_id=HOUSEHOLD_ID, meal_cycle_id=cycle.id, generated_at=datetime.utcnow())
-        db.add(shopping_list)
-        db.flush()
-        existing_by_key: dict[tuple[int, str], ShoppingListItem] = {}
+        db.add(shopping_list); db.flush(); existing_by_key = {}
     else:
-        shopping_list = existing
-        shopping_list.generated_at = datetime.utcnow()
+        shopping_list = existing; shopping_list.generated_at = datetime.utcnow()
         existing_by_key = {(item.ingredient_id, item.unit_family): item for item in existing.items}
 
-    requirements: dict[tuple[int, str], list[dict]] = defaultdict(list)
-    families_by_ingredient: dict[int, set[str]] = defaultdict(set)
-    manual_review_groups: set[tuple[int, str]] = set()
-
+    requirements = defaultdict(list); families_by_ingredient = defaultdict(set); manual_review_groups = set()
     for slot in sorted(cycle.slots, key=lambda value: (value.day_number, value.sort_order, value.id)):
         planned = slot.planned_meal
-        if planned is None:
-            continue
+        if planned is None: continue
         for component in json.loads(planned.scaled_components or "[]"):
             for ingredient_row in component.get("ingredients", []):
-                ingredient_id = int(ingredient_row["ingredient_id"])
-                unit_id = int(ingredient_row["unit_id"])
-                unit = units.get(unit_id)
-                if unit is None:
-                    raise HTTPException(status_code=409, detail=f"Measurement unit {unit_id} no longer exists")
-                key = (ingredient_id, unit.unit_family)
-                families_by_ingredient[ingredient_id].add(unit.unit_family)
-                requirements[key].append(
-                    {
-                        "quantity": Decimal(str(ingredient_row["quantity"])),
-                        "unit_id": unit_id,
-                        "planned_meal_id": planned.id,
-                        "cycle_slot_id": slot.id,
-                        "day_number": slot.day_number,
-                        "meal_name": planned.snapshot_name,
-                        "recipe_id": int(component["recipe_id"]),
-                    }
-                )
-                if ingredient_row.get("manual_review"):
-                    manual_review_groups.add(key)
-
+                ingredient_id = int(ingredient_row["ingredient_id"]); unit_id = int(ingredient_row["unit_id"]); unit = units.get(unit_id)
+                if unit is None: raise HTTPException(status_code=409, detail=f"Measurement unit {unit_id} no longer exists")
+                key = (ingredient_id, unit.unit_family); families_by_ingredient[ingredient_id].add(unit.unit_family)
+                requirements[key].append({"quantity": Decimal(str(ingredient_row["quantity"])), "unit_id": unit_id, "planned_meal_id": planned.id, "cycle_slot_id": slot.id, "day_number": slot.day_number, "meal_name": planned.snapshot_name, "recipe_id": int(component["recipe_id"])})
+                if ingredient_row.get("manual_review"): manual_review_groups.add(key)
     for ingredient in ingredients.values():
-        if not ingredient.active or not ingredient.staple_enabled or ingredient.staple_unit_id is None:
-            continue
+        if not ingredient.active or not ingredient.staple_enabled or ingredient.staple_unit_id is None: continue
         staple_unit = units.get(ingredient.staple_unit_id)
-        if staple_unit is None or ingredient.staple_minimum is None or ingredient.staple_target is None:
-            continue
-        key = (ingredient.id, staple_unit.unit_family)
-        families_by_ingredient[ingredient.id].add(staple_unit.unit_family)
-        requirements.setdefault(key, [])
+        if staple_unit is None or ingredient.staple_minimum is None or ingredient.staple_target is None: continue
+        key = (ingredient.id, staple_unit.unit_family); families_by_ingredient[ingredient.id].add(staple_unit.unit_family); requirements.setdefault(key, [])
 
-    seen_keys: set[tuple[int, str]] = set()
+    seen_keys = set()
     for key in sorted(requirements):
-        seen_keys.add(key)
-        ingredient_id, family = key
-        ingredient = ingredients.get(ingredient_id)
-        if ingredient is None:
-            raise HTTPException(status_code=409, detail=f"Ingredient {ingredient_id} no longer exists")
-        rows = requirements[key]
-        preferred = units.get(ingredient.preferred_unit_id) if ingredient.preferred_unit_id else None
-        staple_unit = units.get(ingredient.staple_unit_id) if ingredient.staple_unit_id else None
-        if preferred and preferred.unit_family == family:
-            target_unit = preferred
-        elif rows:
-            target_unit = units[min(row["unit_id"] for row in rows)]
-        elif staple_unit and staple_unit.unit_family == family:
-            target_unit = staple_unit
-        else:
-            continue
-
-        required = Decimal("0")
-        source_trace = []
+        seen_keys.add(key); ingredient_id, family = key; ingredient = ingredients.get(ingredient_id)
+        if ingredient is None: raise HTTPException(status_code=409, detail=f"Ingredient {ingredient_id} no longer exists")
+        rows = requirements[key]; preferred = units.get(ingredient.preferred_unit_id) if ingredient.preferred_unit_id else None; staple_unit = units.get(ingredient.staple_unit_id) if ingredient.staple_unit_id else None
+        if preferred and preferred.unit_family == family: target_unit = preferred
+        elif rows: target_unit = units[min(row["unit_id"] for row in rows)]
+        elif staple_unit and staple_unit.unit_family == family: target_unit = staple_unit
+        else: continue
+        required = Decimal("0"); source_trace = []
         for row in rows:
-            source_unit = units[row["unit_id"]]
-            required += convert_quantity(row["quantity"], source_unit, target_unit)
-            source_trace.append(
-                {
-                    "planned_meal_id": row["planned_meal_id"],
-                    "cycle_slot_id": row["cycle_slot_id"],
-                    "day_number": row["day_number"],
-                    "meal_name": row["meal_name"],
-                    "recipe_id": row["recipe_id"],
-                    "quantity": str(row["quantity"]),
-                    "unit_id": row["unit_id"],
-                }
-            )
-
-        physical, reserved_elsewhere, available, _ = availability_for(
-            db,
-            ingredient_id,
-            family,
-            target_unit,
-            exclude_cycle_id=cycle.id,
-            units=units,
-        )
-        meal_shortage = max(required - available, Decimal("0"))
-        generated = meal_shortage
-        warnings = []
-
+            source_unit = units[row["unit_id"]]; required += convert_quantity(row["quantity"], source_unit, target_unit)
+            source_trace.append({"planned_meal_id": row["planned_meal_id"], "cycle_slot_id": row["cycle_slot_id"], "day_number": row["day_number"], "meal_name": row["meal_name"], "recipe_id": row["recipe_id"], "quantity": str(row["quantity"]), "unit_id": row["unit_id"]})
+        _, reserved_elsewhere, available, _ = availability_for(db, ingredient_id, family, target_unit, exclude_cycle_id=cycle.id, units=units)
+        generated = max(required - available, Decimal("0")); warnings = []
         if ingredient.staple_enabled and staple_unit is not None and staple_unit.unit_family == family and ingredient.staple_minimum is not None and ingredient.staple_target is not None:
-            staple_minimum = convert_quantity(Decimal(ingredient.staple_minimum), staple_unit, target_unit)
-            staple_target = convert_quantity(Decimal(ingredient.staple_target), staple_unit, target_unit)
-            projected_free = max(available - required, Decimal("0"))
+            staple_minimum = convert_quantity(Decimal(ingredient.staple_minimum), staple_unit, target_unit); staple_target = convert_quantity(Decimal(ingredient.staple_target), staple_unit, target_unit); projected_free = max(available - required, Decimal("0"))
             if projected_free < staple_minimum:
-                generated = max(required + staple_target - available, Decimal("0"))
-                warnings.append(
-                    f"Staple stock would be {projected_free} {target_unit.code}, below minimum {staple_minimum}; replenish toward target {staple_target}."
-                )
-                source_trace.append(
-                    {
-                        "source": "STAPLE",
-                        "minimum": str(staple_minimum),
-                        "target": str(staple_target),
-                        "projected_free": str(projected_free),
-                        "unit_id": target_unit.id,
-                    }
-                )
-
-        if len(families_by_ingredient[ingredient_id]) > 1:
-            warnings.append("Ingredient requirements use incompatible unit families and are kept separate.")
-        if key in manual_review_groups:
-            warnings.append("One or more recipe ingredients use MANUAL scaling; review this quantity.")
-        if reserved_elsewhere > 0:
-            warnings.append(
-                f"{reserved_elsewhere} {target_unit.code} of physical inventory is reserved for other planned cycles."
-            )
-
+                generated = max(required + staple_target - available, Decimal("0")); warnings.append(f"Staple stock would be {projected_free} {target_unit.code}, below minimum {staple_minimum}; replenish toward target {staple_target}."); source_trace.append({"source": "STAPLE", "minimum": str(staple_minimum), "target": str(staple_target), "projected_free": str(projected_free), "unit_id": target_unit.id})
+        if len(families_by_ingredient[ingredient_id]) > 1: warnings.append("Ingredient requirements use incompatible unit families and are kept separate.")
+        if key in manual_review_groups: warnings.append("One or more recipe ingredients use MANUAL scaling; review this quantity.")
+        if reserved_elsewhere > 0: warnings.append(f"{reserved_elsewhere} {target_unit.code} of physical inventory is reserved for other planned cycles.")
         item = existing_by_key.get(key)
         if item is None:
-            item = ShoppingListItem(
-                shopping_list_id=shopping_list.id,
-                ingredient_id=ingredient_id,
-                unit_family=family,
-                adjustment_quantity=Decimal("0"),
-                status="PENDING",
-                baseline_required_quantity=required,
-                plan_delta_quantity=Decimal("0"),
-                purchased_excess_quantity=Decimal("0"),
-            )
-            db.add(item)
-        elif item.baseline_required_quantity is None:
-            item.baseline_required_quantity = Decimal(item.required_quantity)
-
-        purchased = _purchased_in_target(item, target_unit, units)
-        item.shopping_category_id = ingredient.shopping_category_id
-        item.unit_id = target_unit.id
-        item.required_quantity = required
-        item.inventory_quantity = available
-        item.generated_quantity = generated
-        item.source_trace = json.dumps(source_trace, sort_keys=True)
-        item.warning = " ".join(warnings) or None
-        item.plan_delta_quantity = required - Decimal(item.baseline_required_quantity or 0)
-        item.purchased_excess_quantity = max(purchased - required, Decimal("0"))
-        if item.purchases and item.plan_delta_quantity <= 0:
-            item.status = "COMPLETED"
-        elif generated > 0:
-            item.status = "PENDING"
-        elif item.purchases:
-            item.status = "COMPLETED"
-
+            item = ShoppingListItem(shopping_list_id=shopping_list.id, ingredient_id=ingredient_id, unit_family=family, adjustment_quantity=Decimal("0"), status="PENDING", baseline_required_quantity=required, plan_delta_quantity=Decimal("0"), purchased_excess_quantity=Decimal("0")); db.add(item)
+        elif item.baseline_required_quantity is None: item.baseline_required_quantity = Decimal(item.required_quantity)
+        item.shopping_category_id = ingredient.shopping_category_id; item.unit_id = target_unit.id; item.required_quantity = required; item.inventory_quantity = available; item.generated_quantity = generated; item.source_trace = json.dumps(source_trace, sort_keys=True); item.warning = " ".join(warnings) or None; item.plan_delta_quantity = required - Decimal(item.baseline_required_quantity or 0)
+        satisfied = _satisfied_in_target(item, target_unit, units); item.purchased_excess_quantity = max(satisfied - required, Decimal("0")); item.status = "COMPLETED" if _remaining_for(item, target_unit, units) <= 0 and item.purchases else "PENDING" if _remaining_for(item, target_unit, units) > 0 else item.status
     for key, item in existing_by_key.items():
-        if key in seen_keys:
-            continue
+        if key in seen_keys: continue
         target_unit = units.get(item.unit_id)
-        if target_unit is None:
-            continue
-        if item.baseline_required_quantity is None:
-            item.baseline_required_quantity = Decimal(item.required_quantity)
-        purchased = _purchased_in_target(item, target_unit, units)
-        item.required_quantity = Decimal("0")
-        item.generated_quantity = Decimal("0")
-        item.source_trace = "[]"
-        item.plan_delta_quantity = -Decimal(item.baseline_required_quantity or 0)
-        item.purchased_excess_quantity = purchased
-        if item.purchases:
-            item.status = "COMPLETED"
-        elif item.status == "PENDING":
-            item.status = "SKIPPED"
-
-    shopping_list_id = shopping_list.id
-    db.flush()
-    if commit:
-        db.commit()
-        db.expire_all()
-    return db.scalar(
-        select(ShoppingList)
-        .where(ShoppingList.id == shopping_list_id)
-        .options(selectinload(ShoppingList.items).selectinload(ShoppingListItem.purchases))
-        .execution_options(populate_existing=True)
-    )
+        if target_unit is None: continue
+        if item.baseline_required_quantity is None: item.baseline_required_quantity = Decimal(item.required_quantity)
+        satisfied = _satisfied_in_target(item, target_unit, units); item.required_quantity = Decimal("0"); item.generated_quantity = Decimal("0"); item.source_trace = "[]"; item.plan_delta_quantity = -Decimal(item.baseline_required_quantity or 0); item.purchased_excess_quantity = satisfied; item.status = "COMPLETED" if item.purchases else "SKIPPED" if item.status == "PENDING" else item.status
+    shopping_list_id = shopping_list.id; db.flush()
+    if commit: db.commit(); db.expire_all()
+    return db.scalar(select(ShoppingList).where(ShoppingList.id == shopping_list_id).options(selectinload(ShoppingList.items).selectinload(ShoppingListItem.purchases)).execution_options(populate_existing=True))
 
 
 @router.get("/{cycle_id}", response_model=ShoppingListRead)
 def get_shopping_list(cycle_id: int, db: Session = Depends(get_db)) -> dict:
-    cycle = _cycle_or_404(db, cycle_id)
-    return _serialize(db, _shopping_list_or_404(db, cycle_id), cycle)
+    cycle = _cycle_or_404(db, cycle_id); return _serialize(db, _shopping_list_or_404(db, cycle_id), cycle)
 
 
 @router.post("/{cycle_id}/regenerate", response_model=ShoppingListRead)
 def regenerate_shopping_list(cycle_id: int, db: Session = Depends(get_db)) -> dict:
-    cycle = _cycle_or_404(db, cycle_id)
-    return _serialize(db, _regenerate(db, cycle), cycle)
+    cycle = _cycle_or_404(db, cycle_id); return _serialize(db, _regenerate(db, cycle), cycle)
 
 
 @router.put("/{cycle_id}/items/{item_id}", response_model=ShoppingListRead)
 def adjust_shopping_item(cycle_id: int, item_id: int, payload: ShoppingItemAdjustment, db: Session = Depends(get_db)) -> dict:
-    cycle = _cycle_or_404(db, cycle_id)
-    shopping_list = _shopping_list_or_404(db, cycle_id)
-    item = _item_or_404(shopping_list, item_id)
-    if item.status != "PENDING":
-        raise HTTPException(status_code=409, detail="Non-pending shopping items cannot be adjusted")
-    item.adjustment_quantity = payload.adjustment_quantity
-    db.commit()
-    return _serialize(db, shopping_list, cycle)
+    cycle = _cycle_or_404(db, cycle_id); shopping_list = _shopping_list_or_404(db, cycle_id); item = _item_or_404(shopping_list, item_id)
+    if item.status != "PENDING": raise HTTPException(status_code=409, detail="Non-pending shopping items cannot be adjusted")
+    item.adjustment_quantity = payload.adjustment_quantity; db.commit(); return _serialize(db, shopping_list, cycle)
 
 
 @router.post("/{cycle_id}/items/{item_id}/complete", response_model=ShoppingListRead)
 def complete_shopping_item(cycle_id: int, item_id: int, payload: ShoppingItemComplete, db: Session = Depends(get_db)) -> dict:
-    cycle = _cycle_or_404(db, cycle_id)
-    shopping_list = _shopping_list_or_404(db, cycle_id)
-    item = _item_or_404(shopping_list, item_id)
-    if item.status != "PENDING":
-        raise HTTPException(status_code=409, detail="Only pending Shopping demand can be purchased")
-
-    unit = db.get(MeasurementUnit, payload.actual_unit_id)
-    if unit is None:
-        raise HTTPException(status_code=400, detail="Measurement unit not found")
-    if unit.unit_family != item.unit_family:
-        raise HTTPException(status_code=409, detail="Purchased unit must use the same measurement family as the shopping item")
+    cycle = _cycle_or_404(db, cycle_id); shopping_list = _shopping_list_or_404(db, cycle_id); item = _item_or_404(shopping_list, item_id)
+    if payload.idempotency_key:
+        existing = db.scalar(select(ShoppingItemPurchase).where(ShoppingItemPurchase.idempotency_key == payload.idempotency_key))
+        if existing is not None:
+            if existing.shopping_list_item_id != item.id: raise HTTPException(status_code=409, detail="Purchase idempotency key was already used for another Shopping item")
+            return _serialize(db, shopping_list, cycle)
+    if item.status != "PENDING": raise HTTPException(status_code=409, detail="Only pending Shopping demand can be purchased")
+    units = {unit.id: unit for unit in db.scalars(select(MeasurementUnit))}; target_unit = units[item.unit_id]; actual_unit = units.get(payload.actual_unit_id)
+    if actual_unit is None: raise HTTPException(status_code=400, detail="Measurement unit not found")
+    purchased_ingredient_id = payload.purchased_ingredient_id or item.ingredient_id
+    purchased_ingredient = db.scalar(select(Ingredient).where(Ingredient.id == purchased_ingredient_id, Ingredient.household_id == HOUSEHOLD_ID, Ingredient.active.is_(True)))
+    if purchased_ingredient is None: raise HTTPException(status_code=400, detail="Purchased Ingredient not found")
+    is_substitution = purchased_ingredient_id != item.ingredient_id
+    if not is_substitution and actual_unit.unit_family != item.unit_family: raise HTTPException(status_code=409, detail="Purchased unit must use the same measurement family as the shopping item")
+    if is_substitution and (payload.satisfied_quantity is None or payload.satisfied_unit_id is None): raise HTTPException(status_code=422, detail="A substitution must state how much original demand it satisfies")
+    satisfied_unit = units.get(payload.satisfied_unit_id or payload.actual_unit_id)
+    if satisfied_unit is None or satisfied_unit.unit_family != item.unit_family: raise HTTPException(status_code=409, detail="Satisfied unit must use the original Shopping item's measurement family")
+    satisfied_quantity = payload.satisfied_quantity if payload.satisfied_quantity is not None else payload.actual_quantity
+    satisfied_target = convert_quantity(Decimal(satisfied_quantity), satisfied_unit, target_unit)
+    remaining_before = _remaining_for(item, target_unit, units)
+    if satisfied_target > remaining_before: raise HTTPException(status_code=409, detail=f"Purchase satisfies {satisfied_target} {target_unit.code}, but only {remaining_before} {target_unit.code} remains")
     location = db.get(InventoryLocation, payload.storage_location_id)
-    if location is None or location.household_id != HOUSEHOLD_ID or not location.active:
-        raise HTTPException(status_code=400, detail="Inventory location not found")
-
-    lot = InventoryLot(
-        household_id=HOUSEHOLD_ID,
-        ingredient_id=item.ingredient_id,
-        location_id=payload.storage_location_id,
-        quantity=payload.actual_quantity,
-        unit_id=payload.actual_unit_id,
-        purchase_date=payload.purchase_date,
-        expiration_date=payload.expiration_date,
-        notes=payload.notes.strip() if payload.notes else None,
-    )
-    db.add(lot)
-    db.flush()
-    db.add(
-        InventoryTransaction(
-            household_id=HOUSEHOLD_ID,
-            lot_id=lot.id,
-            transaction_type="PURCHASE",
-            quantity_delta=payload.actual_quantity,
-            unit_id=payload.actual_unit_id,
-            to_location_id=payload.storage_location_id,
-            note=payload.notes.strip() if payload.notes else None,
-        )
-    )
-    now = datetime.utcnow()
-    purchase = ShoppingItemPurchase(
-        shopping_list_item_id=item.id,
-        actual_quantity=payload.actual_quantity,
-        actual_unit_id=payload.actual_unit_id,
-        purchase_date=payload.purchase_date,
-        storage_location_id=payload.storage_location_id,
-        expiration_date=payload.expiration_date,
-        purchase_notes=payload.notes.strip() if payload.notes else None,
-        inventory_lot_id=lot.id,
-        completed_at=now,
-    )
-    db.add(purchase)
-    item.status = "COMPLETED"
-    item.actual_quantity = payload.actual_quantity
-    item.actual_unit_id = payload.actual_unit_id
-    item.purchase_date = payload.purchase_date
-    item.storage_location_id = payload.storage_location_id
-    item.expiration_date = payload.expiration_date
-    item.purchase_notes = payload.notes.strip() if payload.notes else None
-    item.inventory_lot_id = lot.id
-    item.completed_at = now
-    db.commit()
-    db.expire_all()
-    shopping_list = _shopping_list_or_404(db, cycle_id)
-    return _serialize(db, shopping_list, cycle)
+    if location is None or location.household_id != HOUSEHOLD_ID or not location.active: raise HTTPException(status_code=400, detail="Inventory location not found")
+    lot = InventoryLot(household_id=HOUSEHOLD_ID, ingredient_id=purchased_ingredient_id, location_id=payload.storage_location_id, quantity=payload.actual_quantity, unit_id=payload.actual_unit_id, purchase_date=payload.purchase_date, expiration_date=payload.expiration_date, notes=payload.notes.strip() if payload.notes else None)
+    db.add(lot); db.flush(); db.add(InventoryTransaction(household_id=HOUSEHOLD_ID, lot_id=lot.id, transaction_type="PURCHASE", quantity_delta=payload.actual_quantity, unit_id=payload.actual_unit_id, to_location_id=payload.storage_location_id, note=payload.notes.strip() if payload.notes else None))
+    now = datetime.utcnow(); purchase = ShoppingItemPurchase(shopping_list_item_id=item.id, actual_quantity=payload.actual_quantity, actual_unit_id=payload.actual_unit_id, purchased_ingredient_id=purchased_ingredient_id, satisfied_quantity=satisfied_quantity, satisfied_unit_id=satisfied_unit.id, purchase_kind="SUBSTITUTION" if is_substitution else "STANDARD", idempotency_key=payload.idempotency_key, purchase_date=payload.purchase_date, storage_location_id=payload.storage_location_id, expiration_date=payload.expiration_date, purchase_notes=payload.notes.strip() if payload.notes else None, inventory_lot_id=lot.id, completed_at=now); db.add(purchase); db.flush()
+    remaining_after = max(remaining_before - satisfied_target, Decimal("0")); item.status = "COMPLETED" if remaining_after <= 0 else "PENDING"; item.actual_quantity = payload.actual_quantity; item.actual_unit_id = payload.actual_unit_id; item.purchase_date = payload.purchase_date; item.storage_location_id = payload.storage_location_id; item.expiration_date = payload.expiration_date; item.purchase_notes = payload.notes.strip() if payload.notes else None; item.inventory_lot_id = lot.id; item.completed_at = now if remaining_after <= 0 else None
+    db.commit(); db.expire_all(); shopping_list = _shopping_list_or_404(db, cycle_id); return _serialize(db, shopping_list, cycle)
 
 
 @router.post("/{cycle_id}/items/{item_id}/skip", response_model=ShoppingListRead)
 def skip_shopping_item(cycle_id: int, item_id: int, db: Session = Depends(get_db)) -> dict:
-    cycle = _cycle_or_404(db, cycle_id)
-    shopping_list = _shopping_list_or_404(db, cycle_id)
-    item = _item_or_404(shopping_list, item_id)
-    if item.status != "PENDING":
-        raise HTTPException(status_code=409, detail="Only pending Shopping demand can be skipped")
-    item.status = "SKIPPED"
-    item.completed_at = datetime.utcnow()
-    db.commit()
-    return _serialize(db, shopping_list, cycle)
+    cycle = _cycle_or_404(db, cycle_id); shopping_list = _shopping_list_or_404(db, cycle_id); item = _item_or_404(shopping_list, item_id)
+    if item.status != "PENDING": raise HTTPException(status_code=409, detail="Only pending Shopping demand can be skipped")
+    item.status = "SKIPPED"; item.completed_at = datetime.utcnow(); db.commit(); return _serialize(db, shopping_list, cycle)
