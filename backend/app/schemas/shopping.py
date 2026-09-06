@@ -17,6 +17,19 @@ class ShoppingItemComplete(BaseModel):
     notes: str | None = None
 
 
+class ShoppingPurchaseRead(BaseModel):
+    id: int
+    actual_quantity: Decimal
+    actual_unit_id: int
+    actual_unit_code: str
+    purchase_date: date | None
+    storage_location_id: int
+    expiration_date: date | None
+    purchase_notes: str | None
+    inventory_lot_id: int
+    completed_at: datetime
+
+
 class ShoppingListItemRead(BaseModel):
     id: int
     ingredient_id: int
@@ -44,6 +57,10 @@ class ShoppingListItemRead(BaseModel):
     purchase_notes: str | None
     inventory_lot_id: int | None
     completed_at: datetime | None
+    baseline_required_quantity: Decimal | None
+    plan_delta_quantity: Decimal
+    purchased_excess_quantity: Decimal
+    purchases: list[ShoppingPurchaseRead]
 
 
 class ShoppingListRead(BaseModel):
