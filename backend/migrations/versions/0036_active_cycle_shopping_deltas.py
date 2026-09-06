@@ -46,6 +46,25 @@ def upgrade() -> None:
         )
         op.create_index("ix_shopping_item_purchases_item", "shopping_item_purchases", ["shopping_list_item_id"])
 
+    if "planned_meal_revisions" not in tables:
+        op.create_table(
+            "planned_meal_revisions",
+            sa.Column("id", sa.Integer(), primary_key=True),
+            sa.Column("cycle_id", sa.Integer(), sa.ForeignKey("meal_cycles.id", ondelete="CASCADE"), nullable=False),
+            sa.Column("cycle_slot_id", sa.Integer(), nullable=False),
+            sa.Column("planned_meal_id", sa.Integer(), nullable=False),
+            sa.Column("action", sa.String(30), nullable=False),
+            sa.Column("source_type", sa.String(30), nullable=False),
+            sa.Column("snapshot_name", sa.String(160), nullable=False),
+            sa.Column("snapshot_description", sa.Text(), nullable=True),
+            sa.Column("planned_servings", sa.Numeric(10, 3), nullable=False),
+            sa.Column("planned_leftover_servings", sa.Numeric(10, 3), nullable=False),
+            sa.Column("component_serving_overrides", sa.Text(), nullable=False),
+            sa.Column("scaled_components", sa.Text(), nullable=False),
+            sa.Column("changed_at", sa.DateTime(), nullable=False),
+        )
+        op.create_index("ix_planned_meal_revisions_cycle", "planned_meal_revisions", ["cycle_id", "id"])
+
     bind.execute(sa.text(
         "UPDATE shopping_list_items SET baseline_required_quantity = required_quantity "
         "WHERE baseline_required_quantity IS NULL"
@@ -63,7 +82,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
-    if "shopping_item_purchases" in set(sa.inspect(bind).get_table_names()):
+    tables = set(sa.inspect(bind).get_table_names())
+    if "planned_meal_revisions" in tables:
+        op.drop_index("ix_planned_meal_revisions_cycle", table_name="planned_meal_revisions")
+        op.drop_table("planned_meal_revisions")
+    if "shopping_item_purchases" in tables:
         op.drop_index("ix_shopping_item_purchases_item", table_name="shopping_item_purchases")
         op.drop_table("shopping_item_purchases")
     columns = _column_names(bind, "shopping_list_items")
