@@ -73,6 +73,10 @@ export type ShoppingPurchaseInput = {
   idempotency_key?: string
 }
 
+export const isShoppingSubstitution = (item: Pick<ShoppingItem, 'ingredient_id'>, purchasedIngredientId: number) => purchasedIngredientId !== item.ingredient_id
+export const hasUnresolvedShoppingDemand = (item: Pick<ShoppingItem, 'status' | 'remaining_quantity'>) => item.status === 'PENDING' && Number(item.remaining_quantity) > 0
+export const shoppingPurchaseCount = (items: Array<Pick<ShoppingItem, 'purchases'>>) => items.reduce((count, item) => count + item.purchases.length, 0)
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } })
   if (!response.ok) {
