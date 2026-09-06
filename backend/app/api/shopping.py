@@ -60,6 +60,13 @@ def _serialize(db: Session, shopping_list: ShoppingList, cycle: MealCycle) -> di
     units = {unit.id: unit for unit in db.scalars(select(MeasurementUnit))}
     items = []
     for item in shopping_list.items:
+        if (
+            cycle.status != "ACTIVE"
+            and item.status == "SKIPPED"
+            and Decimal(item.required_quantity or 0) == 0
+            and not item.purchases
+        ):
+            continue
         ingredient = ingredients[item.ingredient_id]
         category = categories.get(item.shopping_category_id)
         unit = units[item.unit_id]
@@ -299,7 +306,9 @@ def _regenerate(db: Session, cycle: MealCycle, *, commit: bool = True) -> Shoppi
         item.warning = " ".join(warnings) or None
         item.plan_delta_quantity = required - Decimal(item.baseline_required_quantity or 0)
         item.purchased_excess_quantity = max(purchased - required, Decimal("0"))
-        if generated > 0:
+        if item.purchases and item.plan_delta_quantity <= 0:
+            item.status = "COMPLETED"
+        elif generated > 0:
             item.status = "PENDING"
         elif item.purchases:
             item.status = "COMPLETED"
