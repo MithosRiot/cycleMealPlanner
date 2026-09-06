@@ -46,5 +46,8 @@ jobs:
       - name: Test dashboard summaries
         run: node --experimental-strip-types src/dashboardSummaries.test.mjs
 
+      - name: Test Shopping partial/substitution state
+        run: node --experimental-strip-types src/shoppingApi.test.mjs
+
       - name: Build
         run: npm run build
