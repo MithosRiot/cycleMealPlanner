@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchRecipes } from './api'
-import { activateMealCycle, assignDirectRecipe, cancelMealCycle, completeMealCycle, fetchMealCycle, fetchMealCycles, updateMealCycleSchedule } from './mealCyclesApi'
+import { activateMealCycle, assignDirectRecipe, assignNonFoodOccurrence, cancelMealCycle, completeMealCycle, fetchMealCycle, fetchMealCycles, type NonFoodOccurrenceType, updateMealCycleSchedule } from './mealCyclesApi'
+
+function sourceLabel(sourceType: string | undefined): string {
+  if (sourceType === 'DIRECT_RECIPE') return 'Direct Recipe'
+  if (sourceType === 'MANUAL') return 'Manual'
+  if (sourceType === 'EATING_OUT') return 'Eating Out'
+  if (sourceType === 'SKIPPED') return 'Skipped'
+  if (sourceType === 'LEFTOVER') return 'Leftover'
+  if (sourceType === 'RECIPE_OUTPUT') return 'Recipe Output'
+  return 'Saved Meal'
+}
 
 export default function CycleSchedulingPanel() {
   const queryClient = useQueryClient()
@@ -16,6 +26,10 @@ export default function CycleSchedulingPanel() {
   const [directRecipeId, setDirectRecipeId] = useState<number | null>(null)
   const [directServings, setDirectServings] = useState('4')
   const [directLeftovers, setDirectLeftovers] = useState('0')
+  const [occurrenceSlotId, setOccurrenceSlotId] = useState<number | null>(null)
+  const [occurrenceType, setOccurrenceType] = useState<NonFoodOccurrenceType>('MANUAL')
+  const [occurrenceTitle, setOccurrenceTitle] = useState('')
+  const [occurrenceNotes, setOccurrenceNotes] = useState('')
 
   useEffect(() => {
     if (!cycle.data) return
@@ -50,10 +64,17 @@ export default function CycleSchedulingPanel() {
     },
     onSuccess: async () => {
       if (effectiveId !== null) await refreshCycleState(effectiveId)
-      setDirectSlotId(null)
-      setDirectRecipeId(null)
-      setDirectServings('4')
-      setDirectLeftovers('0')
+      setDirectSlotId(null); setDirectRecipeId(null); setDirectServings('4'); setDirectLeftovers('0')
+    },
+  })
+  const placeOccurrence = useMutation({
+    mutationFn: async () => {
+      if (effectiveId === null || occurrenceSlotId === null) throw new Error('Choose an empty slot')
+      return assignNonFoodOccurrence(effectiveId, occurrenceSlotId, occurrenceType, occurrenceTitle.trim() || null, occurrenceNotes.trim() || null)
+    },
+    onSuccess: async () => {
+      if (effectiveId !== null) await refreshCycleState(effectiveId)
+      setOccurrenceSlotId(null); setOccurrenceTitle(''); setOccurrenceNotes('')
     },
   })
 
@@ -61,6 +82,7 @@ export default function CycleSchedulingPanel() {
     if (!cycle.data) return []
     return cycle.data.slots.filter((slot) => slot.planned_meal).map((slot) => ({
       id: slot.id, name: slot.planned_meal?.snapshot_name ?? 'Planned meal', sourceType: slot.planned_meal?.source_type,
+      description: slot.planned_meal?.snapshot_description,
       day: slot.day_number, label: cycle.data?.slot_definitions.find((item) => item.id === slot.slot_definition_id)?.label ?? 'Meal',
       scheduledDate: slot.scheduled_date, servingTime: slot.serving_time,
     }))
@@ -72,12 +94,13 @@ export default function CycleSchedulingPanel() {
 
   return <section className="panel" style={{ marginTop: 20 }}>
     <div className="section-heading">
-      <div><h2>Cycle schedule</h2><p className="planning-note">Set dates/times, place direct Recipes when needed, then activate the validated cycle.</p></div>
+      <div><h2>Cycle schedule</h2><p className="planning-note">Set dates/times, place direct Recipes or non-food occurrences when needed, then activate the validated cycle.</p></div>
       <select value={effectiveId ?? ''} onChange={(event) => setSelectedId(event.target.value ? Number(event.target.value) : null)}><option value="">Select cycle</option>{cycles.data?.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.status}</option>)}</select>
     </div>
     {save.error instanceof Error && <div className="error-banner">{save.error.message}</div>}
     {lifecycleError instanceof Error && <div className="error-banner">{lifecycleError.message}</div>}
     {placeDirectRecipe.error instanceof Error && <div className="error-banner">{placeDirectRecipe.error.message}</div>}
+    {placeOccurrence.error instanceof Error && <div className="error-banner">{placeOccurrence.error.message}</div>}
     {cycle.data && <>
       <div className="ingredient-meta" style={{ marginBottom: 12 }}><span>Status: {cycle.data.status}</span>{cycle.data.activated_at && <span>Activated {new Date(cycle.data.activated_at).toLocaleString()}</span>}{cycle.data.completed_at && <span>Completed {new Date(cycle.data.completed_at).toLocaleString()}</span>}{cycle.data.cancelled_at && <span>Cancelled {new Date(cycle.data.cancelled_at).toLocaleString()}</span>}</div>
       <div className="planning-grid">
@@ -85,20 +108,29 @@ export default function CycleSchedulingPanel() {
         {cycle.data.slot_definitions.map((slot) => <label key={slot.id}>{slot.label} serving time<input type="time" disabled={!draft} value={times[slot.id] ?? ''} onChange={(event) => setTimes((current) => ({ ...current, [slot.id]: event.target.value }))} /></label>)}
       </div>
       <div className="ingredient-meta" style={{ marginTop: 12 }}>{draft && <button type="button" className="button-secondary" disabled={save.isPending} onClick={() => save.mutate()}>{save.isPending ? 'Saving…' : 'Save schedule'}</button>}{draft && <button type="button" disabled={activate.isPending} onClick={() => activate.mutate()}>{activate.isPending ? 'Activating…' : 'Activate cycle'}</button>}{cycle.data.status === 'ACTIVE' && <button type="button" disabled={complete.isPending} onClick={() => complete.mutate()}>{complete.isPending ? 'Completing…' : 'Complete cycle'}</button>}{(cycle.data.status === 'DRAFT' || cycle.data.status === 'ACTIVE') && <button type="button" className="button-secondary" disabled={cancel.isPending} onClick={() => { if (window.confirm(`Cancel ${cycle.data?.name}? Active reservations will be released.`)) cancel.mutate() }}>{cancel.isPending ? 'Cancelling…' : 'Cancel cycle'}</button>}</div>
-      {draft && <section style={{ marginTop: 20 }}>
-        <h3>Place a direct Recipe</h3>
-        <p className="planning-note">Use a Recipe directly without creating a saved Meal wrapper.</p>
-        <div className="planning-grid">
+      {draft && <div className="advanced-grid" style={{ marginTop: 20 }}>
+        <section className="settings-card">
+          <h3>Place a direct Recipe</h3>
+          <p className="planning-note">Use a Recipe directly without creating a saved Meal wrapper.</p>
           <label>Empty slot<select value={directSlotId ?? ''} onChange={(event) => setDirectSlotId(event.target.value ? Number(event.target.value) : null)}><option value="">Choose slot…</option>{emptySlots.map((slot) => { const label = cycle.data?.slot_definitions.find((item) => item.id === slot.slot_definition_id)?.label ?? 'Meal'; return <option key={slot.id} value={slot.id}>Day {slot.day_number} · {label}</option> })}</select></label>
           <label>Recipe<select value={directRecipeId ?? ''} onChange={(event) => { const id = event.target.value ? Number(event.target.value) : null; setDirectRecipeId(id); const recipe = recipes.data?.find((item) => item.id === id); if (recipe) setDirectServings(recipe.base_servings) }}><option value="">Choose Recipe…</option>{recipes.data?.map((recipe) => <option key={recipe.id} value={recipe.id}>{recipe.name}</option>)}</select></label>
           <label>Eat servings<input type="number" min="0.001" step="0.001" value={directServings} onChange={(event) => setDirectServings(event.target.value)} /></label>
           <label>Planned leftovers<input type="number" min="0" step="0.001" value={directLeftovers} onChange={(event) => setDirectLeftovers(event.target.value)} /></label>
-        </div>
-        <button type="button" className="button-secondary" disabled={placeDirectRecipe.isPending || directSlotId === null || directRecipeId === null || Number(directServings) <= 0 || Number(directLeftovers) < 0} onClick={() => placeDirectRecipe.mutate()}>{placeDirectRecipe.isPending ? 'Placing…' : 'Place Recipe'}</button>
-      </section>}
+          <button type="button" className="button-secondary" disabled={placeDirectRecipe.isPending || directSlotId === null || directRecipeId === null || Number(directServings) <= 0 || Number(directLeftovers) < 0} onClick={() => placeDirectRecipe.mutate()}>{placeDirectRecipe.isPending ? 'Placing…' : 'Place Recipe'}</button>
+        </section>
+        <section className="settings-card">
+          <h3>Place a non-food occurrence</h3>
+          <p className="planning-note">Manual, Eating Out, and Skipped entries create no ingredient demand or prep/cooking work.</p>
+          <label>Empty slot<select value={occurrenceSlotId ?? ''} onChange={(event) => setOccurrenceSlotId(event.target.value ? Number(event.target.value) : null)}><option value="">Choose slot…</option>{emptySlots.map((slot) => { const label = cycle.data?.slot_definitions.find((item) => item.id === slot.slot_definition_id)?.label ?? 'Meal'; return <option key={slot.id} value={slot.id}>Day {slot.day_number} · {label}</option> })}</select></label>
+          <label>Type<select value={occurrenceType} onChange={(event) => setOccurrenceType(event.target.value as NonFoodOccurrenceType)}><option value="MANUAL">Manual</option><option value="EATING_OUT">Eating Out</option><option value="SKIPPED">Skipped</option></select></label>
+          {occurrenceType !== 'SKIPPED' && <label>Title<input value={occurrenceTitle} placeholder={occurrenceType === 'EATING_OUT' ? 'Optional restaurant or plan' : 'Required description'} onChange={(event) => setOccurrenceTitle(event.target.value)} /></label>}
+          <label>Notes<input value={occurrenceNotes} onChange={(event) => setOccurrenceNotes(event.target.value)} /></label>
+          <button type="button" className="button-secondary" disabled={placeOccurrence.isPending || occurrenceSlotId === null || (occurrenceType === 'MANUAL' && !occurrenceTitle.trim())} onClick={() => placeOccurrence.mutate()}>{placeOccurrence.isPending ? 'Placing…' : 'Place occurrence'}</button>
+        </section>
+      </div>}
       {cycle.data.status === 'ACTIVE' && <p className="planning-note">Schedule and placement settings are locked while the cycle is ACTIVE.</p>}
-      <div className="recipe-ingredient-list" style={{ marginTop: 16 }}>{scheduleRows.map((row) => <div className="ingredient-row" key={row.id}><strong>{row.name}</strong><div className="ingredient-meta"><span>{row.sourceType === 'DIRECT_RECIPE' ? 'Direct Recipe · ' : ''}Day {row.day} · {row.label}</span><span>{row.scheduledDate ?? 'No date'}{row.servingTime ? ` · ${row.servingTime.slice(0, 5)}` : ''}</span></div></div>)}</div>
-      {scheduleRows.length === 0 && <p className="muted-line">No planned meals in this cycle yet.</p>}
+      <div className="recipe-ingredient-list" style={{ marginTop: 16 }}>{scheduleRows.map((row) => <div className="ingredient-row" key={row.id}><strong>{row.name}</strong><div className="ingredient-meta"><span>{sourceLabel(row.sourceType)} · Day {row.day} · {row.label}</span><span>{row.scheduledDate ?? 'No date'}{row.servingTime ? ` · ${row.servingTime.slice(0, 5)}` : ''}</span>{row.description && <span>{row.description}</span>}</div></div>)}</div>
+      {scheduleRows.length === 0 && <p className="muted-line">No planned occurrences in this cycle yet.</p>}
     </>}
   </section>
 }

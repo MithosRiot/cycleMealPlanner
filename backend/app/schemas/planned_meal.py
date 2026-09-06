@@ -14,6 +14,19 @@ class DirectRecipeAssign(BaseModel):
     planned_leftover_servings: Decimal = Field(default=Decimal("0"), ge=0)
 
 
+class NonFoodOccurrenceAssign(BaseModel):
+    occurrence_type: str = Field(pattern="^(MANUAL|EATING_OUT|SKIPPED)$")
+    title: str | None = Field(default=None, max_length=160)
+    notes: str | None = None
+
+    @model_validator(mode="after")
+    def validate_title(self):
+        self.title = self.title.strip() if self.title else None
+        if self.occurrence_type == "MANUAL" and not self.title:
+            raise ValueError("Manual occurrences require a title")
+        return self
+
+
 class ProducedSourceAssign(BaseModel):
     source_type: str = Field(pattern="^(LEFTOVER|RECIPE_OUTPUT)$")
     source_origin_planned_meal_id: int

@@ -18,6 +18,7 @@ from app.api.ingredients import router as ingredients_router
 from app.api.inventory import router as inventory_router
 from app.api.meal_cycles import router as meal_cycles_router
 from app.api.meals import router as meals_router
+from app.api.non_food_occurrences import router as non_food_occurrences_router
 from app.api.planned_meals import router as planned_meals_router
 from app.api.prep_schedule import router as prep_schedule_router
 from app.api.production import router as production_router
@@ -69,6 +70,7 @@ app.include_router(gather_locations_router)
 app.include_router(meals_router)
 app.include_router(meal_cycles_router)
 app.include_router(planned_meals_router)
+app.include_router(non_food_occurrences_router)
 app.include_router(prep_schedule_router)
 app.include_router(combined_prep_router)
 app.include_router(expiration_planning_router)

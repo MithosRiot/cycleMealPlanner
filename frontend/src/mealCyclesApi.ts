@@ -9,7 +9,7 @@ export type ExpirationSuggestionsResponse = { meal_cycle_id: number; meal_cycle_
 export type CycleValidationIssue = { severity: 'ERROR' | 'WARNING'; code: string; message: string; context: Record<string, unknown> }
 export type CycleValidationResponse = { meal_cycle_id: number; meal_cycle_name: string; valid: boolean; error_count: number; warning_count: number; issues: CycleValidationIssue[] }
 export type ScaledPlannedComponent = { meal_recipe_id: number; recipe_id: number; base_servings: string; requested_servings: string; scale_factor: string; ingredients: Array<{ recipe_ingredient_id: number; ingredient_id: number; quantity: string; unit_id: number; scaling_mode: string; manual_review: boolean }> }
-export type PlannedMealSourceType = 'SAVED_MEAL' | 'DIRECT_RECIPE' | 'LEFTOVER' | 'RECIPE_OUTPUT'
+export type PlannedMealSourceType = 'SAVED_MEAL' | 'DIRECT_RECIPE' | 'LEFTOVER' | 'RECIPE_OUTPUT' | 'MANUAL' | 'EATING_OUT' | 'SKIPPED'
 export type PlannedMeal = {
   id: number; cycle_slot_id: number; meal_id: number | null; source_type: PlannedMealSourceType; source_recipe_id: number | null;
   source_origin_planned_meal_id: number | null; source_record_id: number | null; source_recipe_output_id: number | null; source_quantity: string | null; source_unit_id: number | null;
@@ -22,6 +22,7 @@ export type MealCycleInput = { name: string; duration_days: number; start_date: 
 export type MealCycleStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
 export type MealCycle = { id: number; household_id: number; name: string; duration_days: number; status: MealCycleStatus; start_date: string | null; notes: string | null; population_rules: string; smart_preferences: string; activated_at: string | null; completed_at: string | null; cancelled_at: string | null; slot_definitions: MealSlotDefinition[]; slots: CycleSlot[] }
 export type MealCycleScheduleUpdate = { start_date: string | null; serving_times: Record<number, string | null> }
+export type NonFoodOccurrenceType = 'MANUAL' | 'EATING_OUT' | 'SKIPPED'
 
 async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } })
@@ -51,6 +52,7 @@ export const cancelMealCycle = (id: number): Promise<MealCycle> => jsonRequest(`
 export const deleteMealCycle = (id: number): Promise<void> => jsonRequest(`/api/meal-cycles/${id}`, { method: 'DELETE' })
 export const assignPlannedMeal = (cycleId: number, slotId: number, mealId: number): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal`, { method: 'POST', body: JSON.stringify({ meal_id: mealId }) })
 export const assignDirectRecipe = (cycleId: number, slotId: number, recipeId: number, plannedServings: string, plannedLeftoverServings = '0'): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-recipe`, { method: 'POST', body: JSON.stringify({ recipe_id: recipeId, planned_servings: plannedServings, planned_leftover_servings: plannedLeftoverServings }) })
+export const assignNonFoodOccurrence = (cycleId: number, slotId: number, occurrenceType: NonFoodOccurrenceType, title: string | null, notes: string | null): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-occurrence`, { method: 'POST', body: JSON.stringify({ occurrence_type: occurrenceType, title, notes }) })
 export const assignProducedSource = (cycleId: number, slotId: number, source: ProducedSourceOption, quantity: string): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-source`, { method: 'POST', body: JSON.stringify({ source_type: source.source_type, source_origin_planned_meal_id: source.source_origin_planned_meal_id, source_record_id: source.source_record_id, source_recipe_output_id: source.source_recipe_output_id, quantity, unit_id: source.unit_id }) })
 export const updatePlannedMealPlanning = (cycleId: number, slotId: number, input: { planned_servings: string; planned_leftover_servings: string; component_serving_overrides: Record<number, string> }): Promise<PlannedMeal> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal/planning`, { method: 'PUT', body: JSON.stringify(input) })
 export const removePlannedMeal = (cycleId: number, slotId: number): Promise<void> => jsonRequest(`/api/meal-cycles/${cycleId}/slots/${slotId}/planned-meal`, { method: 'DELETE' })
