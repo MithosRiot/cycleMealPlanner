@@ -40,6 +40,9 @@ def run_migrations_online() -> None:
             connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
             if connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() != 0:
                 raise RuntimeError("Could not disable SQLite foreign-key enforcement for migrations")
+            # PRAGMA execution starts SQLAlchemy's implicit transaction. End it
+            # here so Alembic's migration transaction owns the actual DDL work.
+            connection.commit()
 
         context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
         with context.begin_transaction():
@@ -49,7 +52,14 @@ def run_migrations_online() -> None:
             violations = connection.execute(text("PRAGMA foreign_key_check")).all()
             if violations:
                 raise RuntimeError(f"SQLite migration left foreign-key violations: {violations}")
+            # foreign_key_check also autobegins a transaction; finish it before
+            # restoring enforcement because SQLite ignores FK PRAGMA changes in
+            # an active transaction.
+            connection.commit()
             connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            if connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() != 1:
+                raise RuntimeError("Could not restore SQLite foreign-key enforcement after migrations")
+            connection.commit()
 
 
 if context.is_offline_mode():
