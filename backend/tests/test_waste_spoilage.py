@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 from uuid import uuid4
 
@@ -141,15 +142,17 @@ def test_spoilage_cannot_reduce_ingredient_stock_below_active_reservations() -> 
             f"/api/meal-cycles/{cycle['id']}/slots/{cycle['slots'][0]['id']}/planned-meal",
             json={"meal_id": meal["id"]},
         ).json()
+        components = json.loads(planned["scaled_components"])
+        component = components[0]
 
         with SessionLocal() as db:
             db.add(InventoryReservation(
                 household_id=1,
                 cycle_id=cycle["id"],
                 planned_meal_id=planned["id"],
-                meal_recipe_id=planned["scaled_components"][0]["meal_recipe_id"],
+                meal_recipe_id=component["meal_recipe_id"],
                 recipe_id=recipe["id"],
-                recipe_ingredient_id=planned["scaled_components"][0]["ingredients"][0]["recipe_ingredient_id"],
+                recipe_ingredient_id=component["ingredients"][0]["recipe_ingredient_id"],
                 ingredient_id=ingredient["id"],
                 quantity=Decimal("4"),
                 unit_id=each["id"],
