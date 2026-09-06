@@ -14,6 +14,7 @@ from app.api.equipment import router as equipment_router
 from app.api.expiration_planning import router as expiration_planning_router
 from app.api.gather import router as gather_router
 from app.api.gather_locations import router as gather_locations_router
+from app.api.history import router as history_router
 from app.api.ingredients import router as ingredients_router
 from app.api.inventory import router as inventory_router
 from app.api.meal_cycles import router as meal_cycles_router
@@ -76,6 +77,7 @@ app.include_router(combined_prep_router)
 app.include_router(expiration_planning_router)
 app.include_router(cycle_validation_router)
 app.include_router(shopping_router)
+app.include_router(history_router)
 
 
 @app.get("/health", tags=["system"])
