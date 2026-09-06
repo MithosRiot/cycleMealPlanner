@@ -21,6 +21,10 @@ def seed_fixture() -> None:
         locations = client.get("/api/reference/inventory-locations").json()
         refrigerator = next(item for item in locations if item["name"] == "Refrigerator")
 
+        refreshed = client.post("/api/planned-meals/1/completion/refresh")
+        if refreshed.status_code != 200:
+            raise RuntimeError(f"Could not refresh seeded Chicken Dinner completion: {refreshed.text}")
+
         finalized = client.post("/api/planned-meals/1/completion/finalize")
         if finalized.status_code != 200:
             raise RuntimeError(f"Could not finalize seeded Chicken Dinner: {finalized.text}")
