@@ -280,7 +280,7 @@ def main() -> None:
 
     if args.reset and _has_existing_seed_data():
         _clear_extended_seed_data_before_reset()
-    _base.main(["--reset"] if args.reset else [])
+    _base.seed(reset=args.reset)
     _seed_typed_prep_examples()
     _seed_gather_examples()
     _seed_cooking_steps()
