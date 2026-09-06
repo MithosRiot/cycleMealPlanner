@@ -4,12 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.shopping import _regenerate
 from app.database.session import get_db
 from app.models.ingredient import Ingredient
 from app.models.inventory import InventoryLot, InventoryTransaction
+from app.models.meal_cycle import MealCycle
 from app.models.reference import InventoryLocation, MeasurementUnit
+from app.models.shopping import ShoppingList
 from app.schemas.inventory import (
     CorrectionAction,
+    DiscardAction,
     InventoryLotCreate,
     InventoryLotDetail,
     InventoryLotMetadataUpdate,
@@ -19,6 +23,7 @@ from app.schemas.inventory import (
     SplitAction,
     TransferAction,
 )
+from app.services.inventory_availability import availability_for
 from app.services.production_coverage import reserved_for_lot
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
@@ -53,13 +58,34 @@ def _reserved_produced_quantity(db: Session, lot: InventoryLot) -> Decimal:
     return reserved_for_lot(db, lot.id)
 
 
-def _ensure_produced_reservation_capacity(db: Session, lot: InventoryLot, target_quantity: Decimal) -> None:
-    reserved = _reserved_produced_quantity(db, lot)
-    if target_quantity < reserved:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot reduce produced stock below its reserved future coverage ({reserved})",
-        )
+def _ensure_reservation_capacity(db: Session, lot: InventoryLot, target_quantity: Decimal) -> None:
+    current = Decimal(lot.quantity)
+    if target_quantity >= current:
+        return
+
+    if lot.source_type in {"LEFTOVER", "RECIPE_OUTPUT"}:
+        reserved = _reserved_produced_quantity(db, lot)
+        if target_quantity < reserved:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot reduce produced stock below its reserved future coverage ({reserved})",
+            )
+        return
+
+    if lot.source_type == "INGREDIENT" and lot.ingredient_id is not None:
+        unit = db.get(MeasurementUnit, lot.unit_id)
+        if unit is None:
+            raise HTTPException(status_code=409, detail="Inventory lot measurement unit no longer exists")
+        physical, reserved, _, _ = availability_for(db, lot.ingredient_id, unit.unit_family, unit)
+        projected_physical = physical - (current - target_quantity)
+        if projected_physical < reserved:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Cannot reduce Ingredient stock below active reservations: "
+                    f"{reserved} {unit.code} reserved; {projected_physical} {unit.code} would remain"
+                ),
+            )
 
 
 def _record(
@@ -70,6 +96,7 @@ def _record(
     note: str | None = None,
     from_location_id: int | None = None,
     to_location_id: int | None = None,
+    reason: str | None = None,
 ) -> None:
     db.add(
         InventoryTransaction(
@@ -80,9 +107,22 @@ def _record(
             unit_id=lot.unit_id,
             from_location_id=from_location_id,
             to_location_id=to_location_id,
+            reason=reason.strip() if reason else None,
             note=note.strip() if note else None,
         )
     )
+
+
+def _refresh_active_shopping(db: Session) -> None:
+    db.flush()
+    cycles = list(db.scalars(select(MealCycle).where(
+        MealCycle.household_id == DEFAULT_HOUSEHOLD_ID,
+        MealCycle.status == "ACTIVE",
+    )))
+    for cycle in cycles:
+        shopping_list_id = db.scalar(select(ShoppingList.id).where(ShoppingList.meal_cycle_id == cycle.id))
+        if shopping_list_id is not None:
+            _regenerate(db, cycle, commit=False)
 
 
 @router.get("", response_model=list[InventoryLotRead])
@@ -166,7 +206,7 @@ def remove_inventory(lot_id: int, payload: QuantityAction, db: Session = Depends
     if quantity > current:
         raise HTTPException(status_code=409, detail="Inventory quantity cannot become negative")
     target = current - quantity
-    _ensure_produced_reservation_capacity(db, lot, target)
+    _ensure_reservation_capacity(db, lot, target)
     lot.quantity = target
     _record(db, lot, "MANUAL_REMOVE", -quantity, payload.note)
     db.commit()
@@ -174,11 +214,37 @@ def remove_inventory(lot_id: int, payload: QuantityAction, db: Session = Depends
     return lot
 
 
+def _discard_inventory(lot_id: int, payload: DiscardAction, transaction_type: str, db: Session) -> InventoryLot:
+    lot = _lot_or_404(db, lot_id)
+    quantity = Decimal(payload.quantity)
+    current = Decimal(lot.quantity)
+    if quantity > current:
+        raise HTTPException(status_code=409, detail="Inventory quantity cannot become negative")
+    target = current - quantity
+    _ensure_reservation_capacity(db, lot, target)
+    lot.quantity = target
+    _record(db, lot, transaction_type, -quantity, payload.note, reason=payload.reason)
+    _refresh_active_shopping(db)
+    db.commit()
+    db.refresh(lot)
+    return lot
+
+
+@router.post("/{lot_id}/waste", response_model=InventoryLotRead)
+def waste_inventory(lot_id: int, payload: DiscardAction, db: Session = Depends(get_db)) -> InventoryLot:
+    return _discard_inventory(lot_id, payload, "WASTE", db)
+
+
+@router.post("/{lot_id}/spoilage", response_model=InventoryLotRead)
+def spoil_inventory(lot_id: int, payload: DiscardAction, db: Session = Depends(get_db)) -> InventoryLot:
+    return _discard_inventory(lot_id, payload, "SPOILAGE", db)
+
+
 @router.post("/{lot_id}/correct", response_model=InventoryLotRead)
 def correct_inventory(lot_id: int, payload: CorrectionAction, db: Session = Depends(get_db)) -> InventoryLot:
     lot = _lot_or_404(db, lot_id)
     target = Decimal(payload.quantity)
-    _ensure_produced_reservation_capacity(db, lot, target)
+    _ensure_reservation_capacity(db, lot, target)
     delta = target - Decimal(lot.quantity)
     lot.quantity = target
     _record(db, lot, "CORRECTION", delta, payload.note)
