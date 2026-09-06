@@ -9,6 +9,7 @@ import DashboardPage from './DashboardPage'
 import GatherPanel from './GatherPanel'
 import IngredientsPage from './IngredientsPage'
 import './InventoryPage.css'
+import LeftoversPage from './LeftoversPage'
 import MealCompletionPanel from './MealCompletionPanel'
 import { MealDetailPage, MealEditorPage, MealsPage } from './MealPages'
 import './MealPages.css'
@@ -55,7 +56,7 @@ function App() {
       <Route path="/meal-plan/validation" element={<CycleValidationPage />} />
       <Route path="/inventory" element={<InventoryWithReservationsPage />} />
       <Route path="/shopping" element={<ShoppingPage />} />
-      <Route path="/leftovers" element={<PlaceholderPage title="Leftovers" />} />
+      <Route path="/leftovers" element={<LeftoversPage />} />
       <Route path="/history" element={<PlaceholderPage title="History" />} />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="/settings/ingredients" element={<IngredientsPage />} />
