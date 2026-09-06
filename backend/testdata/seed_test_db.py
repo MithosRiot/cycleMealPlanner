@@ -223,7 +223,7 @@ def _seed_completion_draft() -> None:
                 unit_code = connection.execute(text("SELECT code FROM measurement_units WHERE id=:id"), {"id": unit_id}).scalar_one()
                 prep = connection.execute(text("""
                     SELECT preparation, prep_method, prep_size, prep_state FROM recipe_ingredients WHERE id=:id
-                """), {"id": recipe_ingredient_id}).mappings().first()
+                """)).mappings().first()
                 connection.execute(text("""
                     INSERT INTO meal_completion_usage
                     (id, completion_id, component_key, recipe_id, recipe_name, recipe_ingredient_id,
@@ -269,18 +269,20 @@ def _seed_direct_recipe_examples() -> None:
         connection.execute(text("UPDATE planned_meals SET source_recipe_id=NULL WHERE source_type!='DIRECT_RECIPE'"))
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Reset and seed the deterministic Cycle Meal Planner test database.")
-    parser.add_argument("--reset", action="store_true", help="Delete existing seeded data before recreating it.")
-    args = parser.parse_args()
+def seed(reset: bool = False):
+    """Create or refresh the complete deterministic test database.
 
+    This public function is also the import contract used by backend/run_test.py.
+    Keep the CLI and local launcher on the same full seed path so both include
+    all extended fixtures layered on top of the original base seed.
+    """
     configure_database()
     from app.database.migrations import run_migrations
     run_migrations()
 
-    if args.reset and _has_existing_seed_data():
+    if reset and _has_existing_seed_data():
         _clear_extended_seed_data_before_reset()
-    _base.seed(reset=args.reset)
+    _base.seed(reset=reset)
     _seed_typed_prep_examples()
     _seed_gather_examples()
     _seed_cooking_steps()
@@ -288,6 +290,14 @@ def main() -> None:
     _seed_default_coverage()
     _seed_direct_recipe_examples()
     print(f"Seeded deterministic test database: {TEST_DB}")
+    return TEST_DB
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Reset and seed the deterministic Cycle Meal Planner test database.")
+    parser.add_argument("--reset", action="store_true", help="Delete existing seeded data before recreating it.")
+    args = parser.parse_args()
+    seed(reset=args.reset)
 
 
 if __name__ == "__main__":
