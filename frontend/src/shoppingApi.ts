@@ -3,6 +3,12 @@ export type ShoppingPurchase = {
   actual_quantity: string
   actual_unit_id: number
   actual_unit_code: string
+  purchased_ingredient_id: number
+  purchased_ingredient_name: string
+  satisfied_quantity: string
+  satisfied_unit_id: number
+  satisfied_unit_code: string
+  purchase_kind: 'STANDARD' | 'SUBSTITUTION'
   purchase_date: string | null
   storage_location_id: number
   expiration_date: string | null
@@ -26,6 +32,8 @@ export type ShoppingItem = {
   generated_quantity: string
   adjustment_quantity: string
   final_quantity: string
+  satisfied_quantity: string
+  remaining_quantity: string
   source_trace: string
   warning: string | null
   status: 'PENDING' | 'COMPLETED' | 'SKIPPED'
@@ -59,7 +67,15 @@ export type ShoppingPurchaseInput = {
   purchase_date: string | null
   expiration_date: string | null
   notes: string | null
+  purchased_ingredient_id?: number
+  satisfied_quantity?: string
+  satisfied_unit_id?: number
+  idempotency_key?: string
 }
+
+export const isShoppingSubstitution = (item: Pick<ShoppingItem, 'ingredient_id'>, purchasedIngredientId: number) => purchasedIngredientId !== item.ingredient_id
+export const hasUnresolvedShoppingDemand = (item: Pick<ShoppingItem, 'status' | 'remaining_quantity'>) => item.status === 'PENDING' && Number(item.remaining_quantity) > 0
+export const shoppingPurchaseCount = (items: Array<Pick<ShoppingItem, 'purchases'>>) => items.reduce((count, item) => count + item.purchases.length, 0)
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } })

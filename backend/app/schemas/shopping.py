@@ -15,6 +15,10 @@ class ShoppingItemComplete(BaseModel):
     purchase_date: date | None = None
     expiration_date: date | None = None
     notes: str | None = None
+    purchased_ingredient_id: int | None = None
+    satisfied_quantity: Decimal | None = Field(default=None, gt=0)
+    satisfied_unit_id: int | None = None
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=64)
 
 
 class ShoppingPurchaseRead(BaseModel):
@@ -22,6 +26,12 @@ class ShoppingPurchaseRead(BaseModel):
     actual_quantity: Decimal
     actual_unit_id: int
     actual_unit_code: str
+    purchased_ingredient_id: int
+    purchased_ingredient_name: str
+    satisfied_quantity: Decimal
+    satisfied_unit_id: int
+    satisfied_unit_code: str
+    purchase_kind: str
     purchase_date: date | None
     storage_location_id: int
     expiration_date: date | None
@@ -45,6 +55,8 @@ class ShoppingListItemRead(BaseModel):
     generated_quantity: Decimal
     adjustment_quantity: Decimal
     final_quantity: Decimal
+    satisfied_quantity: Decimal
+    remaining_quantity: Decimal
     source_trace: str
     warning: str | None
     status: str
