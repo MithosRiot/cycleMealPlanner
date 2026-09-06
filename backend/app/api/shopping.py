@@ -12,7 +12,7 @@ from app.models.ingredient import Ingredient
 from app.models.inventory import InventoryLot, InventoryTransaction
 from app.models.meal_cycle import CycleSlot, MealCycle
 from app.models.reference import InventoryLocation, MeasurementUnit, ShoppingCategory
-from app.models.shopping import ShoppingList, ShoppingListItem
+from app.models.shopping import ShoppingItemPurchase, ShoppingList, ShoppingListItem
 from app.schemas.shopping import ShoppingItemAdjustment, ShoppingItemComplete, ShoppingListRead
 from app.services.inventory_availability import availability_for
 from app.services.units import convert_quantity
@@ -37,7 +37,7 @@ def _shopping_list_or_404(db: Session, cycle_id: int) -> ShoppingList:
     shopping_list = db.scalar(
         select(ShoppingList)
         .where(ShoppingList.meal_cycle_id == cycle_id, ShoppingList.household_id == HOUSEHOLD_ID)
-        .options(selectinload(ShoppingList.items))
+        .options(selectinload(ShoppingList.items).selectinload(ShoppingListItem.purchases))
     )
     if shopping_list is None:
         raise HTTPException(status_code=404, detail="Shopping list has not been generated")
@@ -65,6 +65,21 @@ def _serialize(db: Session, shopping_list: ShoppingList, cycle: MealCycle) -> di
         unit = units[item.unit_id]
         actual_unit = units.get(item.actual_unit_id) if item.actual_unit_id else None
         final_quantity = max(Decimal(item.generated_quantity) + Decimal(item.adjustment_quantity), Decimal("0"))
+        purchases = []
+        for purchase in item.purchases:
+            purchase_unit = units[purchase.actual_unit_id]
+            purchases.append({
+                "id": purchase.id,
+                "actual_quantity": purchase.actual_quantity,
+                "actual_unit_id": purchase.actual_unit_id,
+                "actual_unit_code": purchase_unit.code,
+                "purchase_date": purchase.purchase_date,
+                "storage_location_id": purchase.storage_location_id,
+                "expiration_date": purchase.expiration_date,
+                "purchase_notes": purchase.purchase_notes,
+                "inventory_lot_id": purchase.inventory_lot_id,
+                "completed_at": purchase.completed_at,
+            })
         items.append(
             {
                 "id": item.id,
@@ -93,6 +108,10 @@ def _serialize(db: Session, shopping_list: ShoppingList, cycle: MealCycle) -> di
                 "purchase_notes": item.purchase_notes,
                 "inventory_lot_id": item.inventory_lot_id,
                 "completed_at": item.completed_at,
+                "baseline_required_quantity": item.baseline_required_quantity,
+                "plan_delta_quantity": item.plan_delta_quantity,
+                "purchased_excess_quantity": item.purchased_excess_quantity,
+                "purchases": purchases,
             }
         )
     items.sort(key=lambda value: (value["shopping_category_sort_order"], value["shopping_category_name"], value["ingredient_name"], value["unit_family"]))
@@ -105,7 +124,17 @@ def _serialize(db: Session, shopping_list: ShoppingList, cycle: MealCycle) -> di
     }
 
 
-def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
+def _purchased_in_target(item: ShoppingListItem, target_unit: MeasurementUnit, units: dict[int, MeasurementUnit]) -> Decimal:
+    total = Decimal("0")
+    for purchase in item.purchases:
+        source_unit = units.get(purchase.actual_unit_id)
+        if source_unit is None or source_unit.unit_family != target_unit.unit_family:
+            continue
+        total += convert_quantity(Decimal(purchase.actual_quantity), source_unit, target_unit)
+    return total
+
+
+def _regenerate(db: Session, cycle: MealCycle, *, commit: bool = True) -> ShoppingList:
     units = {unit.id: unit for unit in db.scalars(select(MeasurementUnit))}
     ingredients = {
         ingredient.id: ingredient
@@ -115,7 +144,7 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
     existing = db.scalar(
         select(ShoppingList)
         .where(ShoppingList.meal_cycle_id == cycle.id, ShoppingList.household_id == HOUSEHOLD_ID)
-        .options(selectinload(ShoppingList.items))
+        .options(selectinload(ShoppingList.items).selectinload(ShoppingListItem.purchases))
     )
     if existing is None:
         shopping_list = ShoppingList(household_id=HOUSEHOLD_ID, meal_cycle_id=cycle.id, generated_at=datetime.utcnow())
@@ -252,8 +281,16 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
                 unit_family=family,
                 adjustment_quantity=Decimal("0"),
                 status="PENDING",
+                baseline_required_quantity=required,
+                plan_delta_quantity=Decimal("0"),
+                purchased_excess_quantity=Decimal("0"),
             )
             db.add(item)
+            db.flush()
+        elif item.baseline_required_quantity is None:
+            item.baseline_required_quantity = Decimal(item.required_quantity)
+
+        purchased = _purchased_in_target(item, target_unit, units)
         item.shopping_category_id = ingredient.shopping_category_id
         item.unit_id = target_unit.id
         item.required_quantity = required
@@ -261,18 +298,41 @@ def _regenerate(db: Session, cycle: MealCycle) -> ShoppingList:
         item.generated_quantity = generated
         item.source_trace = json.dumps(source_trace, sort_keys=True)
         item.warning = " ".join(warnings) or None
+        item.plan_delta_quantity = required - Decimal(item.baseline_required_quantity or 0)
+        item.purchased_excess_quantity = max(purchased - required, Decimal("0"))
+        if generated > 0:
+            item.status = "PENDING"
+        elif item.purchases:
+            item.status = "COMPLETED"
 
     for key, item in existing_by_key.items():
-        if key not in seen_keys and item.status == "PENDING":
-            db.delete(item)
+        if key in seen_keys:
+            continue
+        target_unit = units.get(item.unit_id)
+        if target_unit is None:
+            continue
+        if item.baseline_required_quantity is None:
+            item.baseline_required_quantity = Decimal(item.required_quantity)
+        purchased = _purchased_in_target(item, target_unit, units)
+        item.required_quantity = Decimal("0")
+        item.generated_quantity = Decimal("0")
+        item.source_trace = "[]"
+        item.plan_delta_quantity = -Decimal(item.baseline_required_quantity or 0)
+        item.purchased_excess_quantity = purchased
+        if item.purchases:
+            item.status = "COMPLETED"
+        elif item.status == "PENDING":
+            item.status = "SKIPPED"
 
     shopping_list_id = shopping_list.id
-    db.commit()
-    db.expire_all()
+    db.flush()
+    if commit:
+        db.commit()
+        db.expire_all()
     return db.scalar(
         select(ShoppingList)
         .where(ShoppingList.id == shopping_list_id)
-        .options(selectinload(ShoppingList.items))
+        .options(selectinload(ShoppingList.items).selectinload(ShoppingListItem.purchases))
         .execution_options(populate_existing=True)
     )
 
@@ -295,7 +355,7 @@ def adjust_shopping_item(cycle_id: int, item_id: int, payload: ShoppingItemAdjus
     shopping_list = _shopping_list_or_404(db, cycle_id)
     item = _item_or_404(shopping_list, item_id)
     if item.status != "PENDING":
-        raise HTTPException(status_code=409, detail="Completed or skipped shopping items cannot be adjusted")
+        raise HTTPException(status_code=409, detail="Non-pending shopping items cannot be adjusted")
     item.adjustment_quantity = payload.adjustment_quantity
     db.commit()
     return _serialize(db, shopping_list, cycle)
@@ -306,8 +366,8 @@ def complete_shopping_item(cycle_id: int, item_id: int, payload: ShoppingItemCom
     cycle = _cycle_or_404(db, cycle_id)
     shopping_list = _shopping_list_or_404(db, cycle_id)
     item = _item_or_404(shopping_list, item_id)
-    if item.status in TERMINAL_STATUSES or item.inventory_lot_id is not None:
-        raise HTTPException(status_code=409, detail="Shopping item has already been completed or skipped")
+    if item.status != "PENDING":
+        raise HTTPException(status_code=409, detail="Only pending Shopping demand can be purchased")
 
     unit = db.get(MeasurementUnit, payload.actual_unit_id)
     if unit is None:
@@ -341,6 +401,19 @@ def complete_shopping_item(cycle_id: int, item_id: int, payload: ShoppingItemCom
             note=payload.notes.strip() if payload.notes else None,
         )
     )
+    now = datetime.utcnow()
+    purchase = ShoppingItemPurchase(
+        shopping_list_item_id=item.id,
+        actual_quantity=payload.actual_quantity,
+        actual_unit_id=payload.actual_unit_id,
+        purchase_date=payload.purchase_date,
+        storage_location_id=payload.storage_location_id,
+        expiration_date=payload.expiration_date,
+        purchase_notes=payload.notes.strip() if payload.notes else None,
+        inventory_lot_id=lot.id,
+        completed_at=now,
+    )
+    db.add(purchase)
     item.status = "COMPLETED"
     item.actual_quantity = payload.actual_quantity
     item.actual_unit_id = payload.actual_unit_id
@@ -349,7 +422,7 @@ def complete_shopping_item(cycle_id: int, item_id: int, payload: ShoppingItemCom
     item.expiration_date = payload.expiration_date
     item.purchase_notes = payload.notes.strip() if payload.notes else None
     item.inventory_lot_id = lot.id
-    item.completed_at = datetime.utcnow()
+    item.completed_at = now
     db.commit()
     db.expire_all()
     shopping_list = _shopping_list_or_404(db, cycle_id)
@@ -361,8 +434,8 @@ def skip_shopping_item(cycle_id: int, item_id: int, db: Session = Depends(get_db
     cycle = _cycle_or_404(db, cycle_id)
     shopping_list = _shopping_list_or_404(db, cycle_id)
     item = _item_or_404(shopping_list, item_id)
-    if item.status in TERMINAL_STATUSES or item.inventory_lot_id is not None:
-        raise HTTPException(status_code=409, detail="Shopping item has already been completed or skipped")
+    if item.status != "PENDING":
+        raise HTTPException(status_code=409, detail="Only pending Shopping demand can be skipped")
     item.status = "SKIPPED"
     item.completed_at = datetime.utcnow()
     db.commit()
