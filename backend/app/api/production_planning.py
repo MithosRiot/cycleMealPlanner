@@ -74,6 +74,7 @@ def _leftover_option(db: Session, origin: PlannedMeal, unit: MeasurementUnit) ->
         available_quantity=available,
         lot_id=lot.id if lot else None,
         expiration_date=lot.expiration_date if lot else None,
+        produced_at=leftover.created_at if leftover else None,
     )
 
 
@@ -108,6 +109,7 @@ def _produced_output_options(db: Session, origin: PlannedMeal, units: dict[int, 
             available_quantity=available,
             lot_id=lot.id if lot else None,
             expiration_date=lot.expiration_date if lot else None,
+            produced_at=output.created_at,
         ))
     return result
 
