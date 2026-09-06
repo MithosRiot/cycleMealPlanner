@@ -156,11 +156,18 @@ def reconcile_active_cycle(
     shopping_list = db.scalar(select(ShoppingList).where(ShoppingList.meal_cycle_id == cycle_id))
     if shopping_list is not None:
         db.flush()
+        # Placement edits can leave CycleSlot.planned_meal populated in the identity
+        # map even after the PlannedMeal row has been deleted. Refresh every slot
+        # relationship before regenerating Shopping so removed demand is not counted.
+        loaded_slots = list(cycle.slots)
+        for cycle_slot in loaded_slots:
+            db.expire(cycle_slot, ["planned_meal"])
         db.expire(cycle, ["slots"])
         cycle = db.scalar(
             select(MealCycle)
             .where(MealCycle.id == cycle_id)
             .options(selectinload(MealCycle.slots).selectinload(CycleSlot.planned_meal))
+            .execution_options(populate_existing=True)
         )
         _regenerate(db, cycle, commit=False)
 
