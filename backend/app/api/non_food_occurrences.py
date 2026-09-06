@@ -12,6 +12,7 @@ from app.models.completion import MealCompletion
 from app.models.meal_cycle import CycleSlot, MealCycle
 from app.models.planned_meal import PlannedMeal
 from app.schemas.planned_meal import NonFoodOccurrenceAssign, PlannedMealRead
+from app.services.active_cycle_reconciliation import assert_occurrence_editable, reconcile_active_cycle, record_revision
 
 router = APIRouter(prefix="/api/meal-cycles", tags=["meal-placement"])
 HOUSEHOLD_ID = 1
@@ -30,7 +31,7 @@ def _load_slot(db: Session, cycle_id: int, slot_id: int) -> CycleSlot:
     )
     if slot is None:
         raise HTTPException(status_code=404, detail="Cycle slot not found")
-    if slot.cycle.status != "DRAFT":
+    if slot.cycle.status not in {"DRAFT", "ACTIVE"}:
         raise HTTPException(status_code=409, detail=f"Cannot edit placements in a {slot.cycle.status} Meal Cycle")
     return slot
 
@@ -72,6 +73,8 @@ def assign_non_food_occurrence(
     if slot.planned_meal is not None:
         if slot.planned_meal.locked:
             raise HTTPException(status_code=409, detail="Placement is locked")
+        assert_occurrence_editable(db, slot.planned_meal)
+        record_revision(db, cycle_id, slot.planned_meal, "REPLACED")
         db.delete(slot.planned_meal)
         db.flush()
 
@@ -115,6 +118,8 @@ def assign_non_food_occurrence(
             actual_servings_eaten=Decimal("0"),
         )
     )
+    db.flush()
+    reconcile_active_cycle(db, cycle_id)
     db.commit()
     db.refresh(planned)
     return planned
