@@ -193,7 +193,7 @@ def verify_fixture() -> None:
         if protected_lot is None or Decimal(protected_lot["quantity"]) != Decimal("5"):
             raise RuntimeError(f"Unexpected protected UAT lot: {protected_lot}")
 
-        availability = client.get("/api/reservations/availability").json()
+        availability = client.get("/api/inventory-availability").json()
         protected = next((row for row in availability if row["ingredient_id"] == by_name["Waste UAT Reserved Produce"]["id"]), None)
         if protected is None:
             raise RuntimeError("Protected UAT Ingredient is missing from availability")
