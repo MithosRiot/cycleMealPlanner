@@ -163,9 +163,16 @@ def complete_shopping_item(cycle_id: int, item_id: int, payload: ShoppingItemCom
     substitution = purchased_iid != item.ingredient_id
     if not substitution and actual_unit.unit_family != item.unit_family: raise HTTPException(409, "Purchased unit must use the same measurement family as the shopping item")
     if substitution and (payload.satisfied_quantity is None or payload.satisfied_unit_id is None): raise HTTPException(422, "A substitution must state how much original demand it satisfies")
-    satisfied_unit = units.get(payload.satisfied_unit_id or payload.actual_unit_id)
+    if substitution:
+        satisfied_unit = units.get(payload.satisfied_unit_id)
+        satisfied_qty = payload.satisfied_quantity
+    else:
+        # A normal purchase always satisfies demand by the actual quantity bought.
+        # Ignore substitution-only satisfaction fields if an older/stale client sends them.
+        satisfied_unit = actual_unit
+        satisfied_qty = payload.actual_quantity
     if satisfied_unit is None or satisfied_unit.unit_family != item.unit_family: raise HTTPException(409, "Satisfied unit must use the original Shopping item's measurement family")
-    satisfied_qty = payload.satisfied_quantity if payload.satisfied_quantity is not None else payload.actual_quantity; satisfied_target = convert_quantity(Decimal(satisfied_qty), satisfied_unit, target); before = _remaining(item, target, units)
+    satisfied_target = convert_quantity(Decimal(satisfied_qty), satisfied_unit, target); before = _remaining(item, target, units)
     if satisfied_target > before: raise HTTPException(409, f"Purchase satisfies {satisfied_target} {target.code}, but only {before} {target.code} remains")
     location = db.get(InventoryLocation, payload.storage_location_id)
     if location is None or location.household_id != HOUSEHOLD_ID or not location.active: raise HTTPException(400, "Inventory location not found")
