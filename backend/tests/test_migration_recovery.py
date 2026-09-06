@@ -7,6 +7,9 @@ from alembic.config import Config
 from sqlalchemy import create_engine, event, text
 
 
+HEAD_REVISION = "0036_active_cycle_shopping_deltas"
+
+
 def _config() -> Config:
     config = Config("alembic.ini")
     config.set_main_option("script_location", "migrations")
@@ -92,16 +95,34 @@ def _seed_dependent_planning(engine) -> None:
         """))
 
 
+def _seed_completed_shopping(engine, unit_id: int, location_id: int) -> None:
+    with engine.begin() as connection:
+        connection.execute(text("""
+            INSERT INTO shopping_lists (id, household_id, meal_cycle_id, generated_at)
+            VALUES (9903,1,9902,'2026-09-05 12:00:00')
+        """))
+        connection.execute(text("""
+            INSERT INTO shopping_list_items
+            (id, shopping_list_id, ingredient_id, unit_id, unit_family, required_quantity,
+             inventory_quantity, generated_quantity, adjustment_quantity, source_trace, status,
+             actual_quantity, actual_unit_id, purchase_date, storage_location_id, inventory_lot_id, completed_at)
+            VALUES (9903,9903,9901,:unit_id,
+                    (SELECT unit_family FROM measurement_units WHERE id=:unit_id),2,0,2,0,'[]','COMPLETED',
+                    2,:unit_id,'2026-09-05',:location_id,9901,'2026-09-05 12:30:00')
+        """), {"unit_id": unit_id, "location_id": location_id})
+
+
 def _assert_recovered(engine) -> None:
     with engine.connect() as connection:
         assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0035_direct_recipe_occurrences"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == HEAD_REVISION
         completion_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(meal_completions)"))}
         inventory_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(inventory_lots)"))}
         planned_info = {row[1]: row for row in connection.execute(text("PRAGMA table_info(planned_meals)"))}
         leftover_info = {row[1]: row for row in connection.execute(text("PRAGMA table_info(leftovers)"))}
         coverage_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(production_coverage_reservations)"))}
         cycle_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(meal_cycles)"))}
+        shopping_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(shopping_list_items)"))}
         tables = {row[0] for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
         serving = connection.execute(text("SELECT code, unit_family FROM measurement_units WHERE code='serving'")) .one()
         fk_violations = connection.execute(text("PRAGMA foreign_key_check")).all()
@@ -116,7 +137,8 @@ def _assert_recovered(engine) -> None:
     assert leftover_info["source_meal_id"][3] == 0
     assert {"source_origin_planned_meal_id", "requested_quantity", "reserved_quantity", "shortage_quantity", "status"}.issubset(coverage_columns)
     assert {"lifecycle_status", "activated_at", "completed_at", "cancelled_at"}.issubset(cycle_columns)
-    assert {"leftovers", "meal_completion_outputs", "production_coverage_reservations"}.issubset(tables)
+    assert {"baseline_required_quantity", "plan_delta_quantity", "purchased_excess_quantity"}.issubset(shopping_columns)
+    assert {"leftovers", "meal_completion_outputs", "production_coverage_reservations", "shopping_item_purchases", "planned_meal_revisions"}.issubset(tables)
     assert "_alembic_tmp_inventory_lots" not in tables
     assert "_alembic_tmp_inventory_transactions" not in tables
     assert "_alembic_tmp_planned_meals" not in tables
@@ -232,6 +254,45 @@ def test_0035_recovers_partial_columns_and_stale_batch_with_populated_dependents
             assert connection.execute(text("SELECT planned_meal_id FROM meal_completions WHERE id=9902")).scalar_one() == 9902
             leftover = connection.execute(text("SELECT planned_meal_id, source_meal_id, source_recipe_id FROM leftovers WHERE id=9902")).one()
             assert leftover.planned_meal_id == 9902 and leftover.source_meal_id == 9902 and leftover.source_recipe_id is None
+        engine.dispose()
+    finally:
+        _restore_env(previous_url, previous_env)
+
+
+def test_0036_recovers_partial_additive_ddl_with_completed_purchase_and_foreign_keys_on(tmp_path) -> None:
+    db_path = tmp_path / "partial-0036.db"
+    database_url = f"sqlite:///{db_path.as_posix()}"
+    previous_url, previous_env = _set_env(database_url)
+    try:
+        command.upgrade(_config(), "0035_direct_recipe_occurrences")
+        engine = _engine(database_url)
+        unit_id, location_id = _seed_dependent_inventory(engine)
+        _seed_dependent_planning(engine)
+        _seed_completed_shopping(engine, unit_id, location_id)
+        with engine.begin() as connection:
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0035_direct_recipe_occurrences"
+            assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
+            connection.execute(text("ALTER TABLE shopping_list_items ADD COLUMN baseline_required_quantity NUMERIC(16, 6)"))
+            connection.execute(text("UPDATE shopping_list_items SET baseline_required_quantity=required_quantity"))
+        command.upgrade(_config(), "head")
+        _assert_recovered(engine)
+        with engine.connect() as connection:
+            item = connection.execute(text("""
+                SELECT baseline_required_quantity, plan_delta_quantity, purchased_excess_quantity
+                FROM shopping_list_items WHERE id=9903
+            """)).one()
+            purchase = connection.execute(text("""
+                SELECT shopping_list_item_id, actual_quantity, actual_unit_id, inventory_lot_id
+                FROM shopping_item_purchases WHERE shopping_list_item_id=9903
+            """)).one()
+            assert item.baseline_required_quantity == 2
+            assert item.plan_delta_quantity == 0
+            assert item.purchased_excess_quantity == 0
+            assert purchase.shopping_list_item_id == 9903
+            assert purchase.actual_quantity == 2
+            assert purchase.actual_unit_id == unit_id
+            assert purchase.inventory_lot_id == 9901
+            assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
         engine.dispose()
     finally:
         _restore_env(previous_url, previous_env)
