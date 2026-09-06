@@ -95,3 +95,13 @@ def test_0036_recovers_partial_additive_ddl_with_completed_purchase_and_foreign_
             r=c.execute(text("SELECT purchased_ingredient_id,satisfied_quantity,satisfied_unit_id,purchase_kind FROM shopping_item_purchases WHERE shopping_list_item_id=9903")).one(); assert r.purchased_ingredient_id==9901 and r.satisfied_quantity==2 and r.satisfied_unit_id==u and r.purchase_kind=="STANDARD"
         e.dispose()
     finally: _restore(old)
+
+def test_0038_recovers_stale_sqlite_batch_table_after_interrupted_attempt(tmp_path):
+    url=f"sqlite:///{(tmp_path/'p38.db').as_posix()}"; old=_env(url)
+    try:
+        command.upgrade(_config(),"0037_shopping_partial_substitutions"); e=_engine(url); _inventory(e)
+        with e.begin() as c:
+            c.execute(text("ALTER TABLE inventory_transactions ADD COLUMN reason VARCHAR(160)"))
+            c.execute(text("CREATE TABLE _alembic_tmp_inventory_transactions AS SELECT * FROM inventory_transactions WHERE 0"))
+        command.upgrade(_config(),"head"); _assert(e); e.dispose()
+    finally: _restore(old)
