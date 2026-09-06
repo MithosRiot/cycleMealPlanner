@@ -34,7 +34,8 @@ def _clear_extended_seed_data_before_reset() -> None:
     """Clear newer child/history tables before the base seed reset.
 
     The base seed reset predates Gather, Cooking Mode, completion history,
-    leftovers/RecipeOutputs, and produced-stock coverage. A populated test DB
+    leftovers/RecipeOutputs, produced-stock coverage, active-cycle revision
+    provenance, and append-only Shopping purchase history. A populated test DB
     therefore has child rows that must be removed before the base reset can
     delete planned_meals, Inventory lots/transactions, Recipes, and related
     parents. Keep foreign-key enforcement ON here so CI validates the deletion
@@ -44,6 +45,8 @@ def _clear_extended_seed_data_before_reset() -> None:
         return
 
     tables = [
+        "planned_meal_revisions",
+        "shopping_item_purchases",
         "production_coverage_reservations",
         "meal_completion_allocations",
         "meal_completion_outputs",
@@ -245,48 +248,46 @@ def _seed_completion_draft() -> None:
                 usage_id += 1
 
 
-def _seed_leftover_coverage_example() -> None:
-    from app.database.session import SessionLocal, engine
-    from app.services.production_coverage import reconcile_production_coverage
-
+def _seed_default_coverage() -> None:
+    from app.database.session import engine
     with engine.begin() as connection:
-        connection.execute(text("DELETE FROM planned_meals WHERE id=2"))
+        connection.execute(text("DELETE FROM production_coverage_reservations"))
         connection.execute(text("""
-            INSERT INTO planned_meals
-            (id, cycle_slot_id, meal_id, source_type, source_origin_planned_meal_id,
-             source_record_id, source_recipe_output_id, source_quantity, source_unit_id,
-             locked, planned_servings, planned_leftover_servings, component_serving_overrides,
-             scaled_components, snapshot_name, snapshot_description, snapshot_meal_types, snapshot_components)
-            VALUES
-            (2,6,1,'LEFTOVER',1,NULL,NULL,2.000000,16,0,2,0,'{}','[]',
-             'Leftover: Chicken Dinner','Seeded future use of Chicken Dinner leftovers','["DINNER"]','[]')
-        """))
-    with SessionLocal() as db:
-        reconcile_production_coverage(db)
-        db.commit()
+            INSERT INTO production_coverage_reservations
+            (cycle_id, planned_meal_id, source_type, source_origin_planned_meal_id, source_record_id,
+             source_recipe_output_id, requested_quantity, unit_id, reserved_quantity, shortage_quantity,
+             lot_id, status, release_reason, released_at, created_at, updated_at)
+            SELECT 1, 2, 'LEFTOVER', 1, NULL, NULL, 2.000000, 16, 2.000000, 0.000000,
+                   NULL, 'ACTIVE', NULL, NULL, :now, :now
+            WHERE EXISTS (SELECT 1 FROM planned_meals WHERE id=2 AND source_type='LEFTOVER')
+        """), {"now": datetime.utcnow()})
 
 
-def seed(reset: bool = False):
-    had_existing_data = not reset and _has_existing_seed_data()
-    if reset:
+def _seed_direct_recipe_examples() -> None:
+    from app.database.session import engine
+    with engine.begin() as connection:
+        connection.execute(text("UPDATE planned_meals SET source_recipe_id=NULL WHERE source_type!='DIRECT_RECIPE'"))
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Reset and seed the deterministic Cycle Meal Planner test database.")
+    parser.add_argument("--reset", action="store_true", help="Delete existing seeded data before recreating it.")
+    args = parser.parse_args()
+
+    configure_database()
+    from app.database.migrations import run_migrations
+    run_migrations()
+
+    if args.reset and _has_existing_seed_data():
         _clear_extended_seed_data_before_reset()
-    path = _base.seed(reset=reset)
-    if had_existing_data:
-        return path
+    _base.main(["--reset"] if args.reset else [])
     _seed_typed_prep_examples()
     _seed_gather_examples()
     _seed_cooking_steps()
     _seed_completion_draft()
-    _seed_leftover_coverage_example()
-    return path
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Seed the reproducible Cycle Meal Planner test database")
-    parser.add_argument("--reset", action="store_true", help="clear and reseed mutable test data")
-    args = parser.parse_args()
-    seed(reset=args.reset)
-    print(TEST_DB)
+    _seed_default_coverage()
+    _seed_direct_recipe_examples()
+    print(f"Seeded deterministic test database: {TEST_DB}")
 
 
 if __name__ == "__main__":
