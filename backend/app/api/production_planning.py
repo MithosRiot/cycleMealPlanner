@@ -17,7 +17,8 @@ from app.models.production import Leftover, MealCompletionOutput
 from app.models.recipe_output import RecipeOutput
 from app.models.reference import MeasurementUnit
 from app.schemas.planned_meal import PlannedMealRead, ProducedSourceAssign, ProducedSourceOption
-from app.services.production_coverage import reconcile_production_coverage, release_coverage_for_planned, reserved_for_lot
+from app.services.active_cycle_reconciliation import assert_occurrence_editable, reconcile_active_cycle, record_revision
+from app.services.production_coverage import release_coverage_for_planned, reserved_for_lot
 
 router = APIRouter(tags=["produced-source-planning"])
 HOUSEHOLD_ID = 1
@@ -194,6 +195,8 @@ def assign_produced_source(cycle_id: int, slot_id: int, payload: ProducedSourceA
     if slot.planned_meal is not None:
         if slot.planned_meal.locked:
             raise HTTPException(status_code=409, detail="Placement is locked")
+        assert_occurrence_editable(db, slot.planned_meal)
+        record_revision(db, cycle_id, slot.planned_meal, "REPLACED")
         release_coverage_for_planned(db, slot.planned_meal.id, "REPLACED")
         db.delete(slot.planned_meal)
         db.flush()
@@ -220,7 +223,7 @@ def assign_produced_source(cycle_id: int, slot_id: int, payload: ProducedSourceA
     )
     db.add(planned)
     db.flush()
-    reconcile_production_coverage(db)
+    reconcile_active_cycle(db, cycle_id)
     db.commit()
     db.refresh(planned)
     return planned

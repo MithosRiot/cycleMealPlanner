@@ -21,6 +21,7 @@ from app.schemas.planned_meal import (
     PlannedMealRead,
     RandomFillResult,
 )
+from app.services.active_cycle_reconciliation import assert_occurrence_editable, reconcile_active_cycle, record_revision
 from app.services.normalization import normalize_name
 
 router = APIRouter(prefix="/api/meal-cycles", tags=["meal-placement"])
@@ -44,7 +45,7 @@ def _load_slot(db: Session, cycle_id: int, slot_id: int) -> CycleSlot:
     )
     if slot is None:
         raise HTTPException(status_code=404, detail="Cycle slot not found")
-    if slot.cycle.status != "DRAFT":
+    if slot.cycle.status not in {"DRAFT", "ACTIVE"}:
         raise HTTPException(status_code=409, detail=f"Cannot edit placements in a {slot.cycle.status} Meal Cycle")
     return slot
 
@@ -168,6 +169,8 @@ def _clear_slot(db: Session, slot: CycleSlot) -> None:
         return
     if slot.planned_meal.locked:
         raise HTTPException(status_code=409, detail="Placement is locked")
+    assert_occurrence_editable(db, slot.planned_meal)
+    record_revision(db, slot.cycle_id, slot.planned_meal, "REPLACED")
     db.delete(slot.planned_meal)
     db.flush()
 
@@ -285,6 +288,7 @@ def assign_meal(cycle_id: int, slot_id: int, payload: PlannedMealAssign, db: Ses
     slot = _load_slot(db, cycle_id, slot_id)
     meal = _load_meal(db, payload.meal_id)
     planned = _place(db, slot, meal)
+    reconcile_active_cycle(db, cycle_id)
     db.commit()
     db.refresh(planned)
     return planned
@@ -295,6 +299,7 @@ def assign_recipe(cycle_id: int, slot_id: int, payload: DirectRecipeAssign, db: 
     slot = _load_slot(db, cycle_id, slot_id)
     recipe = _load_recipe(db, payload.recipe_id)
     planned = _place_recipe(db, slot, recipe, payload)
+    reconcile_active_cycle(db, cycle_id)
     db.commit()
     db.refresh(planned)
     return planned
@@ -305,21 +310,28 @@ def update_planning(cycle_id: int, slot_id: int, payload: PlannedMealPlanningUpd
     slot = _load_slot(db, cycle_id, slot_id)
     if slot.planned_meal is None:
         raise HTTPException(status_code=404, detail="No planned meal in this slot")
+    assert_occurrence_editable(db, slot.planned_meal)
+    if slot.planned_meal.source_type not in {"SAVED_MEAL", "DIRECT_RECIPE"}:
+        raise HTTPException(status_code=409, detail="Serving quantities can only be revised for saved Meals or direct Recipes")
 
     valid_component_ids = {_component_key(component) for component in json.loads(slot.planned_meal.snapshot_components)}
     unknown = set(payload.component_serving_overrides) - valid_component_ids
     if unknown:
         raise HTTPException(status_code=422, detail=f"Unknown planned component: {min(unknown)}")
 
-    slot.planned_meal.planned_servings = payload.planned_servings
-    slot.planned_meal.planned_leftover_servings = payload.planned_leftover_servings
-    slot.planned_meal.component_serving_overrides = json.dumps(
+    planned = slot.planned_meal
+    record_revision(db, cycle_id, planned, "QUANTITY_CHANGED")
+    planned.planned_servings = payload.planned_servings
+    planned.planned_leftover_servings = payload.planned_leftover_servings
+    planned.component_serving_overrides = json.dumps(
         {str(key): str(value) for key, value in payload.component_serving_overrides.items()}
     )
-    slot.planned_meal.scaled_components = _calculate_scaled_components(db, slot.planned_meal)
+    planned.scaled_components = _calculate_scaled_components(db, planned)
+    db.flush()
+    reconcile_active_cycle(db, cycle_id, invalidate_gather_for={planned.id})
     db.commit()
-    db.refresh(slot.planned_meal)
-    return slot.planned_meal
+    db.refresh(planned)
+    return planned
 
 
 @router.delete("/{cycle_id}/slots/{slot_id}/planned-meal", status_code=status.HTTP_204_NO_CONTENT)
@@ -329,7 +341,11 @@ def remove_meal(cycle_id: int, slot_id: int, db: Session = Depends(get_db)) -> N
         return
     if slot.planned_meal.locked:
         raise HTTPException(status_code=409, detail="Placement is locked")
+    assert_occurrence_editable(db, slot.planned_meal)
+    record_revision(db, cycle_id, slot.planned_meal, "REMOVED")
     db.delete(slot.planned_meal)
+    db.flush()
+    reconcile_active_cycle(db, cycle_id)
     db.commit()
 
 
@@ -352,10 +368,14 @@ def move_meal(cycle_id: int, slot_id: int, payload: PlannedMealMove, db: Session
         raise HTTPException(status_code=404, detail="No planned meal in source slot")
     if source.planned_meal.locked:
         raise HTTPException(status_code=409, detail="Placement is locked")
+    assert_occurrence_editable(db, source.planned_meal)
     if target.planned_meal is not None:
         raise HTTPException(status_code=409, detail="Target slot is occupied")
     planned = source.planned_meal
+    record_revision(db, cycle_id, planned, "MOVED")
     planned.cycle_slot_id = target.id
+    db.flush()
+    reconcile_active_cycle(db, cycle_id, invalidate_gather_for={planned.id})
     db.commit()
     db.refresh(planned)
     return planned

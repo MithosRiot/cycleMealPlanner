@@ -60,7 +60,7 @@ All notable changes to Cycle Meal Planner will be documented here.
 - Meal Cycle lifecycle with validation-gated atomic activation, a single ACTIVE cycle invariant, lifecycle timestamps, Dashboard ACTIVE-cycle preference, DRAFT-only plan editing until revision reconciliation is implemented, and reservation-safe completion/cancellation.
 - Direct Recipe cycle occurrences with immutable Recipe provenance and snapshots, normal serving/leftover scaling, reservation and Shopping demand, prep/Gather/Cooking Mode support, completion/Inventory consumption, leftover production, produced-stock reuse, validation, and Dashboard source labeling without requiring a saved Meal wrapper.
 - Manual, Eating Out, and Skipped cycle occurrences with immutable display snapshots, explicit Meal Plan controls, Dashboard labeling, zero Ingredient/Shopping/prep/Gather/Cooking demand, and automatic zero-consumption completion so they never block cycle lifecycle completion.
+- Safe ACTIVE-cycle occurrence revisions for add, replace, move, remove, and serving changes, with atomic reservation/coverage/Gather/Shopping reconciliation, immutable finalized occurrences, historical placement revision provenance, append-only Shopping purchase history, and visible added-demand, removed-demand, and already-purchased-excess deltas.
 
 ### Known limitations
-- Active Meal Cycle revisions are intentionally locked until the v1.0 reconciliation increment is implemented.
 - The development database currently defaults to `./data`; packaged Windows persistence will be moved outside the installation directory.

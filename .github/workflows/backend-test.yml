@@ -34,6 +34,9 @@ jobs:
       - name: Run migration recovery tests
         run: pytest -q tests/test_migration_recovery.py
 
+      - name: Run active-cycle reconciliation tests
+        run: pytest -q tests/test_active_cycle_reconciliation.py tests/test_active_cycle_move_add.py
+
       - name: Run tests
         run: pytest -q --cov=app --cov-report=term-missing
 
@@ -57,6 +60,11 @@ jobs:
 
       - name: Populate non-food occurrence fixture
         run: python testdata/seed_non_food_occurrence_fixture.py
+
+      - name: Populate active-cycle reconciliation fixture
+        run: |
+          python testdata/seed_active_cycle_reconciliation_fixture.py
+          python testdata/seed_active_cycle_reconciliation_fixture.py --verify
 
       - name: Validate repeated populated seed reset
         run: python testdata/seed_test_db.py --reset

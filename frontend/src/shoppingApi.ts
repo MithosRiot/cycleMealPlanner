@@ -1,3 +1,16 @@
+export type ShoppingPurchase = {
+  id: number
+  actual_quantity: string
+  actual_unit_id: number
+  actual_unit_code: string
+  purchase_date: string | null
+  storage_location_id: number
+  expiration_date: string | null
+  purchase_notes: string | null
+  inventory_lot_id: number
+  completed_at: string
+}
+
 export type ShoppingItem = {
   id: number
   ingredient_id: number
@@ -25,6 +38,10 @@ export type ShoppingItem = {
   purchase_notes: string | null
   inventory_lot_id: number | null
   completed_at: string | null
+  baseline_required_quantity: string | null
+  plan_delta_quantity: string
+  purchased_excess_quantity: string
+  purchases: ShoppingPurchase[]
 }
 
 export type ShoppingList = {

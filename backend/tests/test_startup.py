@@ -3,6 +3,12 @@ from sqlalchemy import text
 
 from app.main import app
 from app.database.session import engine
+from testdata.seed_test_db import TEST_DB, seed
+
+
+def test_local_test_launcher_seed_import_contract() -> None:
+    assert TEST_DB.name == "mealplanner-test.db"
+    assert callable(seed)
 
 
 def test_health_endpoint_and_migrations() -> None:
@@ -13,7 +19,7 @@ def test_health_endpoint_and_migrations() -> None:
 
     with engine.connect() as connection:
         migration_version = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-        assert migration_version == "0035_direct_recipe_occurrences"
+        assert migration_version == "0036_active_cycle_shopping_deltas"
 
 
 def test_sqlite_foreign_keys_and_wal_are_enabled() -> None:
