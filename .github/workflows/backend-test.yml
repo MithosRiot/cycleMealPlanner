@@ -35,7 +35,7 @@ jobs:
         run: pytest -q tests/test_migration_recovery.py
 
       - name: Run active-cycle reconciliation tests
-        run: pytest -q tests/test_active_cycle_reconciliation.py
+        run: pytest -q tests/test_active_cycle_reconciliation.py tests/test_active_cycle_move_add.py
 
       - name: Run tests
         run: pytest -q --cov=app --cov-report=term-missing
