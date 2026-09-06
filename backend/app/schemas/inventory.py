@@ -32,6 +32,12 @@ class QuantityAction(BaseModel):
     note: str | None = None
 
 
+class DiscardAction(BaseModel):
+    quantity: Decimal = Field(gt=0)
+    reason: str = Field(min_length=1, max_length=160)
+    note: str | None = None
+
+
 class CorrectionAction(BaseModel):
     quantity: Decimal = Field(ge=0)
     note: str | None = None
@@ -58,6 +64,7 @@ class InventoryTransactionRead(BaseModel):
     unit_id: int
     from_location_id: int | None
     to_location_id: int | None
+    reason: str | None
     note: str | None
     created_at: datetime
 
