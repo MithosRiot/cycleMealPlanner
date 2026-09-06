@@ -21,4 +21,4 @@ def test_0037_recovers_partial_additive_ddl_with_populated_foreign_keys(tmp_path
     command.upgrade(config, "head")
     with engine.connect() as connection:
         version = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one(); columns = {row[1] for row in connection.execute(text("PRAGMA table_info(shopping_item_purchases)"))}; violations = connection.execute(text("PRAGMA foreign_key_check")).all()
-    assert version == "0037_shopping_partial_substitutions"; assert {"purchased_ingredient_id", "satisfied_quantity", "satisfied_unit_id", "purchase_kind", "idempotency_key"}.issubset(columns); assert violations == []
+    assert version == "0038_inventory_waste_spoilage"; assert {"purchased_ingredient_id", "satisfied_quantity", "satisfied_unit_id", "purchase_kind", "idempotency_key"}.issubset(columns); assert violations == []
