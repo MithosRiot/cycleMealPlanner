@@ -43,6 +43,9 @@ export default function CycleSchedulingPanel() {
     await queryClient.invalidateQueries({ queryKey: ['expiration-suggestions', id] })
     await queryClient.invalidateQueries({ queryKey: ['prep-schedule', id] })
     await queryClient.invalidateQueries({ queryKey: ['cycle-validation', id] })
+    await queryClient.invalidateQueries({ queryKey: ['shopping-list', id] })
+    await queryClient.invalidateQueries({ queryKey: ['cycle-reservations', id] })
+    await queryClient.invalidateQueries({ queryKey: ['production-coverage', id] })
     await queryClient.invalidateQueries({ queryKey: ['inventory-availability'] })
     await queryClient.invalidateQueries({ queryKey: ['production-inventory-availability'] })
   }
@@ -91,10 +94,11 @@ export default function CycleSchedulingPanel() {
 
   const lifecycleError = activate.error || complete.error || cancel.error
   const draft = cycle.data?.status === 'DRAFT'
+  const placementEditable = cycle.data?.status === 'DRAFT' || cycle.data?.status === 'ACTIVE'
 
   return <section className="panel" style={{ marginTop: 20 }}>
     <div className="section-heading">
-      <div><h2>Cycle schedule</h2><p className="planning-note">Set dates/times, place direct Recipes or non-food occurrences when needed, then activate the validated cycle.</p></div>
+      <div><h2>Cycle schedule</h2><p className="planning-note">Set dates/times before activation. Unfinalized occurrences can still be revised safely while a cycle is ACTIVE.</p></div>
       <select value={effectiveId ?? ''} onChange={(event) => setSelectedId(event.target.value ? Number(event.target.value) : null)}><option value="">Select cycle</option>{cycles.data?.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.status}</option>)}</select>
     </div>
     {save.error instanceof Error && <div className="error-banner">{save.error.message}</div>}
@@ -108,7 +112,7 @@ export default function CycleSchedulingPanel() {
         {cycle.data.slot_definitions.map((slot) => <label key={slot.id}>{slot.label} serving time<input type="time" disabled={!draft} value={times[slot.id] ?? ''} onChange={(event) => setTimes((current) => ({ ...current, [slot.id]: event.target.value }))} /></label>)}
       </div>
       <div className="ingredient-meta" style={{ marginTop: 12 }}>{draft && <button type="button" className="button-secondary" disabled={save.isPending} onClick={() => save.mutate()}>{save.isPending ? 'Saving…' : 'Save schedule'}</button>}{draft && <button type="button" disabled={activate.isPending} onClick={() => activate.mutate()}>{activate.isPending ? 'Activating…' : 'Activate cycle'}</button>}{cycle.data.status === 'ACTIVE' && <button type="button" disabled={complete.isPending} onClick={() => complete.mutate()}>{complete.isPending ? 'Completing…' : 'Complete cycle'}</button>}{(cycle.data.status === 'DRAFT' || cycle.data.status === 'ACTIVE') && <button type="button" className="button-secondary" disabled={cancel.isPending} onClick={() => { if (window.confirm(`Cancel ${cycle.data?.name}? Active reservations will be released.`)) cancel.mutate() }}>{cancel.isPending ? 'Cancelling…' : 'Cancel cycle'}</button>}</div>
-      {draft && <div className="advanced-grid" style={{ marginTop: 20 }}>
+      {placementEditable && <div className="advanced-grid" style={{ marginTop: 20 }}>
         <section className="settings-card">
           <h3>Place a direct Recipe</h3>
           <p className="planning-note">Use a Recipe directly without creating a saved Meal wrapper.</p>
@@ -128,7 +132,7 @@ export default function CycleSchedulingPanel() {
           <button type="button" className="button-secondary" disabled={placeOccurrence.isPending || occurrenceSlotId === null || (occurrenceType === 'MANUAL' && !occurrenceTitle.trim())} onClick={() => placeOccurrence.mutate()}>{placeOccurrence.isPending ? 'Placing…' : 'Place occurrence'}</button>
         </section>
       </div>}
-      {cycle.data.status === 'ACTIVE' && <p className="planning-note">Schedule and placement settings are locked while the cycle is ACTIVE.</p>}
+      {cycle.data.status === 'ACTIVE' && <p className="planning-note">Schedule structure stays locked while ACTIVE. Adding, moving, removing, or changing quantities on unfinalized occurrences reconciles reservations, Shopping, prep/Gather state, and validation automatically.</p>}
       <div className="recipe-ingredient-list" style={{ marginTop: 16 }}>{scheduleRows.map((row) => <div className="ingredient-row" key={row.id}><strong>{row.name}</strong><div className="ingredient-meta"><span>{sourceLabel(row.sourceType)} · Day {row.day} · {row.label}</span><span>{row.scheduledDate ?? 'No date'}{row.servingTime ? ` · ${row.servingTime.slice(0, 5)}` : ''}</span>{row.description && <span>{row.description}</span>}</div></div>)}</div>
       {scheduleRows.length === 0 && <p className="muted-line">No planned occurrences in this cycle yet.</p>}
     </>}
