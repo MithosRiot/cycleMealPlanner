@@ -57,6 +57,7 @@ class ProducedSourceOption(BaseModel):
     available_quantity: Decimal
     lot_id: int | None
     expiration_date: date | None
+    produced_at: datetime | None = None
 
 
 class PlannedMealMove(BaseModel):
