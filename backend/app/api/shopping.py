@@ -286,7 +286,6 @@ def _regenerate(db: Session, cycle: MealCycle, *, commit: bool = True) -> Shoppi
                 purchased_excess_quantity=Decimal("0"),
             )
             db.add(item)
-            db.flush()
         elif item.baseline_required_quantity is None:
             item.baseline_required_quantity = Decimal(item.required_quantity)
 
