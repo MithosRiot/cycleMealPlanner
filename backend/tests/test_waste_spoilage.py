@@ -177,7 +177,7 @@ def test_spoilage_cannot_reduce_ingredient_stock_below_active_reservations() -> 
         assert allowed.status_code == 200
         assert Decimal(allowed.json()["quantity"]) == Decimal("4")
 
-        availability = client.get("/api/reservations/availability").json()
+        availability = client.get("/api/inventory-availability").json()
         row = next(item for item in availability if item["ingredient_id"] == ingredient["id"])
         assert Decimal(row["physical_quantity"]) == Decimal("4")
         assert Decimal(row["reserved_quantity"]) == Decimal("4")
