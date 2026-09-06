@@ -18,7 +18,8 @@ const baseOption = {
   expiration_date: '2026-09-08',
 }
 
-assert.equal(leftoverState(baseOption, '2026-09-06'), 'AVAILABLE')
+assert.equal(leftoverState({ ...baseOption, reserved_quantity: '0', available_quantity: '3' }, '2026-09-06'), 'AVAILABLE')
+assert.equal(leftoverState(baseOption, '2026-09-06'), 'RESERVED')
 assert.equal(leftoverState({ ...baseOption, available_quantity: '0', reserved_quantity: '3' }, '2026-09-06'), 'RESERVED')
 assert.equal(leftoverState({ ...baseOption, physical_quantity: '0', available_quantity: '0' }, '2026-09-06'), 'EXHAUSTED')
 assert.equal(leftoverState({ ...baseOption, expiration_date: '2026-09-05' }, '2026-09-06'), 'EXPIRED')
