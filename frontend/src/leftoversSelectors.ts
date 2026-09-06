@@ -21,10 +21,14 @@ export function sourceSlotFor(option: ProducedSourceOption, cycles: MealCycle[])
   return null
 }
 
+function sameCycleTargetIsAfterSource(sourceSlot: CycleSlot, targetSlot: CycleSlot): boolean {
+  if (targetSlot.day_number !== sourceSlot.day_number) return targetSlot.day_number > sourceSlot.day_number
+  if (targetSlot.sort_order !== sourceSlot.sort_order) return targetSlot.sort_order > sourceSlot.sort_order
+  return targetSlot.id > sourceSlot.id
+}
+
 function targetIsAfterSource(sourceCycle: MealCycle, sourceSlot: CycleSlot, targetCycle: MealCycle, targetSlot: CycleSlot): boolean {
-  if (sourceCycle.id === targetCycle.id) {
-    return [targetSlot.day_number, targetSlot.sort_order, targetSlot.id].join(':') > [sourceSlot.day_number, sourceSlot.sort_order, sourceSlot.id].join(':')
-  }
+  if (sourceCycle.id === targetCycle.id) return sameCycleTargetIsAfterSource(sourceSlot, targetSlot)
   if (sourceSlot.scheduled_datetime && targetSlot.scheduled_datetime) return targetSlot.scheduled_datetime > sourceSlot.scheduled_datetime
   return true
 }
