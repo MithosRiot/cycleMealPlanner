@@ -223,7 +223,7 @@ def _seed_completion_draft() -> None:
                 unit_code = connection.execute(text("SELECT code FROM measurement_units WHERE id=:id"), {"id": unit_id}).scalar_one()
                 prep = connection.execute(text("""
                     SELECT preparation, prep_method, prep_size, prep_state FROM recipe_ingredients WHERE id=:id
-                """)).mappings().first()
+                """), {"id": recipe_ingredient_id}).mappings().first()
                 connection.execute(text("""
                     INSERT INTO meal_completion_usage
                     (id, completion_id, component_key, recipe_id, recipe_name, recipe_ingredient_id,
