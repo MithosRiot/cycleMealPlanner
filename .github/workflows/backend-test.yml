@@ -66,5 +66,10 @@ jobs:
           python testdata/seed_active_cycle_reconciliation_fixture.py
           python testdata/seed_active_cycle_reconciliation_fixture.py --verify
 
+      - name: Populate Shopping partial/substitution fixture
+        run: |
+          python testdata/seed_shopping_partial_substitution_fixture.py
+          python testdata/seed_shopping_partial_substitution_fixture.py --verify
+
       - name: Validate repeated populated seed reset
         run: python testdata/seed_test_db.py --reset
