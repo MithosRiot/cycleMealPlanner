@@ -5,11 +5,10 @@ export type LeftoverState = 'AVAILABLE' | 'RESERVED' | 'EXHAUSTED' | 'EXPIRED' |
 export function leftoverState(option: ProducedSourceOption, todayIso: string): LeftoverState {
   const physical = Number(option.physical_quantity)
   const reserved = Number(option.reserved_quantity)
-  const available = Number(option.available_quantity)
   if (option.lot_id === null) return 'PLANNED'
   if (physical <= 0) return 'EXHAUSTED'
   if (option.expiration_date && option.expiration_date < todayIso) return 'EXPIRED'
-  if (reserved > 0 && available <= 0) return 'RESERVED'
+  if (reserved > 0) return 'RESERVED'
   return 'AVAILABLE'
 }
 
