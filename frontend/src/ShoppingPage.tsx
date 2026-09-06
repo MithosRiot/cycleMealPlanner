@@ -52,6 +52,7 @@ export default function ShoppingPage() {
         return next
       })
       queryClient.invalidateQueries({ queryKey: ['inventory'] })
+      queryClient.invalidateQueries({ queryKey: ['inventory-availability'] })
     },
   })
   const skip = useMutation({
@@ -82,6 +83,8 @@ export default function ShoppingPage() {
   }
 
   const error = regenerate.error || adjust.error || complete.error || skip.error
+  const purchaseCount = shopping.data?.items.reduce((count, item) => count + item.purchases.length, 0) ?? 0
+  const changedCount = shopping.data?.items.filter((item) => Number(item.plan_delta_quantity) !== 0).length ?? 0
 
   return (
     <section className="shopping-page">
@@ -89,7 +92,7 @@ export default function ShoppingPage() {
         <div>
           <p className="eyebrow">Inventory-aware</p>
           <h1>Shopping</h1>
-          <p>Generate shortages, record what you actually bought, and add purchases directly to Inventory.</p>
+          <p>Generate shortages, record what you actually bought, and keep plan changes separate from purchase history.</p>
         </div>
       </header>
 
@@ -119,8 +122,8 @@ export default function ShoppingPage() {
           <div className="shopping-summary">
             <strong>{shopping.data.meal_cycle_name}</strong>
             <span>{shopping.data.items.filter((item) => item.status === 'PENDING' && Number(item.final_quantity) > 0).length} pending items</span>
-            <span>{shopping.data.items.filter((item) => item.status === 'COMPLETED').length} purchased</span>
-            <span>{shopping.data.items.filter((item) => item.status === 'SKIPPED').length} skipped</span>
+            <span>{purchaseCount} purchase record{purchaseCount === 1 ? '' : 's'}</span>
+            <span>{changedCount} plan change{changedCount === 1 ? '' : 's'}</span>
           </div>
           <div className="shopping-groups">
             {grouped.map(([category, items]) => (
@@ -132,21 +135,28 @@ export default function ShoppingPage() {
                     const compatibleUnits = units.data?.filter((unit) => unit.unit_family === item.unit_family) ?? []
                     const activeLocations = locations.data?.filter((location) => location.active) ?? []
                     const terminal = item.status !== 'PENDING'
+                    const delta = Number(item.plan_delta_quantity)
+                    const excess = Number(item.purchased_excess_quantity)
                     return (
                       <article className={`shopping-item ${terminal ? 'shopping-item-terminal' : Number(item.final_quantity) <= 0 ? 'covered' : ''}`} key={item.id}>
                         <div>
                           <div className="shopping-title-row"><strong>{item.ingredient_name}</strong><span className={`shopping-status ${item.status.toLowerCase()}`}>{item.status}</span></div>
                           <div className="shopping-math">Need {Number(item.required_quantity).toLocaleString()} {item.unit_code} · Have {Number(item.inventory_quantity).toLocaleString()} {item.unit_code}</div>
+                          {delta !== 0 && <div className={delta > 0 ? 'warning-text' : 'planning-note'}>Plan changed: {delta > 0 ? '+' : ''}{delta.toLocaleString()} {item.unit_code} required since this Shopping list was first generated.</div>}
+                          {excess > 0 && <div className="planning-note">Already purchased excess: {excess.toLocaleString()} {item.unit_code} relative to the current plan.</div>}
                           {item.warning && <div className="warning-text">{item.warning}</div>}
                           <details>
-                            <summary>Sources</summary>
-                            <ul>{(JSON.parse(item.source_trace) as Array<{ day_number: number; meal_name: string; quantity: string }>).map((source, index) => <li key={`${source.day_number}-${source.meal_name}-${index}`}>Day {source.day_number}: {source.meal_name} ({source.quantity})</li>)}</ul>
+                            <summary>Current sources</summary>
+                            <ul>{(JSON.parse(item.source_trace) as Array<{ day_number?: number; meal_name?: string; quantity?: string; source?: string }>).map((source, index) => <li key={`${source.day_number ?? source.source}-${source.meal_name ?? ''}-${index}`}>{source.source === 'STAPLE' ? 'Staple stock rule' : `Day ${source.day_number}: ${source.meal_name} (${source.quantity})`}</li>)}</ul>
                           </details>
-                          {item.status === 'COMPLETED' && <div className="purchase-record">Purchased {Number(item.actual_quantity).toLocaleString()} {item.actual_unit_code} · Inventory lot #{item.inventory_lot_id}{item.purchase_date ? ` · ${item.purchase_date}` : ''}</div>}
-                          {item.status === 'SKIPPED' && <div className="purchase-record">Skipped — no inventory was added.</div>}
+                          {item.purchases.length > 0 && <details open>
+                            <summary>Purchase history ({item.purchases.length})</summary>
+                            {item.purchases.map((purchase) => <div className="purchase-record" key={purchase.id}>Purchased {Number(purchase.actual_quantity).toLocaleString()} {purchase.actual_unit_code} · Inventory lot #{purchase.inventory_lot_id}{purchase.purchase_date ? ` · ${purchase.purchase_date}` : ''}</div>)}
+                          </details>}
+                          {item.status === 'SKIPPED' && item.purchases.length === 0 && <div className="purchase-record">No current purchase is required.</div>}
                         </div>
                         <div className="shopping-quantity">
-                          <span className="generated-quantity">Generated: {Number(item.generated_quantity).toLocaleString()} {item.unit_code}</span>
+                          <span className="generated-quantity">Generated now: {Number(item.generated_quantity).toLocaleString()} {item.unit_code}</span>
                           {!terminal && (
                             <>
                               <label>Adjustment<input type="number" step="0.001" value={adjustments[item.id] ?? item.adjustment_quantity} onChange={(event) => setAdjustments({ ...adjustments, [item.id]: event.target.value })} /></label>
