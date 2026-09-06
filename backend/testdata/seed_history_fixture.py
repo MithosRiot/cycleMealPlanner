@@ -65,14 +65,16 @@ def seed_fixture() -> None:
 
 
 def verify_fixture() -> None:
-    seed_test_db.configure_database()
+    # Simulate run_test.py startup before validating persistence. A normal
+    # non-reset seed refresh must preserve finalized completion history.
+    seed_test_db.seed(reset=False)
     with _client() as client:
         meals = client.get("/api/history/meals")
         if meals.status_code != 200:
             raise RuntimeError(f"Meal history failed: {meals.text}")
         chicken = next((item for item in meals.json() if item["meal_name"] == "Chicken Dinner"), None)
         if chicken is None:
-            raise RuntimeError("Chicken Dinner is missing from Meal history")
+            raise RuntimeError("Chicken Dinner is missing from Meal history after normal test-server reseed")
         if chicken["actual_servings_produced"] is None or Decimal(chicken["actual_servings_produced"]) != Decimal("5"):
             raise RuntimeError(f"Unexpected produced servings: {chicken['actual_servings_produced']}")
         if chicken["actual_servings_eaten"] is None or Decimal(chicken["actual_servings_eaten"]) != Decimal("4"):
@@ -93,12 +95,12 @@ def verify_fixture() -> None:
         if Decimal(transaction["quantity_delta"]) != Decimal("1"):
             raise RuntimeError(f"Unexpected leftover transaction quantity: {transaction['quantity_delta']}")
 
-        print("History UAT fixture verification: PASS")
+        print("History restart persistence verification: PASS")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed deterministic Meal and Inventory History UAT data.")
-    parser.add_argument("--verify", action="store_true", help="Verify the already-seeded History fixture.")
+    parser.add_argument("--verify", action="store_true", help="Simulate a normal test-server reseed and verify History persists.")
     args = parser.parse_args()
     if args.verify:
         verify_fixture()
