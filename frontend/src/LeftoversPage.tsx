@@ -65,8 +65,10 @@ export default function LeftoversPage() {
         const targetRow = eligible.find((row) => `${row.cycle.id}:${row.slot.id}` === target)
         const quantity = selectedQuantity[option.source_origin_planned_meal_id] ?? option.available_quantity
         const correction = correctionQuantity[option.source_origin_planned_meal_id] ?? option.physical_quantity
-        const canPlan = state === 'AVAILABLE' && Number(option.available_quantity) > 0 && targetRow && Number(quantity) > 0 && Number(quantity) <= Number(option.available_quantity)
+        const canPlanState = state === 'AVAILABLE' || state === 'RESERVED'
+        const canPlan = canPlanState && Number(option.available_quantity) > 0 && targetRow && Number(quantity) > 0 && Number(quantity) <= Number(option.available_quantity)
         const discardable = Math.max(Number(option.physical_quantity) - Number(option.reserved_quantity), 0)
+        const producedAt = (option as ProducedSourceOption & { produced_at?: string | null }).produced_at
 
         return <article className="panel" key={`${option.source_origin_planned_meal_id}-${option.source_record_id ?? 'planned'}`} style={{ marginBottom: 16 }}>
           <div className="section-heading">
@@ -79,6 +81,7 @@ export default function LeftoversPage() {
 
           <div className="advanced-grid">
             <div><strong>Produced / remaining</strong><p>{option.planned_quantity} planned · {option.physical_quantity} remaining {option.unit_code}</p></div>
+            <div><strong>Production date</strong><p>{producedAt ? new Date(producedAt).toLocaleString() : 'Not produced yet'}</p></div>
             <div><strong>Reserved / available</strong><p>{option.reserved_quantity} reserved · {option.available_quantity} available</p></div>
             <div><strong>Expiration</strong><p>{option.expiration_date ?? 'Not set'}</p></div>
             <div><strong>Provenance</strong><p>{option.lot_id ? `Leftover record ${option.source_record_id ?? '—'} · Inventory lot ${option.lot_id}` : 'Planned leftover; not produced yet'}</p></div>
@@ -101,7 +104,7 @@ export default function LeftoversPage() {
               <label>Quantity<input type="number" min="0.001" max={option.available_quantity} step="any" value={quantity} onChange={(event) => setSelectedQuantity((current) => ({ ...current, [option.source_origin_planned_meal_id]: event.target.value }))} /></label>
               <div><button type="button" disabled={!canPlan || plan.isPending} onClick={() => targetRow && plan.mutate({ option, cycleId: targetRow.cycle.id, slotId: targetRow.slot.id, quantity })}>Schedule leftover</button></div>
             </div>
-            {state !== 'AVAILABLE' && <p className="planning-note">This leftover cannot be newly scheduled while its state is {state}.</p>}
+            {!canPlanState && <p className="planning-note">This leftover cannot be newly scheduled while its state is {state}.</p>}
           </div>
         </article>
       })}
