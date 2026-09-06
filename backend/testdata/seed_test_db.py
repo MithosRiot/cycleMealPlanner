@@ -184,6 +184,16 @@ def _seed_cooking_steps() -> None:
 def _seed_completion_draft() -> None:
     from app.database.session import engine
     with engine.begin() as connection:
+        existing_completion = connection.execute(text(
+            "SELECT id FROM meal_completions WHERE planned_meal_id=1 LIMIT 1"
+        )).first()
+        if existing_completion is not None:
+            # run_test.py calls seed(reset=False) on every launch. Preserve any
+            # draft/finalized completion already created during UAT so a server
+            # restart never destroys completion history. Explicit --reset still
+            # clears the table first and recreates the deterministic draft.
+            return
+
         planned = connection.execute(text("""
             SELECT id, snapshot_name, planned_servings, planned_leftover_servings,
                    component_serving_overrides, scaled_components
@@ -198,7 +208,6 @@ def _seed_completion_draft() -> None:
             "scaled_components": json.loads(planned["scaled_components"] or "[]"),
         }
         fingerprint = hashlib.sha256(json.dumps(fingerprint_source, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
-        connection.execute(text("DELETE FROM meal_completions WHERE planned_meal_id=1"))
         connection.execute(text("""
             INSERT INTO meal_completions
             (id, planned_meal_id, status, plan_fingerprint, snapshot_name,

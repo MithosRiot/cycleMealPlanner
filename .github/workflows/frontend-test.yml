@@ -6,7 +6,6 @@ on:
       - 'frontend/**'
       - '.github/workflows/frontend-test.yml'
   push:
-    branches: [main]
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-test.yml'
@@ -51,6 +50,9 @@ jobs:
 
       - name: Test Leftovers state and future-slot selection
         run: node --experimental-strip-types src/leftoversSelectors.test.mjs
+
+      - name: Test History display selectors
+        run: node --experimental-strip-types src/historySelectors.test.mjs
 
       - name: Build
         run: npm run build

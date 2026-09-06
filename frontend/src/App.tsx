@@ -7,6 +7,7 @@ import CycleSchedulingPanel from './CycleSchedulingPanel'
 import CycleValidationPage from './CycleValidationPage'
 import DashboardPage from './DashboardPage'
 import GatherPanel from './GatherPanel'
+import HistoryPage from './HistoryPage'
 import IngredientsPage from './IngredientsPage'
 import './InventoryPage.css'
 import LeftoversPage from './LeftoversPage'
@@ -26,10 +27,6 @@ const navigation = [
   ['Plan Validation', '/meal-plan/validation'], ['Inventory', '/inventory'], ['Shopping', '/shopping'],
   ['Leftovers', '/leftovers'], ['History', '/history'], ['Settings', '/settings'],
 ] as const
-
-function PlaceholderPage({ title }: { title: string }) {
-  return <section className="page-card"><p className="eyebrow">Cycle Meal Planner</p><h1>{title}</h1><p>This section is ready for its Milestone implementation.</p></section>
-}
 
 function MealPlanPageWithScheduling() {
   return <><MealPlanWithReservationsPage /><CycleSchedulingPanel /><PrepSchedulePanel /><CombinedPrepPanel /><GatherPanel /><CookingModePanel /><MealCompletionPanel /><ProducedStockCoveragePanel /></>
@@ -57,7 +54,7 @@ function App() {
       <Route path="/inventory" element={<InventoryWithReservationsPage />} />
       <Route path="/shopping" element={<ShoppingPage />} />
       <Route path="/leftovers" element={<LeftoversPage />} />
-      <Route path="/history" element={<PlaceholderPage title="History" />} />
+      <Route path="/history" element={<HistoryPage />} />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="/settings/ingredients" element={<IngredientsPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
