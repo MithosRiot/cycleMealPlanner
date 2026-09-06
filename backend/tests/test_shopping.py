@@ -61,6 +61,19 @@ def test_partial_purchase_leaves_only_remaining_demand_pending() -> None:
         row = regenerated.json()["items"][0]; assert row["status"] == "PENDING"; assert len(row["purchases"]) == 1
 
 
+def test_standard_purchase_ignores_substitution_only_satisfaction_fields() -> None:
+    with TestClient(app) as client:
+        cycle_id, item, units, locations = _create_shopping_item(client, uuid4().hex[:8])
+        result = client.post(f"/api/shopping/{cycle_id}/items/{item['id']}/complete", json={"actual_quantity": "8", "actual_unit_id": units["oz"]["id"], "satisfied_quantity": "1", "satisfied_unit_id": units["lb"]["id"], "storage_location_id": locations["Pantry"]["id"], "idempotency_key": f"stale-{uuid4().hex}"})
+        assert result.status_code == 200
+        row = result.json()["items"][0]
+        assert row["status"] == "PENDING"
+        assert Decimal(row["satisfied_quantity"]) == Decimal("0.5")
+        assert Decimal(row["remaining_quantity"]) == Decimal("0.5")
+        assert Decimal(row["purchases"][0]["satisfied_quantity"]) == Decimal("8")
+        assert row["purchases"][0]["satisfied_unit_code"] == "oz"
+
+
 def test_shopping_substitution_preserves_original_demand_and_intakes_target_once() -> None:
     with TestClient(app) as client:
         cycle_id, item, units, locations = _create_shopping_item(client, uuid4().hex[:8])
