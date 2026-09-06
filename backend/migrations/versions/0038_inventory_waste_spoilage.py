@@ -27,6 +27,15 @@ def _column_names(bind, table_name: str) -> set[str]:
     return {row["name"] for row in sa.inspect(bind).get_columns(table_name)}
 
 
+def _drop_stale_sqlite_batch_table(bind) -> None:
+    # SQLite batch migrations create this table before copying/renaming data.
+    # Because SQLite DDL is non-transactional, an interrupted prior attempt can
+    # leave it behind while alembic_version still points at 0037. Remove only
+    # this Alembic-owned scratch table so the migration can safely retry.
+    if bind.dialect.name == "sqlite":
+        bind.execute(sa.text("DROP TABLE IF EXISTS _alembic_tmp_inventory_transactions"))
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     if "reason" not in _column_names(bind, "inventory_transactions"):
@@ -36,6 +45,7 @@ def upgrade() -> None:
     current = checks.get("ck_inventory_transactions_type")
     sql = str(current.get("sqltext", "")) if current else ""
     if "WASTE" not in sql or "SPOILAGE" not in sql:
+        _drop_stale_sqlite_batch_table(bind)
         with op.batch_alter_table("inventory_transactions") as batch:
             if current is not None:
                 batch.drop_constraint("ck_inventory_transactions_type", type_="check")
@@ -55,6 +65,7 @@ def downgrade() -> None:
 
     checks = _check_map(bind, "inventory_transactions")
     current = checks.get("ck_inventory_transactions_type")
+    _drop_stale_sqlite_batch_table(bind)
     with op.batch_alter_table("inventory_transactions") as batch:
         if current is not None:
             batch.drop_constraint("ck_inventory_transactions_type", type_="check")
