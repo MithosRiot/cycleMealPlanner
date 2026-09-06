@@ -32,6 +32,9 @@ def main() -> None:
         cursor = dbapi_connection.cursor(); cursor.execute("PRAGMA foreign_keys=ON"); cursor.close()
 
     with engine.begin() as connection:
+        location_id = connection.execute(text("SELECT id FROM inventory_locations ORDER BY id LIMIT 1")).scalar_one()
+        unit_id = connection.execute(text("SELECT id FROM measurement_units ORDER BY id LIMIT 1")).scalar_one()
+        unit_family = connection.execute(text("SELECT unit_family FROM measurement_units WHERE id=:id"), {"id": unit_id}).scalar_one()
         connection.execute(text("INSERT INTO ingredients (id, household_id, name, normalized_name, perishable, active, notes) VALUES (9001, 1, 'Migration Test Ingredient', 'migration test ingredient', 0, 1, 'must survive upgrade')"))
         connection.execute(text("INSERT INTO ingredient_aliases (id, ingredient_id, alias, normalized_alias) VALUES (9001, 9001, 'Migration Alias', 'migration alias')"))
         connection.execute(text("INSERT INTO recipes (id, household_id, name, normalized_name, base_servings, serving_unit, favorite, active) VALUES (9001, 1, 'Migration Recipe', 'migration recipe', 4, 'servings', 0, 1)"))
@@ -39,6 +42,19 @@ def main() -> None:
         connection.execute(text("INSERT INTO meal_cycles (id, household_id, name, normalized_name, duration_days, status, start_date, notes, population_rules, smart_preferences) VALUES (9001, 1, 'Migration Cycle', 'migration cycle', 1, 'DRAFT', '2026-09-01', 'must survive upgrade', '{}', '{}')"))
         connection.execute(text("INSERT INTO meal_slot_definitions (id, cycle_id, label, sort_order) VALUES (9001, 9001, 'Dinner', 0)"))
         connection.execute(text("INSERT INTO cycle_slots (id, cycle_id, slot_definition_id, day_number, sort_order) VALUES (9001, 9001, 9001, 1, 0)"))
+        connection.execute(text("INSERT INTO inventory_lots (id, household_id, ingredient_id, location_id, quantity, unit_id, purchase_date, notes) VALUES (9001, 1, 9001, :location_id, 2, :unit_id, '2026-09-01', 'legacy shopping purchase lot')"), {"location_id": location_id, "unit_id": unit_id})
+        connection.execute(text("INSERT INTO shopping_lists (id, household_id, meal_cycle_id, generated_at) VALUES (9001, 1, 9001, '2026-09-01 12:00:00')"))
+        connection.execute(text("""
+            INSERT INTO shopping_list_items
+            (id, shopping_list_id, ingredient_id, shopping_category_id, unit_id, unit_family,
+             required_quantity, inventory_quantity, generated_quantity, adjustment_quantity,
+             source_trace, warning, status, actual_quantity, actual_unit_id, purchase_date,
+             storage_location_id, expiration_date, purchase_notes, inventory_lot_id, completed_at)
+            VALUES
+            (9001, 9001, 9001, NULL, :unit_id, :unit_family,
+             2, 0, 2, 0, '[]', NULL, 'COMPLETED', 2, :unit_id, '2026-09-01',
+             :location_id, NULL, 'legacy completed purchase', 9001, '2026-09-01 12:30:00')
+        """), {"unit_id": unit_id, "unit_family": unit_family, "location_id": location_id})
 
     command.upgrade(alembic_config(), "head")
 
@@ -70,10 +86,15 @@ def main() -> None:
         coverage_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(production_coverage_reservations)"))}
         cycle_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(meal_cycles)"))}
         cycle_indexes = {item[1] for item in connection.execute(text("PRAGMA index_list(meal_cycles)"))}
+        shopping_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(shopping_list_items)"))}
+        purchase_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(shopping_item_purchases)"))}
+        revision_columns = {item[1] for item in connection.execute(text("PRAGMA table_info(planned_meal_revisions)"))}
+        shopping_row = connection.execute(text("SELECT required_quantity, baseline_required_quantity, plan_delta_quantity, purchased_excess_quantity FROM shopping_list_items WHERE id=9001")).one()
+        purchase_row = connection.execute(text("SELECT shopping_list_item_id, actual_quantity, actual_unit_id, inventory_lot_id, purchase_notes FROM shopping_item_purchases WHERE shopping_list_item_id=9001")).one()
         serving_unit = connection.execute(text("SELECT code, unit_family FROM measurement_units WHERE id=16")).one()
         fk_violations = connection.execute(text("PRAGMA foreign_key_check")).all()
 
-    assert version == "0035_direct_recipe_occurrences"
+    assert version == "0036_active_cycle_shopping_deltas"
     assert row.name == "Migration Test Ingredient"
     assert bool(row.staple_enabled) is False
     assert row.staple_minimum is None and row.staple_target is None and row.staple_unit_id is None
@@ -105,11 +126,18 @@ def main() -> None:
     assert {"source_type", "source_recipe_id", "source_origin_planned_meal_id", "source_record_id", "source_recipe_output_id", "source_quantity", "source_unit_id"}.issubset(planned_info)
     assert planned_info["meal_id"][3] == 0
     assert {"planned_meal_id", "source_origin_planned_meal_id", "source_type", "lot_id", "requested_quantity", "reserved_quantity", "shortage_quantity", "status"}.issubset(coverage_columns)
+    assert {"baseline_required_quantity", "plan_delta_quantity", "purchased_excess_quantity"}.issubset(shopping_columns)
+    assert {"shopping_list_item_id", "actual_quantity", "actual_unit_id", "storage_location_id", "inventory_lot_id", "completed_at"}.issubset(purchase_columns)
+    assert {"cycle_id", "cycle_slot_id", "planned_meal_id", "action", "source_type", "planned_servings", "scaled_components", "changed_at"}.issubset(revision_columns)
+    assert shopping_row.required_quantity == 2 and shopping_row.baseline_required_quantity == 2
+    assert shopping_row.plan_delta_quantity == 0 and shopping_row.purchased_excess_quantity == 0
+    assert purchase_row.shopping_list_item_id == 9001 and purchase_row.actual_quantity == 2
+    assert purchase_row.inventory_lot_id == 9001 and purchase_row.purchase_notes == "legacy completed purchase"
     assert serving_unit.code == "serving" and serving_unit.unit_family == "SERVING"
     assert fk_violations == []
 
     engine.dispose(); DB_PATH.unlink(missing_ok=True)
-    print("Populated SQLite upgrade 0020 -> 0035 succeeded and preserved existing data while adding direct Recipe occurrence storage.")
+    print("Populated SQLite upgrade 0020 -> 0036 succeeded, preserved existing data, and backfilled active-cycle Shopping history.")
 
 
 if __name__ == "__main__":
