@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchIngredients } from './api'
 import { fetchInventoryHistory, fetchMealHistory } from './historyApi'
+import { inventoryHistoryName, signedQuantity, usageTitle } from './historySelectors'
 
 const transactionTypes = ['PURCHASE', 'CONSUME', 'TRANSFER', 'MANUAL_ADD', 'MANUAL_REMOVE', 'CORRECTION', 'PRODUCTION']
 
@@ -48,7 +49,7 @@ export default function HistoryPage() {
 
         <h4>Actual Ingredient usage</h4>
         {entry.usages.map((usage, index) => <div className="inventory-history-row" key={`${entry.completion_id}-${index}`}>
-          <strong>{usage.recipe_name} · {usage.actual_ingredient_name}{usage.substituted ? ' (substitution)' : ''}</strong>
+          <strong>{usageTitle(usage)}</strong>
           <span>Actual {usage.actual_quantity} {usage.actual_unit_code}</span>
           <span>Planned {usage.planned_quantity} {usage.planned_unit_code} {usage.planned_ingredient_name}</span>
           <span>{usage.allocations.length ? `Lots: ${usage.allocations.map((row) => `#${row.lot_id} (${row.source_quantity} ${row.source_unit_code})`).join(', ')}` : 'No Inventory allocation recorded'}</span>
@@ -82,9 +83,9 @@ export default function HistoryPage() {
 
       {inventory.isPending && <p>Loading Inventory history…</p>}
       {inventory.data?.map((row) => <div className="inventory-history-row" key={row.transaction_id}>
-        <strong>{row.transaction_type} · Lot {row.lot_id} · {row.ingredient_name ?? row.source_name ?? row.source_type}</strong>
+        <strong>{row.transaction_type} · Lot {row.lot_id} · {inventoryHistoryName(row)}</strong>
         <span>{new Date(row.created_at).toLocaleString()}</span>
-        <span>{Number(row.quantity_delta) > 0 ? '+' : ''}{row.quantity_delta} {row.unit_code}</span>
+        <span>{signedQuantity(row)}</span>
         <span>Source: {row.source_type}{row.source_name ? ` · ${row.source_name}` : ''}{row.source_id ? ` · record ${row.source_id}` : ''}</span>
         {(row.from_location_name || row.to_location_name) && <span>Location: {row.from_location_name ?? '—'} → {row.to_location_name ?? '—'}</span>}
         {row.note && <span>Note: {row.note}</span>}
