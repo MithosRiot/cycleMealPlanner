@@ -11,8 +11,15 @@ def _create_completed_meal(client: TestClient, suffix: str) -> dict:
     each = units["each"]
     ounce = units["oz"]
     locations = client.get("/api/reference/inventory-locations").json()
-    refrigerator = next(item for item in locations if item["name"] == "Refrigerator")
     pantry = next(item for item in locations if item["name"] == "Pantry")
+    history_location_response = client.post("/api/reference/inventory-locations", json={
+        "name": f"History Test Location {suffix}",
+        "parent_location_id": None,
+        "location_type": "OTHER",
+        "sort_order": 900,
+    })
+    assert history_location_response.status_code == 201
+    history_location = history_location_response.json()
 
     ingredient = client.post("/api/ingredients", json={
         "name": f"History Ingredient {suffix}", "shopping_category_id": None,
@@ -62,11 +69,11 @@ def _create_completed_meal(client: TestClient, suffix: str) -> dict:
     preview = client.get(f"/api/planned-meals/{planned['id']}/completion/production-preview?actual_servings_produced=5").json()
     committed = client.post(f"/api/planned-meals/{planned['id']}/completion/production", json={
         "actual_servings_produced": "5", "actual_servings_eaten": "4",
-        "leftover_location_id": refrigerator["id"], "leftover_expiration_date": "2026-09-10",
+        "leftover_location_id": history_location["id"], "leftover_expiration_date": "2026-09-10",
         "leftover_notes": "History leftover",
         "outputs": [{
             "recipe_output_id": output["id"], "component_key": preview["outputs"][0]["component_key"],
-            "actual_quantity": "2.5", "location_id": refrigerator["id"],
+            "actual_quantity": "2.5", "location_id": history_location["id"],
             "expiration_date": "2026-09-09", "notes": "History measured output",
         }],
     })
@@ -83,7 +90,7 @@ def _create_completed_meal(client: TestClient, suffix: str) -> dict:
         "ingredient": ingredient,
         "source_lot": lot,
         "pantry": pantry,
-        "refrigerator": refrigerator,
+        "history_location": history_location,
     }
 
 
@@ -117,7 +124,7 @@ def test_inventory_history_filters_and_location_provenance() -> None:
     with TestClient(app) as client:
         data = _create_completed_meal(client, suffix)
         transfer = client.post(f"/api/inventory/{data['source_lot']['id']}/transfer", json={
-            "to_location_id": data["refrigerator"]["id"], "note": "History transfer",
+            "to_location_id": data["history_location"]["id"], "note": "History transfer",
         })
         assert transfer.status_code == 200
 
@@ -134,7 +141,7 @@ def test_inventory_history_filters_and_location_provenance() -> None:
         assert row["ingredient_name"] == data["ingredient"]["name"]
         assert row["source_type"] == "INGREDIENT"
         assert row["from_location_name"] == data["pantry"]["name"]
-        assert row["to_location_name"] == data["refrigerator"]["name"]
+        assert row["to_location_name"] == data["history_location"]["name"]
         assert row["note"] == "History transfer"
 
         empty = client.get("/api/history/inventory", params={"lot_id": 99999999})
