@@ -35,18 +35,26 @@ jobs:
         run: pytest -q tests/test_migration_recovery.py
 
       - name: Test active quantity reconciliation
-        run: pytest -q tests/test_active_cycle_reconciliation.py::test_active_quantity_change_reconciles_reservations_shopping_and_revision_history --junitxml=active-cycle-results.xml
+        run: pytest -q tests/test_active_cycle_reconciliation.py::test_active_quantity_change_reconciles_reservations_shopping_and_revision_history --junitxml=active-quantity-results.xml
 
-      - name: Upload active-cycle test results
+      - name: Upload active quantity results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: active-cycle-test-results
-          path: backend/active-cycle-results.xml
+          name: active-quantity-test-results
+          path: backend/active-quantity-results.xml
           if-no-files-found: ignore
 
       - name: Test active purchase/removal/finalized rollback
-        run: pytest -q tests/test_active_cycle_reconciliation.py::test_active_removed_demand_preserves_purchase_history_and_finalized_edit_rolls_back
+        run: pytest -q tests/test_active_cycle_reconciliation.py::test_active_removed_demand_preserves_purchase_history_and_finalized_edit_rolls_back --junitxml=active-rollback-results.xml
+
+      - name: Upload active rollback results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: active-rollback-test-results
+          path: backend/active-rollback-results.xml
+          if-no-files-found: ignore
 
       - name: Run tests
         run: pytest -q --cov=app --cov-report=term-missing
