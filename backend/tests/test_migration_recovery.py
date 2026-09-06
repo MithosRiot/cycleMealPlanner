@@ -3,7 +3,7 @@ import os
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, event, text
-HEAD_REVISION = "0037_shopping_partial_substitutions"
+HEAD_REVISION = "0038_inventory_waste_spoilage"
 
 def _config():
     c=Config("alembic.ini"); c.set_main_option("script_location","migrations"); return c
@@ -33,8 +33,22 @@ def _planning(e):
 
 def _assert(e):
     with e.connect() as c:
-        assert c.execute(text("PRAGMA foreign_keys")).scalar_one()==1; assert c.execute(text("SELECT version_num FROM alembic_version")).scalar_one()==HEAD_REVISION; tables={r[0] for r in c.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}; planned={r[1]:r for r in c.execute(text("PRAGMA table_info(planned_meals)"))}; leftovers={r[1]:r for r in c.execute(text("PRAGMA table_info(leftovers)"))}; purchases={r[1] for r in c.execute(text("PRAGMA table_info(shopping_item_purchases)"))}; assert c.execute(text("PRAGMA foreign_key_check")).all()==[]
-    assert planned["meal_id"][3]==0 and "source_recipe_id" in planned; assert leftovers["source_meal_id"][3]==0 and "source_recipe_id" in leftovers; assert {"shopping_item_purchases","planned_meal_revisions","production_coverage_reservations"}.issubset(tables); assert not any(x.startswith("_alembic_tmp_") for x in tables); assert {"purchased_ingredient_id","satisfied_quantity","satisfied_unit_id","purchase_kind","idempotency_key"}.issubset(purchases)
+        assert c.execute(text("PRAGMA foreign_keys")).scalar_one()==1
+        assert c.execute(text("SELECT version_num FROM alembic_version")).scalar_one()==HEAD_REVISION
+        tables={r[0] for r in c.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
+        planned={r[1]:r for r in c.execute(text("PRAGMA table_info(planned_meals)"))}
+        leftovers={r[1]:r for r in c.execute(text("PRAGMA table_info(leftovers)"))}
+        purchases={r[1] for r in c.execute(text("PRAGMA table_info(shopping_item_purchases)"))}
+        transactions={r[1] for r in c.execute(text("PRAGMA table_info(inventory_transactions)"))}
+        transaction_sql=c.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='inventory_transactions'")).scalar_one()
+        assert c.execute(text("PRAGMA foreign_key_check")).all()==[]
+    assert planned["meal_id"][3]==0 and "source_recipe_id" in planned
+    assert leftovers["source_meal_id"][3]==0 and "source_recipe_id" in leftovers
+    assert {"shopping_item_purchases","planned_meal_revisions","production_coverage_reservations"}.issubset(tables)
+    assert not any(x.startswith("_alembic_tmp_") for x in tables)
+    assert {"purchased_ingredient_id","satisfied_quantity","satisfied_unit_id","purchase_kind","idempotency_key"}.issubset(purchases)
+    assert "reason" in transactions
+    assert "WASTE" in transaction_sql and "SPOILAGE" in transaction_sql
 
 def _run(tmp,name,start,partial,planning=False):
     url=f"sqlite:///{(tmp/name).as_posix()}"; old=_env(url)
