@@ -17,13 +17,24 @@ def _location(client: TestClient, kind: str) -> dict:
     return next(row for row in client.get("/api/reference/inventory-locations").json() if row["active"] and row["location_type"] == kind)
 
 
-def _ingredient(client: TestClient, name: str, perishable: bool = True) -> int:
+def _test_refrigerator(client: TestClient, suffix: str) -> int:
+    response = client.post("/api/reference/inventory-locations", json={
+        "name": f"Resolution Refrigerator {suffix}",
+        "parent_location_id": None,
+        "location_type": "REFRIGERATOR",
+        "sort_order": 990,
+    })
+    assert response.status_code == 201
+    return response.json()["id"]
+
+
+def _ingredient(client: TestClient, name: str, location_id: int, perishable: bool = True) -> int:
     unit = _unit(client)
     response = client.post("/api/ingredients", json={
         "name": name,
         "shopping_category_id": None,
         "preferred_unit_id": unit["id"],
-        "default_location_id": _location(client, "REFRIGERATOR")["id"],
+        "default_location_id": location_id,
         "perishable": perishable,
         "notes": None,
         "aliases": [],
@@ -83,10 +94,10 @@ def _meal(client: TestClient, name: str, recipe_id: int) -> int:
     return response.json()["id"]
 
 
-def _lot(client: TestClient, ingredient_id: int, expiration: str) -> int:
+def _lot(client: TestClient, ingredient_id: int, location_id: int, expiration: str) -> int:
     response = client.post("/api/inventory", json={
         "ingredient_id": ingredient_id,
-        "location_id": _location(client, "REFRIGERATOR")["id"],
+        "location_id": location_id,
         "quantity": "5",
         "unit_id": _unit(client)["id"],
         "purchase_date": "2026-09-05",
@@ -116,15 +127,16 @@ def _cycle(client: TestClient, name: str) -> dict:
 def test_resolution_ranking_prefers_multiple_expiring_items_and_explicit_no_suggestion() -> None:
     suffix = uuid4().hex[:8]
     with TestClient(app) as client:
-        yogurt = _ingredient(client, f"Resolution Yogurt {suffix}")
-        spinach = _ingredient(client, f"Resolution Spinach {suffix}")
-        shelf = _ingredient(client, f"Resolution Shelf {suffix}", perishable=False)
+        refrigerator_id = _test_refrigerator(client, suffix)
+        yogurt = _ingredient(client, f"Resolution Yogurt {suffix}", refrigerator_id)
+        spinach = _ingredient(client, f"Resolution Spinach {suffix}", refrigerator_id)
+        shelf = _ingredient(client, f"Resolution Shelf {suffix}", refrigerator_id, perishable=False)
         recovery_recipe = _recipe(client, f"Resolution Recovery Recipe {suffix}", [yogurt, spinach])
         _recipe(client, f"Resolution Yogurt Only {suffix}", [yogurt])
         recovery_meal = _meal(client, f"Resolution Recovery Meal {suffix}", recovery_recipe)
-        yogurt_lot = _lot(client, yogurt, "2026-09-08")
-        _lot(client, spinach, "2026-09-08")
-        shelf_lot = _lot(client, shelf, "2026-09-08")
+        yogurt_lot = _lot(client, yogurt, refrigerator_id, "2026-09-08")
+        _lot(client, spinach, refrigerator_id, "2026-09-08")
+        shelf_lot = _lot(client, shelf, refrigerator_id, "2026-09-08")
         cycle = _cycle(client, f"Resolution Cycle {suffix}")
 
         with SessionLocal() as db:
@@ -147,8 +159,9 @@ def test_resolution_ranking_prefers_multiple_expiring_items_and_explicit_no_sugg
 def test_freeze_resolution_marks_lot_frozen_moves_to_freezer_and_removes_use_soon() -> None:
     suffix = uuid4().hex[:8]
     with TestClient(app) as client:
-        ingredient_id = _ingredient(client, f"Resolution Freeze {suffix}")
-        lot_id = _lot(client, ingredient_id, "2026-09-08")
+        refrigerator_id = _test_refrigerator(client, suffix)
+        ingredient_id = _ingredient(client, f"Resolution Freeze {suffix}", refrigerator_id)
+        lot_id = _lot(client, ingredient_id, refrigerator_id, "2026-09-08")
         freezer = _location(client, "FREEZER")
 
         response = client.post(f"/api/inventory/{lot_id}/freeze", json={
