@@ -14,10 +14,13 @@ down_revision: Union[str, None] = "0038_inventory_waste_spoilage"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+TABLE_NAME = "manual_shopping_items"
+INDEX_NAME = "ix_manual_shopping_items_shopping_list_id"
 
-def upgrade() -> None:
+
+def _create_table() -> None:
     op.create_table(
-        "manual_shopping_items",
+        TABLE_NAME,
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("shopping_list_id", sa.Integer(), sa.ForeignKey("shopping_lists.id", ondelete="CASCADE"), nullable=False),
         sa.Column("name", sa.String(length=160), nullable=False),
@@ -35,9 +38,26 @@ def upgrade() -> None:
         sa.CheckConstraint("quantity > 0", name="ck_manual_shopping_items_quantity_positive"),
         sa.CheckConstraint("status IN ('PENDING','COMPLETED','SKIPPED')", name="ck_manual_shopping_items_status"),
     )
-    op.create_index("ix_manual_shopping_items_shopping_list_id", "manual_shopping_items", ["shopping_list_id"])
+
+
+def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if TABLE_NAME not in inspector.get_table_names():
+        _create_table()
+        inspector = sa.inspect(bind)
+
+    indexes = {row["name"] for row in inspector.get_indexes(TABLE_NAME) if row.get("name")}
+    if INDEX_NAME not in indexes:
+        op.create_index(INDEX_NAME, TABLE_NAME, ["shopping_list_id"])
 
 
 def downgrade() -> None:
-    op.drop_index("ix_manual_shopping_items_shopping_list_id", table_name="manual_shopping_items")
-    op.drop_table("manual_shopping_items")
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if TABLE_NAME not in inspector.get_table_names():
+        return
+    indexes = {row["name"] for row in inspector.get_indexes(TABLE_NAME) if row.get("name")}
+    if INDEX_NAME in indexes:
+        op.drop_index(INDEX_NAME, table_name=TABLE_NAME)
+    op.drop_table(TABLE_NAME)
