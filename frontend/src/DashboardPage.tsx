@@ -34,29 +34,26 @@ function plannedSourceLabel(sourceType: PlannedMealSourceType | undefined): stri
 }
 
 export default function DashboardPage() {
-  const cycles = useQuery({ queryKey: ['meal-cycles'], queryFn: fetchMealCycles, refetchInterval: 5_000 })
+  const cycles = useQuery({ queryKey: ['meal-cycles'], queryFn: fetchMealCycles })
   const currentCycle = selectCurrentCycle(cycles.data ?? [])
   const prep = useQuery({
     queryKey: ['prep-schedule', currentCycle?.id ?? null],
     queryFn: () => fetchPrepSchedule(currentCycle!.id),
     enabled: currentCycle !== null,
-    refetchInterval: 5_000,
   })
   const inventory = useQuery({ queryKey: ['inventory-availability'], queryFn: fetchInventoryAvailability })
   const production = useQuery({ queryKey: ['production-inventory-availability'], queryFn: fetchProductionAvailability })
-  const useSoon = useQuery({ queryKey: ['dashboard-use-soon', 7], queryFn: () => fetchUseSoon(7), refetchInterval: 5_000 })
+  const useSoon = useQuery({ queryKey: ['dashboard-use-soon', 7], queryFn: () => fetchUseSoon(7) })
   const validation = useQuery({
     queryKey: ['cycle-validation', currentCycle?.id ?? null],
     queryFn: () => fetchCycleValidation(currentCycle!.id),
     enabled: currentCycle !== null,
-    refetchInterval: 5_000,
   })
   const shopping = useQuery({
     queryKey: ['shopping-list', currentCycle?.id ?? null],
     queryFn: () => fetchShoppingList(currentCycle!.id),
     enabled: currentCycle !== null,
     retry: false,
-    refetchInterval: 5_000,
   })
 
   if (cycles.isPending) return <section className="page-card"><p className="eyebrow">Cycle Meal Planner</p><h1>Dashboard</h1><p>Loading dashboard…</p></section>
@@ -96,7 +93,7 @@ export default function DashboardPage() {
     <div className="advanced-grid" style={{ marginTop: 16 }}>
       <section className="settings-card">
         <h2>Daily summary</h2>
-        <p className="planning-note">Today's concise operational picture. Refreshes automatically.</p>
+        <p className="planning-note">Today's concise operational picture.</p>
         <div className="inventory-history-row">
           <strong>{dailySummary.mealCount} meal{dailySummary.mealCount === 1 ? '' : 's'} today · {dailySummary.prepCount} prep task{dailySummary.prepCount === 1 ? '' : 's'}</strong>
           {dailySummary.nextMealName ? <span>Next meal: {formatServingTime(dailySummary.nextMealTime)} · {dailySummary.nextMealName}</span> : <span>No scheduled Meal today.</span>}
@@ -128,7 +125,7 @@ export default function DashboardPage() {
 
     <section className="settings-card" style={{ marginTop: 16 }}>
       <div className="section-heading">
-        <div><h2>Plan alerts</h2><p className="planning-note">Current-cycle validation and generated Shopping shortages. This section refreshes automatically.</p></div>
+        <div><h2>Plan alerts</h2><p className="planning-note">Current-cycle validation and generated Shopping shortages.</p></div>
         <div className="ingredient-meta"><span>{validationAlerts.length} validation</span><span>{shoppingShortages.length} shopping</span></div>
       </div>
       {validation.error instanceof Error && <div className="error-banner">{validation.error.message}</div>}
