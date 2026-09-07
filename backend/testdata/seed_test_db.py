@@ -35,11 +35,11 @@ def _clear_extended_seed_data_before_reset() -> None:
 
     The base seed reset predates Gather, Cooking Mode, completion history,
     leftovers/RecipeOutputs, produced-stock coverage, active-cycle revision
-    provenance, and append-only Shopping purchase history. A populated test DB
-    therefore has child rows that must be removed before the base reset can
-    delete planned_meals, Inventory lots/transactions, Recipes, and related
-    parents. Keep foreign-key enforcement ON here so CI validates the deletion
-    order instead of masking it.
+    provenance, append-only Shopping purchase history, and manual Shopping
+    items. A populated test DB therefore has child rows that must be removed
+    before the base reset can delete planned_meals, Inventory lots/transactions,
+    Recipes, and related parents. Keep foreign-key enforcement ON here so CI
+    validates the deletion order instead of masking it.
     """
     if not TEST_DB.exists():
         return
@@ -47,6 +47,7 @@ def _clear_extended_seed_data_before_reset() -> None:
     tables = [
         "planned_meal_revisions",
         "shopping_item_purchases",
+        "manual_shopping_items",
         "production_coverage_reservations",
         "meal_completion_allocations",
         "meal_completion_outputs",
