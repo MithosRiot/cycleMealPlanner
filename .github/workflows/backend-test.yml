@@ -81,5 +81,10 @@ jobs:
           python testdata/seed_waste_spoilage_fixture.py
           python testdata/seed_waste_spoilage_fixture.py --verify
 
+      - name: Populate expiration-resolution fixture
+        run: |
+          python testdata/seed_expiration_resolution_fixture.py
+          python testdata/seed_expiration_resolution_fixture.py --verify
+
       - name: Validate repeated populated seed reset
         run: python testdata/seed_test_db.py --reset
