@@ -20,5 +20,5 @@ def test_0037_recovers_partial_additive_ddl_with_populated_foreign_keys(tmp_path
         connection.execute(text("ALTER TABLE shopping_item_purchases ADD COLUMN purchased_ingredient_id INTEGER"))
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        version = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one(); columns = {row[1] for row in connection.execute(text("PRAGMA table_info(shopping_item_purchases)"))}; violations = connection.execute(text("PRAGMA foreign_key_check")).all()
-    assert version == "0038_inventory_waste_spoilage"; assert {"purchased_ingredient_id", "satisfied_quantity", "satisfied_unit_id", "purchase_kind", "idempotency_key"}.issubset(columns); assert violations == []
+        version = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one(); columns = {row[1] for row in connection.execute(text("PRAGMA table_info(shopping_item_purchases)"))}; manual_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(manual_shopping_items)"))}; violations = connection.execute(text("PRAGMA foreign_key_check")).all()
+    assert version == "0039_manual_shopping_items"; assert {"purchased_ingredient_id", "satisfied_quantity", "satisfied_unit_id", "purchase_kind", "idempotency_key"}.issubset(columns); assert {"shopping_list_id", "name", "quantity", "status", "inventory_lot_id"}.issubset(manual_columns); assert violations == []
