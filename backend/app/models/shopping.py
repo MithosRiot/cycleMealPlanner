@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, event
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, event
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 from app.database.base import Base
 
@@ -9,12 +9,35 @@ class ShoppingList(Base):
     __tablename__="shopping_lists"
     id:Mapped[int]=mapped_column(Integer,primary_key=True); household_id:Mapped[int]=mapped_column(ForeignKey("households.id",ondelete="CASCADE"),nullable=False); meal_cycle_id:Mapped[int]=mapped_column(ForeignKey("meal_cycles.id",ondelete="CASCADE"),nullable=False,unique=True); generated_at:Mapped[datetime]=mapped_column(DateTime,nullable=False,default=datetime.utcnow)
     items:Mapped[list[ShoppingListItem]]=relationship(back_populates="shopping_list",cascade="all, delete-orphan",order_by="ShoppingListItem.id")
+    manual_items:Mapped[list[ManualShoppingItem]]=relationship(back_populates="shopping_list",cascade="all, delete-orphan",order_by="ManualShoppingItem.id")
 
 class ShoppingListItem(Base):
     __tablename__="shopping_list_items"
     id:Mapped[int]=mapped_column(Integer,primary_key=True); shopping_list_id:Mapped[int]=mapped_column(ForeignKey("shopping_lists.id",ondelete="CASCADE"),nullable=False); ingredient_id:Mapped[int]=mapped_column(ForeignKey("ingredients.id",ondelete="RESTRICT"),nullable=False); shopping_category_id:Mapped[int|None]=mapped_column(ForeignKey("shopping_categories.id",ondelete="SET NULL")); unit_id:Mapped[int]=mapped_column(ForeignKey("measurement_units.id",ondelete="RESTRICT"),nullable=False); unit_family:Mapped[str]=mapped_column(String(20),nullable=False); required_quantity:Mapped[Decimal]=mapped_column(Numeric(16,6),nullable=False); inventory_quantity:Mapped[Decimal]=mapped_column(Numeric(16,6),nullable=False); generated_quantity:Mapped[Decimal]=mapped_column(Numeric(16,6),nullable=False); adjustment_quantity:Mapped[Decimal]=mapped_column(Numeric(16,6),nullable=False,default=Decimal("0")); source_trace:Mapped[str]=mapped_column(Text,nullable=False,default="[]"); warning:Mapped[str|None]=mapped_column(Text); status:Mapped[str]=mapped_column(String(20),nullable=False,default="PENDING"); actual_quantity:Mapped[Decimal|None]=mapped_column(Numeric(16,6)); actual_unit_id:Mapped[int|None]=mapped_column(ForeignKey("measurement_units.id",ondelete="RESTRICT")); purchase_date:Mapped[date|None]=mapped_column(Date); storage_location_id:Mapped[int|None]=mapped_column(ForeignKey("inventory_locations.id",ondelete="RESTRICT")); expiration_date:Mapped[date|None]=mapped_column(Date); purchase_notes:Mapped[str|None]=mapped_column(Text); inventory_lot_id:Mapped[int|None]=mapped_column(ForeignKey("inventory_lots.id",ondelete="RESTRICT"),unique=True); completed_at:Mapped[datetime|None]=mapped_column(DateTime); baseline_required_quantity:Mapped[Decimal|None]=mapped_column(Numeric(16,6)); plan_delta_quantity:Mapped[Decimal]=mapped_column(Numeric(16,6),nullable=False,default=Decimal("0")); purchased_excess_quantity:Mapped[Decimal]=mapped_column(Numeric(16,6),nullable=False,default=Decimal("0"))
     shopping_list:Mapped[ShoppingList]=relationship(back_populates="items"); purchases:Mapped[list[ShoppingItemPurchase]]=relationship(back_populates="shopping_item",cascade="all, delete-orphan",order_by="ShoppingItemPurchase.id")
     __table_args__=(UniqueConstraint("shopping_list_id","ingredient_id","unit_family",name="uq_shopping_item_ingredient_family"),)
+
+class ManualShoppingItem(Base):
+    __tablename__="manual_shopping_items"
+    id:Mapped[int]=mapped_column(Integer,primary_key=True)
+    shopping_list_id:Mapped[int]=mapped_column(ForeignKey("shopping_lists.id",ondelete="CASCADE"),nullable=False,index=True)
+    name:Mapped[str]=mapped_column(String(160),nullable=False)
+    quantity:Mapped[Decimal]=mapped_column(Numeric(16,6),nullable=False)
+    unit_id:Mapped[int|None]=mapped_column(ForeignKey("measurement_units.id",ondelete="RESTRICT"))
+    shopping_category_id:Mapped[int|None]=mapped_column(ForeignKey("shopping_categories.id",ondelete="SET NULL"))
+    ingredient_id:Mapped[int|None]=mapped_column(ForeignKey("ingredients.id",ondelete="RESTRICT"))
+    notes:Mapped[str|None]=mapped_column(Text)
+    status:Mapped[str]=mapped_column(String(20),nullable=False,default="PENDING")
+    completed_at:Mapped[datetime|None]=mapped_column(DateTime)
+    inventory_lot_id:Mapped[int|None]=mapped_column(ForeignKey("inventory_lots.id",ondelete="RESTRICT"),unique=True)
+    purchase_date:Mapped[date|None]=mapped_column(Date)
+    storage_location_id:Mapped[int|None]=mapped_column(ForeignKey("inventory_locations.id",ondelete="RESTRICT"))
+    expiration_date:Mapped[date|None]=mapped_column(Date)
+    shopping_list:Mapped[ShoppingList]=relationship(back_populates="manual_items")
+    __table_args__=(
+        CheckConstraint("quantity > 0",name="ck_manual_shopping_items_quantity_positive"),
+        CheckConstraint("status IN ('PENDING','COMPLETED','SKIPPED')",name="ck_manual_shopping_items_status"),
+    )
 
 class ShoppingItemPurchase(Base):
     __tablename__="shopping_item_purchases"
