@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { dashboardShoppingShortages, dashboardValidationAlerts } from './dashboardAlerts'
 import { fetchUseSoon } from './dashboardApi'
+import ExpirationResolutionPanel from './ExpirationResolutionPanel'
 import { fetchCycleValidation, fetchMealCycles, type PlannedMealSourceType } from './mealCyclesApi'
 import { fetchPrepSchedule } from './prepScheduleApi'
 import { fetchInventoryAvailability, fetchProductionAvailability } from './reservationsApi'
@@ -150,15 +151,8 @@ export default function DashboardPage() {
 
     <section className="settings-card" style={{ marginTop: 16 }}>
       <h2>Use Soon</h2>
-      <p className="planning-note">Available Inventory expiring within the next 7 days, ordered by urgency.</p>
-      {useSoon.error instanceof Error && <div className="error-banner">{useSoon.error.message}</div>}
-      {useSoon.data?.recommendations.map((row) => <div className="inventory-history-row" key={`${row.source_type}-${row.lot_id}`}>
-        <strong>{useSoonLabel(row.days_remaining)} · {row.source_name}</strong>
-        <span>{row.source_type === 'INGREDIENT' ? 'Ingredient' : row.source_type === 'LEFTOVER' ? 'Leftover' : 'Recipe output'} · Lot {row.lot_id}</span>
-        <span>{row.available_quantity} {row.unit_code} available · {row.location_name}</span>
-        <span>Expires {row.expiration_date}</span>
-      </div>)}
-      {!useSoon.isPending && !useSoon.error && useSoon.data?.recommendations.length === 0 && <p className="muted-line">No available Inventory expires within the next 7 days.</p>}
+      <p className="planning-note">Available Inventory expiring within the next 7 days, with deterministic advisory resolutions. Nothing changes until you click an action.</p>
+      <ExpirationResolutionPanel cycleId={currentCycle.id} />
     </section>
 
     <section className="settings-card" style={{ marginTop: 16 }}>
