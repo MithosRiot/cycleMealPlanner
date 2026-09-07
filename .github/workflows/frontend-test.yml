@@ -54,5 +54,8 @@ jobs:
       - name: Test History display selectors
         run: node --experimental-strip-types src/historySelectors.test.mjs
 
+      - name: Test Inventory discard controls
+        run: node --experimental-strip-types src/inventoryDiscardSelectors.test.mjs
+
       - name: Build
         run: npm run build

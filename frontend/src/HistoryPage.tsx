@@ -4,7 +4,7 @@ import { fetchIngredients } from './api'
 import { fetchInventoryHistory, fetchMealHistory } from './historyApi'
 import { inventoryHistoryName, signedQuantity, usageTitle } from './historySelectors'
 
-const transactionTypes = ['PURCHASE', 'CONSUME', 'TRANSFER', 'MANUAL_ADD', 'MANUAL_REMOVE', 'CORRECTION', 'PRODUCTION']
+const transactionTypes = ['PURCHASE', 'CONSUME', 'TRANSFER', 'MANUAL_ADD', 'MANUAL_REMOVE', 'CORRECTION', 'PRODUCTION', 'WASTE', 'SPOILAGE']
 
 export default function HistoryPage() {
   const meals = useQuery({ queryKey: ['history', 'meals'], queryFn: fetchMealHistory })
@@ -88,6 +88,7 @@ export default function HistoryPage() {
         <span>{signedQuantity(row)}</span>
         <span>Source: {row.source_type}{row.source_name ? ` · ${row.source_name}` : ''}{row.source_id ? ` · record ${row.source_id}` : ''}</span>
         {(row.from_location_name || row.to_location_name) && <span>Location: {row.from_location_name ?? '—'} → {row.to_location_name ?? '—'}</span>}
+        {row.reason && <span>Reason: {row.reason}</span>}
         {row.note && <span>Note: {row.note}</span>}
         <span>Transaction {row.transaction_id}</span>
       </div>)}

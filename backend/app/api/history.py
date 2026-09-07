@@ -151,6 +151,7 @@ def inventory_history(
             "from_location_name": locations.get(transaction.from_location_id) if transaction.from_location_id is not None else None,
             "to_location_id": transaction.to_location_id,
             "to_location_name": locations.get(transaction.to_location_id) if transaction.to_location_id is not None else None,
+            "reason": transaction.reason,
             "note": transaction.note,
         })
     return result

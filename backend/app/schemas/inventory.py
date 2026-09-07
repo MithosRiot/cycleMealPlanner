@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class InventoryLotCreate(BaseModel):
@@ -32,6 +32,20 @@ class QuantityAction(BaseModel):
     note: str | None = None
 
 
+class DiscardAction(BaseModel):
+    quantity: Decimal = Field(gt=0)
+    reason: str = Field(min_length=1, max_length=160)
+    note: str | None = None
+
+    @field_validator("reason")
+    @classmethod
+    def reason_must_not_be_blank(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("reason must not be blank")
+        return normalized
+
+
 class CorrectionAction(BaseModel):
     quantity: Decimal = Field(ge=0)
     note: str | None = None
@@ -58,6 +72,7 @@ class InventoryTransactionRead(BaseModel):
     unit_id: int
     from_location_id: int | None
     to_location_id: int | None
+    reason: str | None
     note: str | None
     created_at: datetime
 

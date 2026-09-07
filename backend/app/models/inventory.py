@@ -54,6 +54,7 @@ class InventoryTransaction(Base):
     unit_id: Mapped[int] = mapped_column(ForeignKey("measurement_units.id", ondelete="RESTRICT"), nullable=False)
     from_location_id: Mapped[int | None] = mapped_column(ForeignKey("inventory_locations.id", ondelete="RESTRICT"))
     to_location_id: Mapped[int | None] = mapped_column(ForeignKey("inventory_locations.id", ondelete="RESTRICT"))
+    reason: Mapped[str | None] = mapped_column(String(160))
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
@@ -61,7 +62,7 @@ class InventoryTransaction(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "transaction_type IN ('PURCHASE','CONSUME','TRANSFER','MANUAL_ADD','MANUAL_REMOVE','CORRECTION','PRODUCTION')",
+            "transaction_type IN ('PURCHASE','CONSUME','TRANSFER','MANUAL_ADD','MANUAL_REMOVE','CORRECTION','PRODUCTION','WASTE','SPOILAGE')",
             name="ck_inventory_transactions_type",
         ),
     )

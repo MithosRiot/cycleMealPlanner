@@ -14,6 +14,8 @@ import {
   splitInventory,
   transferInventory,
 } from './api'
+import { recordSpoilage, recordWaste } from './inventoryDiscardApi'
+import { canSubmitDiscard } from './inventoryDiscardSelectors'
 
 type ViewMode = 'ingredient' | 'location'
 
@@ -43,9 +45,16 @@ export default function InventoryPage() {
   })
 
   const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['inventory'] })
-    await queryClient.invalidateQueries({ queryKey: ['inventory-availability'] })
-    await queryClient.invalidateQueries({ queryKey: ['allocation-preview'] })
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['inventory'] }),
+      queryClient.invalidateQueries({ queryKey: ['inventory-availability'] }),
+      queryClient.invalidateQueries({ queryKey: ['production-inventory-availability'] }),
+      queryClient.invalidateQueries({ queryKey: ['allocation-preview'] }),
+      queryClient.invalidateQueries({ queryKey: ['dashboard-use-soon'] }),
+      queryClient.invalidateQueries({ queryKey: ['cycle-validation'] }),
+      queryClient.invalidateQueries({ queryKey: ['shopping-list'] }),
+      queryClient.invalidateQueries({ queryKey: ['history', 'inventory'] }),
+    ])
   }
   const createLot = useMutation({
     mutationFn: createInventoryLot,
@@ -62,6 +71,13 @@ export default function InventoryPage() {
       if (action.kind === 'remove') return removeInventory(action.lot.id, action.value)
       return correctInventory(action.lot.id, action.value)
     },
+    onSuccess: refresh,
+  })
+  const discard = useMutation({
+    mutationFn: async (action: { lot: InventoryLot; kind: 'WASTE' | 'SPOILAGE'; value: string; reason: string; note: string }) =>
+      action.kind === 'WASTE'
+        ? recordWaste(action.lot.id, action.value, action.reason, action.note)
+        : recordSpoilage(action.lot.id, action.value, action.reason, action.note),
     onSuccess: refresh,
   })
   const move = useMutation({ mutationFn: ({ lot, target }: { lot: InventoryLot; target: number }) => transferInventory(lot.id, target), onSuccess: refresh })
@@ -88,7 +104,7 @@ export default function InventoryPage() {
     return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))
   }, [lots.data, viewMode, ingredientNames, locationNames])
 
-  const error = createLot.error ?? adjust.error ?? move.error ?? split.error
+  const error = createLot.error ?? adjust.error ?? discard.error ?? move.error ?? split.error
 
   return <section className="inventory-page">
     <div className="page-card"><p className="eyebrow">Inventory</p><h1>Physical Inventory</h1><p>Track ingredient, leftover, and Recipe output lots across physical storage locations.</p></div>
@@ -114,22 +130,29 @@ export default function InventoryPage() {
         <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}><option value="">All locations</option>{locations.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
       </div>
       <div className="inventory-groups">
-        {grouped.map(([group, groupLots]) => <div className="inventory-group" key={group}><h3>{group}</h3>{groupLots.map((lot) => <InventoryLotRow key={lot.id} lot={lot} itemName={lotName(lot)} locationName={locationNames.get(lot.location_id) ?? 'Unknown'} unitCode={unitCodes.get(lot.unit_id) ?? ''} unitCodes={unitCodes} locationNames={locationNames} locations={locations.data ?? []} onAdjust={(kind, value) => adjust.mutate({ lot, kind, value })} onMove={(target) => move.mutate({ lot, target })} onSplit={(value, target, note) => split.mutate({ lot, value, target, note })} />)}</div>)}
+        {grouped.map(([group, groupLots]) => <div className="inventory-group" key={group}><h3>{group}</h3>{groupLots.map((lot) => <InventoryLotRow key={lot.id} lot={lot} itemName={lotName(lot)} locationName={locationNames.get(lot.location_id) ?? 'Unknown'} unitCode={unitCodes.get(lot.unit_id) ?? ''} unitCodes={unitCodes} locationNames={locationNames} locations={locations.data ?? []} onAdjust={(kind, value) => adjust.mutate({ lot, kind, value })} onDiscard={(kind, value, reason, note) => discard.mutate({ lot, kind, value, reason, note })} onMove={(target) => move.mutate({ lot, target })} onSplit={(value, target, note) => split.mutate({ lot, value, target, note })} />)}</div>)}
         {!lots.isPending && grouped.length === 0 && <p className="muted-line">No inventory lots match the current filters.</p>}
       </div>
     </section>
   </section>
 }
 
-function InventoryLotRow({ lot, itemName, locationName, unitCode, unitCodes, locationNames, locations, onAdjust, onMove, onSplit }: {
+function InventoryLotRow({ lot, itemName, locationName, unitCode, unitCodes, locationNames, locations, onAdjust, onDiscard, onMove, onSplit }: {
   lot: InventoryLot; itemName: string; locationName: string; unitCode: string; unitCodes: Map<number, string>; locationNames: Map<number, string>; locations: { id: number; name: string }[];
-  onAdjust: (kind: 'add' | 'remove' | 'correct', value: string) => void; onMove: (target: number) => void; onSplit: (value: string, target: number, note: string) => void
+  onAdjust: (kind: 'add' | 'remove' | 'correct', value: string) => void; onDiscard: (kind: 'WASTE' | 'SPOILAGE', value: string, reason: string, note: string) => void; onMove: (target: number) => void; onSplit: (value: string, target: number, note: string) => void
 }) {
   const [value, setValue] = useState(''); const [target, setTarget] = useState(String(lot.location_id)); const [splitValue, setSplitValue] = useState(''); const [splitTarget, setSplitTarget] = useState(String(lot.location_id)); const [splitNote, setSplitNote] = useState(''); const [showHistory, setShowHistory] = useState(false)
+  const [discardValue, setDiscardValue] = useState(''); const [discardReason, setDiscardReason] = useState(''); const [discardNote, setDiscardNote] = useState('')
   const detail = useQuery({ queryKey: ['inventory-lot', lot.id], queryFn: () => fetchInventoryLot(lot.id), enabled: showHistory })
+  const discardReady = canSubmitDiscard(discardValue, discardReason, lot.quantity)
+  const submitDiscard = (kind: 'WASTE' | 'SPOILAGE') => {
+    onDiscard(kind, discardValue, discardReason, discardNote)
+    setDiscardValue(''); setDiscardReason(''); setDiscardNote('')
+  }
   return <div className="inventory-lot-row">
     <div className="inventory-lot-summary"><strong>{itemName} · Lot {lot.id}</strong><div className="muted-line">{lot.quantity} {unitCode} · {locationName}{lot.expiration_date ? ` · expires ${lot.expiration_date}` : ''}</div>{lot.source_type !== 'INGREDIENT' && <div className="muted-line">Produced stock · {lot.source_type === 'LEFTOVER' ? 'Leftover Meal servings' : 'Recipe output'}</div>}{lot.notes && <div className="muted-line">{lot.notes}</div>}</div>
     <div className="inventory-actions"><input type="number" min="0" step="any" placeholder="Qty" value={value} onChange={(e) => setValue(e.target.value)} /><button type="button" disabled={!value} onClick={() => { onAdjust('add', value); setValue('') }}>Add</button><button type="button" className="button-secondary" disabled={!value} onClick={() => { onAdjust('remove', value); setValue('') }}>Remove</button><button type="button" className="button-secondary" disabled={!value} onClick={() => { onAdjust('correct', value); setValue('') }}>Correct to</button></div>
+    <div className="inventory-split-actions"><input type="number" min="0.000001" max={lot.quantity} step="any" placeholder={`Discard qty (${unitCode})`} value={discardValue} onChange={(e) => setDiscardValue(e.target.value)} /><input placeholder="Reason (required)" value={discardReason} onChange={(e) => setDiscardReason(e.target.value)} /><input placeholder="Discard note (optional)" value={discardNote} onChange={(e) => setDiscardNote(e.target.value)} /><button type="button" className="button-secondary" disabled={!discardReady} onClick={() => submitDiscard('WASTE')}>Record waste</button><button type="button" className="button-secondary" disabled={!discardReady} onClick={() => submitDiscard('SPOILAGE')}>Record spoilage</button></div>
     <div className="inventory-actions"><select value={target} onChange={(e) => setTarget(e.target.value)}>{locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button type="button" className="button-secondary" disabled={Number(target) === lot.location_id} onClick={() => onMove(Number(target))}>Move</button></div>
     <div className="inventory-split-actions"><input type="number" min="0.000001" max={lot.quantity} step="any" placeholder="Split qty" value={splitValue} onChange={(e) => setSplitValue(e.target.value)} /><select value={splitTarget} onChange={(e) => setSplitTarget(e.target.value)}>{locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><input placeholder="Split note (optional)" value={splitNote} onChange={(e) => setSplitNote(e.target.value)} /><button type="button" disabled={!splitValue || Number(splitValue) <= 0 || Number(splitValue) >= Number(lot.quantity)} onClick={() => { onSplit(splitValue, Number(splitTarget), splitNote); setSplitValue(''); setSplitNote('') }}>Split lot</button><button type="button" className="button-secondary" onClick={() => setShowHistory((current) => !current)}>{showHistory ? 'Hide history' : 'History'}</button></div>
     {showHistory && <div className="inventory-history">{detail.isPending && <p className="muted-line">Loading history…</p>}{detail.error instanceof Error && <div className="error-banner">{detail.error.message}</div>}{detail.data?.transactions.map((tx) => <div className="inventory-history-row" key={tx.id}><strong>{tx.transaction_type}</strong><span>{tx.quantity_delta} {unitCodes.get(tx.unit_id) ?? ''}</span><span>{tx.from_location_id ? locationNames.get(tx.from_location_id) ?? `Location ${tx.from_location_id}` : '—'} → {tx.to_location_id ? locationNames.get(tx.to_location_id) ?? `Location ${tx.to_location_id}` : '—'}</span><span>{tx.note ?? '—'}</span><span>{new Date(tx.created_at).toLocaleString()}</span></div>)}{detail.data?.transactions.length === 0 && <p className="muted-line">No transactions.</p>}</div>}

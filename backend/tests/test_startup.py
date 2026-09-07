@@ -19,7 +19,7 @@ def test_health_endpoint_and_migrations() -> None:
 
     with engine.connect() as connection:
         migration_version = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-        assert migration_version == "0037_shopping_partial_substitutions"
+        assert migration_version == "0038_inventory_waste_spoilage"
 
 
 def test_sqlite_foreign_keys_and_wal_are_enabled() -> None:

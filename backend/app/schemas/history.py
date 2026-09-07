@@ -81,4 +81,5 @@ class InventoryHistoryEntry(BaseModel):
     from_location_name: str | None
     to_location_id: int | None
     to_location_name: str | None
+    reason: str | None
     note: str | None
