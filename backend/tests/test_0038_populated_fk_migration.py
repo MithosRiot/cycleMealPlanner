@@ -7,6 +7,9 @@ from alembic.config import Config
 from sqlalchemy import create_engine, text
 
 
+HEAD_REVISION = "0039_manual_shopping_items"
+
+
 def _config() -> Config:
     config = Config("alembic.ini")
     config.set_main_option("script_location", "migrations")
@@ -44,12 +47,13 @@ def test_0038_upgrades_populated_sqlite_with_fk_reference_and_stale_batch_table(
 
         verify = create_engine(url)
         with verify.connect() as connection:
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0038_inventory_waste_spoilage"
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == HEAD_REVISION
             assert connection.execute(text("SELECT tx_id FROM migration_tx_ref WHERE id=1")).scalar_one() == 9910
             assert connection.execute(text("SELECT COUNT(*) FROM inventory_transactions WHERE id=9910")).scalar_one() == 1
             assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
             tables = {row[0] for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
             assert "_alembic_tmp_inventory_transactions" not in tables
+            assert "manual_shopping_items" in tables
             transaction_sql = connection.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='inventory_transactions'" )).scalar_one()
             assert "WASTE" in transaction_sql and "SPOILAGE" in transaction_sql
         verify.dispose()
