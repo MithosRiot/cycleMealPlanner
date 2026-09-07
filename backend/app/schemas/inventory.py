@@ -56,6 +56,11 @@ class TransferAction(BaseModel):
     note: str | None = None
 
 
+class FreezeAction(BaseModel):
+    freezer_location_id: int
+    note: str | None = None
+
+
 class SplitAction(BaseModel):
     quantity: Decimal = Field(gt=0)
     to_location_id: int

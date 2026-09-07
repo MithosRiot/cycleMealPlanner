@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -15,6 +15,7 @@ from app.models.inventory import InventoryLot
 from app.models.meal_cycle import CycleSlot, MealCycle
 from app.models.planned_meal import PlannedMeal
 from app.models.reference import MeasurementUnit
+from app.services.expiration_resolution import expiration_resolution_rows
 from app.services.units import convert_quantity
 
 router = APIRouter(prefix="/api/meal-cycles", tags=["expiration-planning"])
@@ -160,3 +161,17 @@ def expiration_suggestions(cycle_id: int, db: Session = Depends(get_db)) -> dict
         "start_date": cycle.start_date,
         "suggestions": suggestions,
     }
+
+
+@router.get("/{cycle_id}/expiration-resolutions")
+def expiration_resolutions(
+    cycle_id: int,
+    days: int = Query(default=7, ge=1, le=30),
+    db: Session = Depends(get_db),
+) -> dict:
+    try:
+        return expiration_resolution_rows(db, cycle_id=cycle_id, horizon_days=days)
+    except ValueError as exc:
+        message = str(exc)
+        status_code = 404 if message == "Meal cycle not found" else 409
+        raise HTTPException(status_code=status_code, detail=message) from exc

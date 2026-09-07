@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,6 +15,7 @@ from app.models.shopping import ShoppingList
 from app.schemas.inventory import (
     CorrectionAction,
     DiscardAction,
+    FreezeAction,
     InventoryLotCreate,
     InventoryLotDetail,
     InventoryLotMetadataUpdate,
@@ -248,6 +250,36 @@ def correct_inventory(lot_id: int, payload: CorrectionAction, db: Session = Depe
     delta = target - Decimal(lot.quantity)
     lot.quantity = target
     _record(db, lot, "CORRECTION", delta, payload.note)
+    db.commit()
+    db.refresh(lot)
+    return lot
+
+
+@router.post("/{lot_id}/freeze", response_model=InventoryLotRead)
+def freeze_inventory(lot_id: int, payload: FreezeAction, db: Session = Depends(get_db)) -> InventoryLot:
+    lot = _lot_or_404(db, lot_id)
+    if lot.frozen_date is not None and lot.thawed_date is None:
+        raise HTTPException(status_code=409, detail="Inventory lot is already frozen")
+    if lot.source_type == "INGREDIENT":
+        ingredient = db.get(Ingredient, lot.ingredient_id) if lot.ingredient_id is not None else None
+        if ingredient is None or not ingredient.perishable:
+            raise HTTPException(status_code=409, detail="This Ingredient lot is not eligible for a freeze resolution")
+
+    location = db.get(InventoryLocation, payload.freezer_location_id)
+    if (
+        location is None
+        or location.household_id != DEFAULT_HOUSEHOLD_ID
+        or not location.active
+        or location.location_type != "FREEZER"
+    ):
+        raise HTTPException(status_code=400, detail="Selected location is not an active Freezer")
+
+    old_location = lot.location_id
+    lot.location_id = location.id
+    lot.frozen_date = date.today()
+    lot.thawed_date = None
+    note = payload.note.strip() if payload.note else "Expiration resolution: frozen"
+    _record(db, lot, "TRANSFER", Decimal("0"), note, old_location, location.id)
     db.commit()
     db.refresh(lot)
     return lot
