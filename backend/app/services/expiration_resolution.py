@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -31,7 +31,7 @@ ACTION_ORDER = {
 def _slot_date(cycle: MealCycle, slot: CycleSlot) -> date | None:
     if cycle.start_date is None:
         return None
-    return cycle.start_date.fromordinal(cycle.start_date.toordinal() + slot.day_number - 1)
+    return cycle.start_date + timedelta(days=slot.day_number - 1)
 
 
 def _slot_key(slot: CycleSlot) -> tuple:
