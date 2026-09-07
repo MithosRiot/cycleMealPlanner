@@ -26,7 +26,6 @@ export default function ExpirationResolutionPanel({ cycleId }: { cycleId: number
   const resolutions = useQuery({
     queryKey: ['expiration-resolutions', cycleId, 7],
     queryFn: () => fetchExpirationResolutions(cycleId, 7),
-    refetchInterval: 5_000,
   })
   const produced = useQuery({ queryKey: ['produced-source-options'], queryFn: fetchProducedSourceOptions })
 
