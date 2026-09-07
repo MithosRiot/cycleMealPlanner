@@ -48,6 +48,9 @@ jobs:
       - name: Test Shopping partial/substitution state
         run: node --experimental-strip-types src/shoppingApi.test.mjs
 
+      - name: Test manual Shopping state
+        run: node --experimental-strip-types src/manualShoppingApi.test.mjs
+
       - name: Test Leftovers state and future-slot selection
         run: node --experimental-strip-types src/leftoversSelectors.test.mjs
 
