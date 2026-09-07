@@ -42,6 +42,14 @@ def _shopping_list(db: Session, cycle_id: int, *, create: bool) -> ShoppingList 
     return value
 
 
+def _reload_shopping_list(db: Session, cycle_id: int) -> ShoppingList:
+    db.expire_all()
+    value = _shopping_list(db, cycle_id, create=False)
+    if value is None:
+        raise RuntimeError("Manual Shopping list disappeared after commit")
+    return value
+
+
 def _manual_or_404(shopping_list: ShoppingList, item_id: int) -> ManualShoppingItem:
     item = next((row for row in shopping_list.manual_items if row.id == item_id), None)
     if item is None:
@@ -123,10 +131,7 @@ def create_manual_item(cycle_id: int, payload: ManualShoppingItemWrite, db: Sess
         status="PENDING",
     ))
     db.commit()
-    db.expire_all()
-    shopping_list = _shopping_list(db, cycle_id, create=False)
-    assert shopping_list is not None
-    return _serialize(db, cycle_id, shopping_list)
+    return _serialize(db, cycle_id, _reload_shopping_list(db, cycle_id))
 
 
 @router.put("/{cycle_id}/manual-items/{item_id}", response_model=ManualShoppingListRead)
@@ -146,7 +151,7 @@ def update_manual_item(cycle_id: int, item_id: int, payload: ManualShoppingItemW
     item.ingredient_id = payload.ingredient_id
     item.notes = payload.notes
     db.commit()
-    return _serialize(db, cycle_id, shopping_list)
+    return _serialize(db, cycle_id, _reload_shopping_list(db, cycle_id))
 
 
 @router.delete("/{cycle_id}/manual-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -224,10 +229,7 @@ def complete_manual_item(cycle_id: int, item_id: int, payload: ManualShoppingIte
     item.status = "COMPLETED"
     item.completed_at = datetime.utcnow()
     db.commit()
-    db.expire_all()
-    shopping_list = _shopping_list(db, cycle_id, create=False)
-    assert shopping_list is not None
-    return _serialize(db, cycle_id, shopping_list)
+    return _serialize(db, cycle_id, _reload_shopping_list(db, cycle_id))
 
 
 @router.post("/{cycle_id}/manual-items/{item_id}/skip", response_model=ManualShoppingListRead)
@@ -244,4 +246,4 @@ def skip_manual_item(cycle_id: int, item_id: int, db: Session = Depends(get_db))
     item.status = "SKIPPED"
     item.completed_at = datetime.utcnow()
     db.commit()
-    return _serialize(db, cycle_id, shopping_list)
+    return _serialize(db, cycle_id, _reload_shopping_list(db, cycle_id))
