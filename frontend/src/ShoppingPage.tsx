@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchIngredients, fetchInventoryLocations, fetchMeasurementUnits } from './api'
+import ManualShoppingPanel from './ManualShoppingPanel'
 import { fetchMealCycles } from './mealCyclesApi'
 import { adjustShoppingItem, completeShoppingItem, fetchShoppingList, regenerateShoppingList, skipShoppingItem, type ShoppingItem } from './shoppingApi'
 import './ShoppingPage.css'
@@ -80,10 +81,11 @@ export default function ShoppingPage() {
       <label>Meal cycle<select value={cycleId ?? ''} onChange={(event) => setCycleId(event.target.value ? Number(event.target.value) : null)}><option value="">Choose a cycle…</option>{cycles.data?.map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.name}</option>)}</select></label>
       <button type="button" disabled={cycleId === null || regenerate.isPending} onClick={() => regenerate.mutate()}>{shopping.data ? 'Regenerate list' : 'Generate list'}</button>
     </section>
+    {cycleId !== null && <ManualShoppingPanel cycleId={cycleId} />}
     {cycleId !== null && shopping.isError && !regenerate.isPending && <div className="empty-state shopping-empty"><p>No generated shopping list for this cycle yet.</p><button type="button" onClick={() => regenerate.mutate()}>Generate shopping list</button></div>}
     {error && <div className="error-banner">{(error as Error).message}</div>}
     {shopping.data && <>
-      <div className="shopping-summary"><strong>{shopping.data.meal_cycle_name}</strong><span>{shopping.data.items.filter((item) => item.status === 'PENDING' && Number(item.remaining_quantity) > 0).length} pending items</span><span>{purchaseCount} purchase record{purchaseCount === 1 ? '' : 's'}</span><span>{changedCount} plan change{changedCount === 1 ? '' : 's'}</span></div>
+      <div className="shopping-summary"><strong>{shopping.data.meal_cycle_name}</strong><span>{shopping.data.items.filter((item) => item.status === 'PENDING' && Number(item.remaining_quantity) > 0).length} pending generated items</span><span>{purchaseCount} generated purchase record{purchaseCount === 1 ? '' : 's'}</span><span>{changedCount} plan change{changedCount === 1 ? '' : 's'}</span></div>
       <div className="shopping-groups">{grouped.map(([category, items]) => <section className="settings-card shopping-category" key={category}><h2>{category}</h2><div className="shopping-items">{items.map((item) => {
         const draft = draftFor(item); const activeLocations = locations.data?.filter((location) => location.active) ?? []; const terminal = item.status !== 'PENDING'; const delta = Number(item.plan_delta_quantity); const excess = Number(item.purchased_excess_quantity); const substitution = Number(draft.ingredientId) !== item.ingredient_id; const actualIngredient = ingredients.data?.find((value) => value.id === Number(draft.ingredientId)); const actualFamily = units.data?.find((value) => value.id === actualIngredient?.preferred_unit_id)?.unit_family; const purchaseUnits = units.data?.filter((unit) => !substitution || !actualFamily || unit.unit_family === actualFamily) ?? []; const satisfactionUnits = units.data?.filter((unit) => unit.unit_family === item.unit_family) ?? []
         return <article className={`shopping-item ${terminal ? 'shopping-item-terminal' : Number(item.remaining_quantity) <= 0 ? 'covered' : ''}`} key={item.id}>

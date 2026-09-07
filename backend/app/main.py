@@ -17,6 +17,7 @@ from app.api.gather_locations import router as gather_locations_router
 from app.api.history import router as history_router
 from app.api.ingredients import router as ingredients_router
 from app.api.inventory import router as inventory_router
+from app.api.manual_shopping import router as manual_shopping_router
 from app.api.meal_cycles import router as meal_cycles_router
 from app.api.meals import router as meals_router
 from app.api.non_food_occurrences import router as non_food_occurrences_router
@@ -77,6 +78,7 @@ app.include_router(combined_prep_router)
 app.include_router(expiration_planning_router)
 app.include_router(cycle_validation_router)
 app.include_router(shopping_router)
+app.include_router(manual_shopping_router)
 app.include_router(history_router)
 
 

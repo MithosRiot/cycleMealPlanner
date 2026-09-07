@@ -3,7 +3,7 @@ import os
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, event, text
-HEAD_REVISION = "0038_inventory_waste_spoilage"
+HEAD_REVISION = "0039_manual_shopping_items"
 
 def _config():
     c=Config("alembic.ini"); c.set_main_option("script_location","migrations"); return c
@@ -40,13 +40,15 @@ def _assert(e):
         leftovers={r[1]:r for r in c.execute(text("PRAGMA table_info(leftovers)"))}
         purchases={r[1] for r in c.execute(text("PRAGMA table_info(shopping_item_purchases)"))}
         transactions={r[1] for r in c.execute(text("PRAGMA table_info(inventory_transactions)"))}
+        manual_columns={r[1] for r in c.execute(text("PRAGMA table_info(manual_shopping_items)"))}
         transaction_sql=c.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='inventory_transactions'")).scalar_one()
         assert c.execute(text("PRAGMA foreign_key_check")).all()==[]
     assert planned["meal_id"][3]==0 and "source_recipe_id" in planned
     assert leftovers["source_meal_id"][3]==0 and "source_recipe_id" in leftovers
-    assert {"shopping_item_purchases","planned_meal_revisions","production_coverage_reservations"}.issubset(tables)
+    assert {"shopping_item_purchases","planned_meal_revisions","production_coverage_reservations","manual_shopping_items"}.issubset(tables)
     assert not any(x.startswith("_alembic_tmp_") for x in tables)
     assert {"purchased_ingredient_id","satisfied_quantity","satisfied_unit_id","purchase_kind","idempotency_key"}.issubset(purchases)
+    assert {"shopping_list_id","name","quantity","unit_id","shopping_category_id","ingredient_id","status","completed_at","inventory_lot_id"}.issubset(manual_columns)
     assert "reason" in transactions
     assert "WASTE" in transaction_sql and "SPOILAGE" in transaction_sql
 
