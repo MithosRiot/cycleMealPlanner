@@ -6,6 +6,20 @@ export type SmartPlanningPreferences = { repeat_spacing_days: number; favorite_b
 export type ExpiringMatch = { ingredient_id: number; ingredient_name: string; inventory_lot_id: number; expiration_date: string; days_until_expiration_on_planned_date: number; usable_quantity: string; unit_id: number; unit_code: string }
 export type ExpirationSuggestion = { planned_meal_id: number; cycle_slot_id: number; meal_id: number | null; meal_name: string; day_number: number; planned_date: string; urgency_days: number; expiring_matches: ExpiringMatch[]; suggested_empty_day_numbers: number[]; suggested_swap_day_numbers: number[]; can_move_earlier: boolean; can_swap_earlier: boolean }
 export type ExpirationSuggestionsResponse = { meal_cycle_id: number; meal_cycle_name: string; start_date: string; suggestions: ExpirationSuggestion[] }
+export type ExpirationResolutionActionKind = 'MOVE_EXISTING' | 'PLAN_MEAL' | 'PLAN_RECIPE' | 'PLAN_PRODUCED' | 'FREEZE'
+export type ExpirationResolutionAction = {
+  kind: ExpirationResolutionActionKind; title: string; detail: string; candidate_name: string;
+  source_slot_id?: number; source_day_number?: number; target_slot_id?: number; target_day_number?: number;
+  meal_id?: number; recipe_id?: number; planned_servings?: string; lot_id?: number; quantity?: string;
+  freezer_location_id?: number; freezer_location_name?: string;
+  matched_expiring_items: number; shopping_shortage_lines: number; shopping_shortage_ratio: string
+}
+export type ExpirationResolution = {
+  lot_id: number; source_type: 'INGREDIENT' | 'LEFTOVER' | 'RECIPE_OUTPUT'; source_id: number | null; source_name: string;
+  ingredient_id: number | null; location_id: number; location_name: string; available_quantity: string; unit_id: number; unit_code: string;
+  expiration_date: string; days_remaining: number; status: 'ACTIONABLE' | 'NO_SUGGESTION'; no_suggestion_reason: string | null; actions: ExpirationResolutionAction[]
+}
+export type ExpirationResolutionsResponse = { meal_cycle_id: number; meal_cycle_name: string; horizon_days: number; resolutions: ExpirationResolution[] }
 export type CycleValidationIssue = { severity: 'ERROR' | 'WARNING'; code: string; message: string; context: Record<string, unknown> }
 export type CycleValidationResponse = { meal_cycle_id: number; meal_cycle_name: string; valid: boolean; error_count: number; warning_count: number; issues: CycleValidationIssue[] }
 export type ScaledPlannedComponent = { meal_recipe_id: number; recipe_id: number; base_servings: string; requested_servings: string; scale_factor: string; ingredients: Array<{ recipe_ingredient_id: number; ingredient_id: number; quantity: string; unit_id: number; scaling_mode: string; manual_review: boolean }> }
@@ -39,6 +53,7 @@ async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
 export const fetchMealCycles = (): Promise<MealCycle[]> => jsonRequest('/api/meal-cycles')
 export const fetchMealCycle = (id: number): Promise<MealCycle> => jsonRequest(`/api/meal-cycles/${id}`)
 export const fetchExpirationSuggestions = (id: number): Promise<ExpirationSuggestionsResponse> => jsonRequest(`/api/meal-cycles/${id}/expiration-suggestions`)
+export const fetchExpirationResolutions = (id: number, days = 7): Promise<ExpirationResolutionsResponse> => jsonRequest(`/api/meal-cycles/${id}/expiration-resolutions?days=${days}`)
 export const fetchCycleValidation = (id: number): Promise<CycleValidationResponse> => jsonRequest(`/api/meal-cycles/${id}/validate`)
 export const fetchProducedSourceOptions = (): Promise<ProducedSourceOption[]> => jsonRequest('/api/produced-source-options')
 export const createMealCycle = (input: MealCycleInput): Promise<MealCycle> => jsonRequest('/api/meal-cycles', { method: 'POST', body: JSON.stringify(input) })
