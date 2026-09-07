@@ -17,8 +17,12 @@ HOUSEHOLD_ID = 1
 SOURCE_ORDER = {"INGREDIENT": 0, "LEFTOVER": 1, "RECIPE_OUTPUT": 2}
 
 
+def _still_frozen(lot: InventoryLot) -> bool:
+    return lot.frozen_date is not None and lot.thawed_date is None
+
+
 def _lot_priority(lot: InventoryLot, preferred_location_id: int | None) -> tuple:
-    still_frozen = lot.frozen_date is not None and lot.thawed_date is None
+    still_frozen = _still_frozen(lot)
     return (
         lot.expiration_date is None,
         lot.expiration_date or date.max,
@@ -90,6 +94,8 @@ def use_soon_rows(db: Session, horizon_days: int = 7, today: date | None = None)
 
     rows: list[dict] = []
     for lot in ingredient_lots:
+        if _still_frozen(lot):
+            continue
         if lot.expiration_date is None or lot.expiration_date < today or lot.expiration_date > cutoff:
             continue
         available = ingredient_available.get(lot.id, Decimal("0"))
@@ -122,6 +128,8 @@ def use_soon_rows(db: Session, horizon_days: int = 7, today: date | None = None)
         InventoryLot.quantity > 0,
     )))
     for lot in produced_lots:
+        if _still_frozen(lot):
+            continue
         if lot.expiration_date is None or lot.expiration_date < today or lot.expiration_date > cutoff:
             continue
         availability = produced_by_lot.get(lot.id)
